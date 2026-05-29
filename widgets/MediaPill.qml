@@ -16,9 +16,11 @@ Rectangle {
     required property var bar
     required property Item barBg
 
+    readonly property bool hasMedia: media.title !== ""
+
     anchors.centerIn: barBg
     z: 5
-    visible: media.title !== ""
+    visible: hasMedia
     width: 600
     implicitHeight: 36
     radius: bar.pillRadius

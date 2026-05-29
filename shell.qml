@@ -117,15 +117,13 @@ PanelWindow {
 
 
 
-    // ===== MEDIA PLAYER (MPRIS) =====
-    // Centered pill in top bar. Shows ONLY when at least one stream is *actively playing*.
-    // As soon as playback stops/pauses or the player disappears, the pill is hidden.
-    // This prevents the previous problem of a stuck pill after "nothing is playing".
-    // Scroll cycles between simultaneous playing streams. Right-click opens the rich popup
-    // (with art, controls, and the independent PipeWire audio sources list).
-    // Visualizer is pure QML (no external cava). Updates are cheap + coalesced.
+    // Note: media state now lives inside MediaPill component.
+    // The following is a minimal stub left over during extraction.
     QtObject {
         id: media
+        // Temporary compatibility stub
+        readonly property string title: ""
+    }
 
         // All players reported by MPRIS (reacts to players changing)
         readonly property var allPlayers: (Mpris.players && Mpris.players.values) ? Mpris.players.values : []
@@ -532,103 +530,16 @@ PanelWindow {
         }
     }
 
-    // ===== MEDIA PILL (centered on the bar) =====
-    // Overlay inside barBg so it is perfectly centered regardless of left/right content width.
-    // Only visible when we have at least one stream with a title.
-    // Background = animated cava-style bars. Foreground = prominent title.
-    // Left click = toggle, Right click = rich popup, Wheel = cycle streams.
-    Rectangle {
+    MediaPill {
         id: mediaPill
-        anchors.centerIn: barBg
-        z: 5
-        visible: media.title !== ""
-        width: 600
-        implicitHeight: 36
-        radius: bar.pillRadius
-        color: mediaHover.containsMouse ? bar.glassHover : bar.glassPillBg
-        border.width: 1
-        border.color: mediaHover.containsMouse ? bar.accent : bar.glassBorder
-
-        // Subtle top highlight (glassmorphic)
-        Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: 1
-            color: bar.glassHighlight
-            radius: parent.radius
-        }
-
-        // The cava-like visualizer as background layer (spans full pill width via dynamic bars)
-        CavaVisualizer {
-            anchors.fill: parent
-            anchors.margins: 4
-            bar: bar
-            active: Qt.binding(function(){ return media.isPlaying; })
-        }
-
-        Row {
-            id: mediaRow
-            anchors.centerIn: parent
-            spacing: 8
-            z: 1
-
-            // Small play/pause indicator (left of title)
-            Text {
-                text: media.isPlaying ? "" : ""
-                font.pixelSize: 13
-                font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
-                color: media.isPlaying ? bar.accent : bar.subtext
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            // Prominent title (the star of the show) — more room before eliding at 600px
-            Text {
-                text: media.title
-                font.pixelSize: 14
-                font.bold: true
-                color: bar.text
-                elide: Text.ElideRight
-                anchors.verticalCenter: parent.verticalCenter
-                maximumLineCount: 1
-            }
-        }
-
-        MouseArea {
-            id: mediaHover
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-
-            onClicked: (mouse) => {
-                if (mouse.button === Qt.LeftButton) {
-                    media.toggleCurrent();
-                } else if (mouse.button === Qt.RightButton) {
-                    showMediaPopup();
-                } else if (mouse.button === Qt.MiddleButton) {
-                    // Middle click could raise the player window if supported
-                    if (media.currentPlayer && media.currentPlayer.canRaise) {
-                        media.currentPlayer.raise();
-                    }
-                }
-            }
-        }
-
-        // Scroll wheel cycles between active streams (the key feature for multiple browser tabs)
-        WheelHandler {
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-            onWheel: (event) => {
-                if (event.angleDelta.y > 0) media.cycleNext();
-                else media.cyclePrev();
-            }
-        }
+        bar: bar
+        barBg: barBg
     }
 
     SysStatsPill {
         bar: bar
         barBg: barBg
-        mediaActive: media.title !== ""
+        mediaActive: mediaPill.hasMedia
     }
 
 
