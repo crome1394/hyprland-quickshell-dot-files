@@ -10,7 +10,7 @@ import QtQuick
 Item {
     id: root
 
-    property var bar   // supplied via Loader onLoaded
+    property var bar
 
     property real value: 0.0
     property var onSet: function(v){}
@@ -20,19 +20,25 @@ Item {
     implicitWidth: 48
     implicitHeight: 5
 
+    // Force actual size from implicit when centered via anchors.centerIn
+    width: implicitWidth
+    height: implicitHeight
+
     Rectangle {
         anchors.fill: parent
         radius: 2
         color: root.track
     }
 
+    // Fill - simpler width expression + explicit root.width
     Rectangle {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.max(0, Math.min(parent.width, parent.width * root.value))
+        width: root.width * root.value
         height: parent.height
         radius: 2
         color: root.fill
+        visible: root.value > 0
     }
 
     MouseArea {

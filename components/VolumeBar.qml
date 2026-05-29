@@ -16,7 +16,7 @@ import QtQuick
 Item {
     id: root
 
-    property var bar   // theme source (accent, surface, muted) - supplied by Loader onLoaded for now
+    property var bar   // theme source (accent, surface, muted)
 
     property real value: 0.0
     property var onSet: function(v){}
@@ -27,6 +27,12 @@ Item {
     implicitWidth: 110
     implicitHeight: barHeight + 4
 
+    // Force actual size from implicit when the component is centered
+    // via anchors.centerIn (common in the bar pill). Anchors.fill cases
+    // from the caller will override this.
+    width: implicitWidth
+    height: implicitHeight
+
     // Track
     Rectangle {
         anchors.centerIn: parent
@@ -36,14 +42,15 @@ Item {
         color: root.track
     }
 
-    // Fill
+    // Fill - use root.width explicitly for more reliable binding
     Rectangle {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.max(0, Math.min(parent.width, parent.width * root.value))
+        width: root.width * root.value
         height: root.barHeight
         radius: height / 2
         color: root.fill
+        visible: root.value > 0
     }
 
     MouseArea {
