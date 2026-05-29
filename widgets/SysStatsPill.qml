@@ -4,11 +4,14 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io as Io
 
-// SysStatsPill.qml
-// Centered CPU + GPU utilization + temperature pill.
-// Only visible when no media is playing.
-// Right-click CPU launches btop, GPU launches nvtop.
-// Extracted from the original monolithic shell.qml.
+// =============================================================================
+// SysStatsPill.qml — System resource gauges (CPU, GPU, RAM, Swap)
+// =============================================================================
+//
+// Right-click opens btop (CPU) or nvtop (GPU) in a new terminal.
+// Visibility is coupled to MediaPill.hasMedia — when media is playing the
+// gauges hide to reduce center clutter.
+// =============================================================================
 
 Rectangle {
     id: root

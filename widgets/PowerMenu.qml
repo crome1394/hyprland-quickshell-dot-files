@@ -3,9 +3,13 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 
-// PowerMenu.qml
-// Icon-only power pill + its centered glassmorphic popup (lock, logout, reboot, shutdown, BIOS).
-// Extracted from the original monolithic shell.qml.
+// =============================================================================
+// PowerMenu.qml — Power / Session menu
+// =============================================================================
+//
+// Simple power menu with Lock, Logout, Suspend, Reboot, Shutdown, and BIOS entry.
+// Opens as a centered popup on click.
+// =============================================================================
 
 Rectangle {
     id: root

@@ -5,10 +5,22 @@ import Quickshell.Services.Pipewire
 
 import "../components"
 
-// AudioPill.qml
-// The full audio/volume widget: cycling speaker/mic/dual pill + its two popups.
-// Uses the reusable VolumeBar/MiniVolumeBar components we extracted earlier.
-// Extracted from the original monolithic shell.qml.
+// =============================================================================
+// AudioPill.qml — Audio control pill (speaker + mic + device menus)
+// =============================================================================
+//
+// Three view modes cycled with left click:
+//   0 = Speaker volume
+//   1 = Microphone volume
+//   2 = Both (compact)
+//
+// Right click opens the full audio popup with device lists.
+// Middle click mutes the current view's device.
+// Wheel on the bars changes volume.
+//
+// All PipeWire logic lives in the private `audio` QtObject.
+// Reuses VolumeBar and MiniVolumeBar from ../components.
+// =============================================================================
 
 Rectangle {
     id: root
@@ -89,9 +101,8 @@ Rectangle {
         target: Pipewire.nodes
         function onValuesChanged() {
             audio.refreshDevices();
-            // Keep the direct PipeWire stream list fresh (used in media popup).
+            // Keep the direct PipeWire stream list fresh (used in the media popup's PipeWire sources section).
             // Complements the MPRIS path.
-            // (media is still in main file for now)
         }
     }
 

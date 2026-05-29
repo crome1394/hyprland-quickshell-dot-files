@@ -3,9 +3,14 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 
-// NotificationBell.qml
-// Swaync-backed notification bell pill with count badge and DND support.
-// Extracted from the original monolithic shell.qml.
+// =============================================================================
+// NotificationBell.qml — Swaync-backed notification indicator
+// =============================================================================
+//
+// Shows bell icon + count badge. Supports Do Not Disturb state.
+// All state comes from the `notif` QtObject passed in from shell.qml
+// (populated by the long-lived swaync-client -s subscribe process).
+// =============================================================================
 
 Rectangle {
     id: root

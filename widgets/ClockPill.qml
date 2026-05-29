@@ -2,9 +2,14 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 
-// ClockPill.qml
-// The clock pill + its coupled calendar popup.
-// Extracted from the original monolithic shell.qml as a coupled pair.
+// =============================================================================
+// ClockPill.qml — Clock + Calendar popup
+// =============================================================================
+//
+// Displays current time. Right-click opens a calendar popup.
+// The calendar logic (42-cell grid, month navigation, today highlight) is
+// self-contained inside this file.
+// =============================================================================
 
 Rectangle {
     id: root

@@ -4,7 +4,24 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell.Io as Io
 
-// Use the single source of truth defined in Theme.qml (prevents drift from the bar).
+// =============================================================================
+// HelpMenu.qml — Rich centered help overlay for Hyprland keybindings
+// =============================================================================
+//
+// This is the polished version originally developed in ~/.config/quickshell-help.
+// It was integrated into the main bar config so it can be toggled via IPC
+// (`qs ipc call help toggle`) from hyprland.lua without launching a second qs process.
+//
+// Features:
+//   - Tab 0: Key Bindings (parsed live from hyprland.lua with colored key pills)
+//   - Tab 1: Environment variables (from hl.env() lines)
+//   - Tab 2: System info (fastfetch + clickable copy-to-clipboard values + logo)
+//
+// The component creates its own PanelWindow so it can float centered on screen
+// independently of the main bar.
+// =============================================================================
+
+// Use the single source of truth defined in Theme.qml (prevents color drift).
 import "."
 
 Item {
@@ -12,8 +29,7 @@ Item {
 
     Theme { id: th }
 
-    // Glass + color theme now sourced from the shared Theme.qml.
-    // (Previously duplicated here with a tiny opacity difference on glassPopupBg.)
+    // --- Themed colors (sourced from central Theme.qml) ---
     readonly property color glassPopupBg: th.glassPopupBg
     readonly property color glassPopupBorder: th.glassPopupBorder
     readonly property color glassPopupHighlight: th.glassPopupHighlight
@@ -23,42 +39,208 @@ Item {
     readonly property color accent: th.accent
     readonly property color surface: th.surface
 
-    readonly property bool open: helpWindow.visible
-    property int currentTab: 0
-    property string bindFilter: ""
-
-    property string _rawLuaText: ""
-    property var _parsedBinds: []
-    property var _parsedEnv: []
-
-    property string systemOutput: ""
-    property bool systemDirty: true
+    // --- Public API ---
+    property bool open: helpWindow.visible
+    signal opened()
+    signal closed()
 
     function toggle() {
         if (helpWindow.visible) hide()
         else show()
     }
 
+    function show() { ... }   // (see implementation below)
+    function hide() { helpWindow.visible = false }
+
+    // --- Internal State ---
+    property int currentTab: 0
+    property string bindFilter: ""
+
+    // Raw + parsed data from hyprland.lua
+    property string _rawLuaText: ""
+    property var _parsedBinds: []
+    property var _parsedEnv: []
+
+    // System info (fastfetch) state
+    property string systemOutput: ""
+    property bool systemDirty: true
+    property var systemEntries: []
+    property string copiedValue: ""
+
     function show() {
         const sw = helpWindow.screen ? helpWindow.screen.width : 1920
         const sh = helpWindow.screen ? helpWindow.screen.height : 1080
-        helpWindow.x = Math.max(40, (sw - helpWindow.width) / 2)
-        helpWindow.y = Math.max(40, (sh - helpWindow.height) / 2)
+        if (typeof helpWindow.x === "number") {
+            helpWindow.x = Math.max(40, (sw - helpWindow.width) / 2)
+            helpWindow.y = Math.max(40, (sh - helpWindow.height) / 2)
+        }
         helpWindow.visible = true
-        refreshLua()
         if (currentTab === 2 && systemDirty) refreshSystemInfo()
     }
 
-    function hide() { helpWindow.visible = false }
+    function hide() {
+        helpWindow.visible = false
+    }
 
     function refreshLua() {
-        hyprLua.path = ""
-        hyprLua.path = "/home/crome/.config/hypr/hyprland.lua"
+        hyprCat.running = false
+        hyprCat.command = ["cat", "/home/crome/.config/hypr/hyprland.lua"]
+        hyprCat.running = true
+    }
+
+    Io.Process {
+        id: hyprCat
+        running: false
+        stdout: Io.StdioCollector {
+            onTextChanged: {
+                if (text && text.length > 50) {
+                    _rawLuaText = text
+                    _parsedBinds = parseKeybinds(text)
+                    _parsedEnv = parseEnvVars(text)
+                }
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        refreshLua()
+    }
+
+    function parseKeybinds(text) {
+        if (!text) return []
+        const lines = text.split("\n")
+        const out = []
+        for (let i = 0; i < lines.length; i++) {
+            const originalLine = lines[i]
+            let line = originalLine.trim()
+            if (!line.includes("hl.bind(")) continue
+            if (line.startsWith("--hl.bind") || line.startsWith("----hl.bind")) continue
+            if (!originalLine.includes("--#")) continue
+
+            const bindIdx = line.indexOf("hl.bind(")
+            if (bindIdx === -1) continue
+            const afterOpen = line.substring(bindIdx + 8)
+            let depth = 0
+            let keyEnd = -1
+            for (let j = 0; j < afterOpen.length; j++) {
+                const ch = afterOpen[j]
+                if (ch === '(' || ch === '{' || ch === '[') depth++
+                else if (ch === ')' || ch === '}' || ch === ']') depth--
+                else if (ch === ',' && depth === 0) {
+                    keyEnd = j
+                    break
+                }
+            }
+            if (keyEnd === -1) continue
+            let keyExpr = afterOpen.substring(0, keyEnd).trim()
+            keyExpr = keyExpr.replace(/mainMod\s*\.\.\s*/g, "SUPER + ")
+            keyExpr = keyExpr.replace(/["']/g, "")
+            keyExpr = keyExpr.replace(/\s*\+\s*/g, " + ")
+            keyExpr = keyExpr.replace(/\+\s*\+\s*/g, "+ ")
+            keyExpr = keyExpr.replace(/\s+/g, " ").trim()
+
+            let description = ""
+            const descMatch = originalLine.match(/--#\s*(.+)$/)
+            if (descMatch) description = descMatch[1].trim()
+
+            out.push({ key: keyExpr, action: description, comment: "" })
+        }
+        return out
+    }
+
+    function parseEnvVars(text) {
+        if (!text) return []
+        const lines = text.split("\n")
+        const out = []
+        for (let i = 0; i < lines.length; i++) {
+            const originalLine = lines[i]
+            let line = originalLine.trim()
+            if (!line.includes("hl.env(")) continue
+            if (line.startsWith("--hl.env") || line.startsWith("----hl.env")) continue
+            const m = line.match(/^hl\.env\(\s*["']([^"']+)["']\s*,\s*["']([^"']*)["']\s*\)/)
+            if (!m) continue
+            let comment = ""
+            const hashMatch = originalLine.match(/--#\s*(.+)$/)
+            if (hashMatch) comment = hashMatch[1].trim()
+            else {
+                const oldMatch = originalLine.match(/--\s*(.+)$/)
+                if (oldMatch) comment = oldMatch[1].trim()
+            }
+            out.push({ key: m[1], value: m[2], comment: comment })
+        }
+        return out
+    }
+
+    function parseFastfetchOutput(raw) {
+        if (!raw) return []
+        const lines = raw.split("\n")
+        const entries = []
+        for (let line of lines) {
+            line = line.trim()
+            if (!line) continue
+            if (line.includes("@") && !line.includes(":")) continue
+            if (line.match(/^[-=]+$/)) continue
+            const idx = line.indexOf(":")
+            if (idx > 0) {
+                const label = line.substring(0, idx).trim()
+                let value = line.substring(idx + 1).trim()
+                const lower = label.toLowerCase()
+                if (lower === "terminal" || lower.includes("font")) continue
+                if (value) entries.push({ label: label, value: value })
+            }
+        }
+        return entries
+    }
+
+    function keyPillColor(key) {
+        const k = (key || "").toUpperCase().trim()
+        if (k.includes("SUPER") || k.includes("WIN") || k.includes("META")) return "#89b4fa"
+        if (k.includes("SHIFT")) return "#fab387"
+        if (k.includes("CTRL") || k.includes("CONTROL")) return "#cba6f7"
+        if (k.includes("ALT")) return "#94e2d5"
+        return "#6c7086"
+    }
+
+    function keyPillTextColor(key) {
+        return keyPillColor(key) === "#6c7086" ? "#ffffff" : "#000000"
+    }
+
+    function refreshSystemInfo() {
+        systemProcess.running = false
+        systemProcess.running = true
+        systemDirty = false
+        copiedValue = ""
+    }
+
+    function copyToClipboard(text) {
+        Quickshell.execDetached([
+            "sh", "-c",
+            'printf "%s" "$1" | wl-copy',
+            "wl-copy",
+            text
+        ])
+        copiedValue = text
         Qt.callLater(function() {
-            _rawLuaText = hyprLua.text()
-            _parsedBinds = parseKeybinds(_rawLuaText)
-            _parsedEnv = parseEnvVars(_rawLuaText)
-        })
+            if (copiedValue === text) copiedValue = ""
+        }, 1200)
+    }
+
+    Io.Process {
+        id: systemProcess
+        command: ["fastfetch", "--logo", "none"]
+        running: false
+        stdout: Io.SplitParser {
+            splitMarker: "\n"
+            onRead: (line) => { systemOutput += line + "\n" }
+        }
+        onStarted: systemOutput = ""
+        onExited: (code) => {
+            if (code !== 0 && systemOutput.trim() === "") {
+                systemOutput = "Failed to collect system information (exit code " + code + ")"
+            } else {
+                systemEntries = parseFastfetchOutput(systemOutput)
+            }
+        }
     }
 
     function filteredBinds() {
@@ -71,118 +253,13 @@ Item {
         })
     }
 
-    Io.FileView {
-        id: hyprLua
-        path: "/home/crome/.config/hypr/hyprland.lua"
-        preload: true
-        blockLoading: false
-    }
-
-    Component.onCompleted: {
-        _rawLuaText = hyprLua.text()
-        _parsedBinds = parseKeybinds(_rawLuaText)
-        _parsedEnv = parseEnvVars(_rawLuaText)
-    }
-
-    function parseKeybinds(text) {
-        if (!text) return []
-        const lines = text.split("\n")
-        const out = []
-        for (let i = 0; i < lines.length; i++) {
-            let line = lines[i].trim()
-            if (!line.startsWith("hl.bind(")) continue
-            const m = line.match(/^hl\.bind\(\s*(.+?)\s*,\s*(.+?)(?:\s*,\s*(\{[^}]*\}))?\s*\)\s*(?:--\s*(.*))?$/)
-            if (!m) continue
-            let keyExpr = m[1].trim()
-            let actionExpr = m[2].trim()
-            let comment = (m[4] || "").trim()
-
-            keyExpr = keyExpr.replace(/mainMod\s*\.\.\s*["']\s*\+\s*["']/g, "SUPER + ")
-            keyExpr = keyExpr.replace(/mainMod\s*\.\.\s*/g, "SUPER + ")
-            keyExpr = keyExpr.replace(/^["']|["']$/g, "")
-
-            let nice = actionExpr
-            if (actionExpr.indexOf("exec_cmd") !== -1) {
-                const em = actionExpr.match(/exec_cmd\(\s*["']([^"']+)["']/)
-                if (em) {
-                    const cmd = em[1]
-                    if (cmd.indexOf("volume.sh") !== -1) nice = "Volume control"
-                    else if (cmd.indexOf("media-player-controls") !== -1) nice = "Media control"
-                    else if (cmd.indexOf("brightnessctl") !== -1) nice = "Brightness"
-                    else if (cmd.indexOf("playerctl") !== -1) nice = "Player control"
-                    else if (cmd.indexOf("flameshot") !== -1) nice = "Screenshot"
-                    else if (cmd.indexOf("vicinae") !== -1) nice = "Toggle launcher"
-                    else if (cmd.indexOf("nwg-drawer") !== -1) nice = "App drawer"
-                    else if (cmd.indexOf("brave") !== -1) nice = "Launch Brave"
-                    else if (cmd.indexOf("flatpak run") !== -1) nice = "Launch SpeedCrunch"
-                    else if (cmd.indexOf("toggle-monitor-dpms") !== -1) nice = "Toggle monitor DPMS"
-                    else if (cmd.indexOf("hyprctl reload") !== -1) nice = "Reload Hyprland"
-                    else if (cmd.indexOf("systemctl") !== -1 || cmd.indexOf("shutdown") !== -1 || cmd.indexOf("reboot") !== -1) nice = "Power action"
-                    else nice = "Launch " + cmd.split("/").pop()
-                } else nice = "Execute command"
-            } else if (actionExpr.indexOf("window.close") !== -1) nice = "Close window"
-            else if (actionExpr.indexOf("window.float") !== -1) nice = "Toggle floating"
-            else if (actionExpr.indexOf("window.pseudo") !== -1) nice = "Pseudo-tile"
-            else if (actionExpr.indexOf("focus") !== -1) {
-                const ws = actionExpr.match(/workspace\s*=\s*["']?([^"'\s,}]+)/)
-                nice = ws ? "Workspace " + ws[1] : "Move focus"
-            } else if (actionExpr.indexOf("window.move") !== -1) {
-                const ws = actionExpr.match(/workspace\s*=\s*["']?([^"'\s,}]+)/)
-                nice = ws ? "Move window to " + ws[1] : "Move window"
-            } else if (actionExpr.indexOf("layout") !== -1) nice = "Toggle split"
-            else if (actionExpr.indexOf("workspace.toggle_special") !== -1) nice = "Toggle special workspace"
-            else if (actionExpr.indexOf("mouse_down") !== -1 || actionExpr.indexOf("mouse_up") !== -1) nice = "Scroll workspaces"
-            else if (actionExpr.indexOf("mouse:272") !== -1) nice = "Move window (drag)"
-            else if (actionExpr.indexOf("mouse:273") !== -1) nice = "Resize window (drag)"
-            else if (actionExpr.indexOf("dsp.exit") !== -1) nice = "Exit Hyprland"
-
-            out.push({ key: keyExpr, action: nice, comment: comment })
-        }
-        return out
-    }
-
-    function parseEnvVars(text) {
-        if (!text) return []
-        const lines = text.split("\n")
-        const out = []
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim()
-            if (!line.startsWith("hl.env(")) continue
-            const m = line.match(/^hl\.env\(\s*["']([^"']+)["']\s*,\s*["']([^"']*)["']\s*\)\s*(?:--\s*(.*))?$/)
-            if (m) out.push({ key: m[1], value: m[2], comment: (m[3] || "").trim() })
-        }
-        return out
-    }
-
-    function refreshSystemInfo() {
-        systemProcess.running = false
-        systemProcess.running = true
-        systemDirty = false
-    }
-
-    Io.Process {
-        id: systemProcess
-        command: ["fastfetch"]
-        running: false
-        stdout: Io.SplitParser {
-            splitMarker: "\n"
-            onRead: (line) => { systemOutput += line + "\n" }
-        }
-        onStarted: systemOutput = ""
-        onExited: (code) => {
-            if (code !== 0 && systemOutput === "")
-                systemOutput = "fastfetch exited with code " + code
-        }
-    }
-
     PanelWindow {
         id: helpWindow
         visible: false
         color: "transparent"
         exclusiveZone: 0
-        width: 1060
-        height: 720
-        
+        implicitWidth: 1060
+        implicitHeight: 720
 
         Item {
             anchors.fill: parent
@@ -223,7 +300,7 @@ Item {
                     Layout.fillWidth: true
                     Text { text: "Hyprland Help"; color: root.text; font.pixelSize: 18; font.bold: true }
                     Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: Qt.rgba(1,1,1,0.12) }
-                    Text { text: "ALT + /  ·  live from hyprland.lua"; color: root.overlay; font.pixelSize: 12 }
+                    Text { text: "SUPER + ?  ·  live from hyprland.lua"; color: root.overlay; font.pixelSize: 12 }
                     Item { Layout.fillWidth: true }
                     Rectangle {
                         width: 28; height: 28; radius: 6
@@ -282,27 +359,72 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true; Layout.fillHeight: true; color: "transparent"
 
+                    // Key Bindings Tab - two column grid
                     Flickable {
                         visible: root.currentTab === 0; anchors.fill: parent
-                        contentHeight: bindsCol.implicitHeight + 20; clip: true
-                        Column {
-                            id: bindsCol; width: parent.width; spacing: 1
+                        contentHeight: bindsGrid.implicitHeight + 20; clip: true
+
+                        GridLayout {
+                            id: bindsGrid
+                            width: parent.width
+                            columns: 2
+                            columnSpacing: 16
+                            rowSpacing: 2
+
                             Repeater {
                                 model: root.filteredBinds()
                                 delegate: Rectangle {
-                                    width: bindsCol.width; height: 26; radius: 4
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 26
+                                    radius: 4
                                     color: rma.containsMouse ? Qt.rgba(1,1,1,0.03) : "transparent"
+
                                     MouseArea { id: rma; anchors.fill: parent; hoverEnabled: true }
+
                                     RowLayout {
-                                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 12
-                                        Text { Layout.preferredWidth: 240; text: modelData.key; color: root.accent; font.pixelSize: 12; font.family: "monospace"; elide: Text.ElideRight }
-                                        Text { Layout.fillWidth: true; text: modelData.action + (modelData.comment ? "  — " + modelData.comment : ""); color: root.text; font.pixelSize: 12; elide: Text.ElideRight }
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        spacing: 8
+
+                                        // Colored key pills
+                                        Row {
+                                            spacing: 4
+                                            Repeater {
+                                                model: modelData.key.split(/\s*\+\s*/)
+                                                delegate: Rectangle {
+                                                    height: 20
+                                                    width: keyText.implicitWidth + 12
+                                                    radius: 5
+                                                    color: keyPillColor(modelData)
+
+                                                    Text {
+                                                        id: keyText
+                                                        anchors.centerIn: parent
+                                                        text: modelData
+                                                        color: keyPillTextColor(modelData)
+                                                        font.pixelSize: 10
+                                                        font.family: "monospace"
+                                                        font.bold: true
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.action
+                                            color: root.text
+                                            font.pixelSize: 12
+                                            elide: Text.ElideRight
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
+                    // Environment Tab
                     Flickable {
                         visible: root.currentTab === 1; anchors.fill: parent
                         contentHeight: envCol.implicitHeight + 20; clip: true
@@ -315,23 +437,120 @@ Item {
                                     color: ema.containsMouse ? Qt.rgba(1,1,1,0.03) : "transparent"
                                     MouseArea { id: ema; anchors.fill: parent; hoverEnabled: true }
                                     RowLayout {
-                                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 16
-                                        Text { Layout.preferredWidth: 300; text: modelData.key; color: root.accent; font.pixelSize: 12; font.family: "monospace" }
-                                        Text { Layout.fillWidth: true; text: "\"" + modelData.value + "\"" + (modelData.comment ? "  — " + modelData.comment : ""); color: root.text; font.pixelSize: 12; elide: Text.ElideRight }
+                                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 12
+                                        Text {
+                                            Layout.preferredWidth: 290
+                                            text: modelData.key
+                                            color: root.accent
+                                            font.pixelSize: 12
+                                            font.family: "monospace"
+                                        }
+                                        Text {
+                                            Layout.preferredWidth: 380
+                                            text: modelData.value
+                                            color: root.accent
+                                            font.pixelSize: 12
+                                            font.family: "monospace"
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            visible: modelData.comment
+                                            text: modelData.comment
+                                            color: root.text
+                                            font.pixelSize: 12
+                                            elide: Text.ElideRight
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    Flickable {
-                        visible: root.currentTab === 2; anchors.fill: parent
-                        contentHeight: sysText.implicitHeight + 20; clip: true
-                        TextEdit {
-                            id: sysText; width: parent.width - 10
-                            text: root.systemOutput || "Loading..."; color: root.text
-                            font.pixelSize: 11; font.family: "NotoSansMono, monospace"
-                            readOnly: true; selectByMouse: true; wrapMode: TextEdit.NoWrap
+                    // System Info Tab
+                    Item {
+                        visible: root.currentTab === 2
+                        anchors.fill: parent
+                        anchors.margins: 10
+
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 20
+
+                            Image {
+                                source: "/home/crome/.config/quickshell/cachyos-linux.svg"
+                                Layout.preferredWidth: 180
+                                Layout.preferredHeight: 180
+                                fillMode: Image.PreserveAspectFit
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                spacing: 4
+
+                                Text {
+                                    text: "crome@crome-dt"
+                                    font.pixelSize: 18
+                                    font.bold: true
+                                    color: root.accent
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 1
+                                    color: root.glassPopupBorder
+                                    opacity: 0.5
+                                }
+
+                                Flickable {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    clip: true
+                                    contentHeight: sysList.implicitHeight
+
+                                    Column {
+                                        id: sysList
+                                        width: parent.width
+                                        spacing: 2
+
+                                        Repeater {
+                                            model: root.systemEntries
+                                            delegate: Rectangle {
+                                                width: parent.width
+                                                height: 24
+                                                color: valueMa.containsMouse ? Qt.rgba(1,1,1,0.06) : "transparent"
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 4
+                                                    anchors.rightMargin: 8
+                                                    spacing: 12
+                                                    Text {
+                                                        Layout.preferredWidth: 210
+                                                        text: modelData.label + ":"
+                                                        color: root.accent
+                                                        font.pixelSize: 12
+                                                        font.family: "monospace"
+                                                    }
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.value
+                                                        color: root.text
+                                                        font.pixelSize: 12
+                                                        font.family: "monospace"
+                                                        MouseArea {
+                                                            id: valueMa
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: root.copyToClipboard(modelData.value)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -341,7 +560,7 @@ Item {
                     Text {
                         text: root.currentTab === 0 ? (root.filteredBinds().length + " bindings  ·  open menu or click Reload file")
                             : root.currentTab === 1 ? (root._parsedEnv.length + " environment variables")
-                            : "fastfetch"
+                            : "system info"
                         color: root.overlay; font.pixelSize: 11
                     }
                     Item { Layout.fillWidth: true }

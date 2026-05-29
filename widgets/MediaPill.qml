@@ -3,12 +3,22 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
+import Quickshell.Widgets
 
 import "../components"
 
-// MediaPill.qml
-// Centered media player pill (MPRIS + PipeWire visualizer) + rich popup.
-// Extracted from the original monolithic shell.qml.
+// =============================================================================
+// MediaPill.qml — Centered media player pill + rich popup
+// =============================================================================
+//
+// Shows currently playing media (via MPRIS) with a Cava visualizer background.
+// - Left click: toggle play/pause
+// - Scroll wheel: cycle between active players
+// - Right click: opens the rich media popup (art, controls, seek, player selector, PipeWire sources)
+//
+// This component owns all its own state (the `media` QtObject) so it is fully
+// self-contained after extraction from the old monolithic shell.qml.
+// =============================================================================
 
 Rectangle {
     id: root
@@ -16,6 +26,7 @@ Rectangle {
     required property var bar
     required property Item barBg
 
+    // Whether any media is currently playing (drives visibility + coupling with SysStatsPill)
     readonly property bool hasMedia: media.title !== ""
 
     anchors.centerIn: barBg
@@ -222,6 +233,22 @@ Rectangle {
         function onValuesChanged() { media.refreshPlayers(); }
     }
 
+    // Lightweight periodic rescan for MPRIS (self-contained now that media state lives here).
+    // Catches players that mutate metadata/playback in place without emitting valuesChanged
+    // (Audacious, mpv, some VLC, browser edge cases, etc.).
+    Timer {
+        interval: 1500
+        running: true
+        repeat: true
+        onTriggered: media.refreshPlayers()
+    }
+
+    Component.onCompleted: {
+        // Pick up any already-registered MPRIS players (Spotify, browsers left open, etc.)
+        Qt.callLater(media.refreshPlayers);
+        media.refreshBrowserAudioNodes();
+    }
+
     // ===== THE PILL UI =====
     // Subtle top highlight
     Rectangle {
@@ -295,6 +322,443 @@ Rectangle {
         }
     }
 
-    // Popups and helpers will be moved here in the full extraction.
-    // For now, this is the core pill + state.
+    // ===== MEDIA POPUP HELPERS =====
+    function showMediaPopup() {
+        if (mediaPopup.visible) {
+            mediaPopup.visible = false;
+            return;
+        }
+
+        // Force a fresh player scan (synchronous internal call) before the guard.
+        // refreshPlayers() itself is async via callLater; we need up-to-date players here.
+        media._actuallyRefreshPlayers();
+
+        if (!root.visible || !media.currentPlayer) {
+            console.log("MediaPill: not showing popup (visible:", root.visible, "currentPlayer:", media.currentPlayer, "players.length:", media.players ? media.players.length : 0);
+            return;
+        }
+
+        // Position under the bar, centered on the media pill
+        var pos = root.mapToItem(barBg, root.width / 2, root.height);
+        var popupW = mediaPopup.implicitWidth;
+        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920;
+
+        var targetX = bar.sideMargin + pos.x - (popupW / 2);
+        var minX = 12;
+        var maxX = screenW - popupW - 12;
+        mediaPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX));
+        mediaPopup.anchor.rect.y = bar.implicitHeight + 4;
+
+        media.refreshBrowserAudioNodes();
+
+        mediaPopup.visible = true;
+    }
+
+    function hideMediaPopup() {
+        mediaPopup.visible = false;
+    }
+
+    // ===== MEDIA POPUP (rich controls, art, seek, player selector) =====
+    PopupWindow {
+        id: mediaPopup
+        anchor.window: bar
+        implicitWidth: 520
+        implicitHeight: 470
+        visible: false
+        color: "transparent"
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 14
+            color: bar.glassPopupBg
+            border.width: 1
+            border.color: bar.glassPopupBorder
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 1.5
+                color: bar.glassPopupHighlight
+                radius: parent.radius
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 12
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: media.appName
+                        color: bar.accent
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
+                    Item { Layout.fillWidth: true }
+
+                    Rectangle {
+                        Layout.preferredWidth: 68
+                        Layout.preferredHeight: 20
+                        radius: 4
+                        color: rescanMa.containsMouse ? bar.glassHover : bar.surface
+                        border.width: 1
+                        border.color: bar.glassBorder
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 4
+                            Text {
+                                text: "⟳"
+                                font.pixelSize: 12
+                                color: bar.accent
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                                text: "Rescan"
+                                font.pixelSize: 10
+                                color: bar.text
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                        MouseArea {
+                            id: rescanMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: media.forceRescan()
+                        }
+                    }
+
+                    Text {
+                        text: "click outside to close"
+                        color: bar.overlay
+                        font.pixelSize: 11
+                        Layout.leftMargin: 8
+                    }
+                }
+
+                // Art + metadata
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 14
+
+                    Rectangle {
+                        Layout.preferredWidth: 110
+                        Layout.preferredHeight: 110
+                        radius: 8
+                        color: bar.surface
+                        border.width: 1
+                        border.color: "#45475a"
+
+                        ClippingRectangle {
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            radius: 6
+                            color: "transparent"
+
+                            Image {
+                                anchors.fill: parent
+                                fillMode: Image.PreserveAspectCrop
+                                source: media.artUrl
+                                visible: media.artUrl !== ""
+                            }
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            visible: media.artUrl === ""
+                            text: "󰝚"
+                            font.pixelSize: 42
+                            color: bar.overlay
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: media.title || "(no title)"
+                            color: bar.text
+                            font.pixelSize: 18
+                            font.bold: true
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: media.artist !== ""
+                            text: media.artist
+                            color: bar.subtext
+                            font.pixelSize: 14
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: media.album !== ""
+                            text: media.album
+                            color: bar.overlay
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+
+                // Transport controls
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 24
+                    Layout.topMargin: 6
+
+                    Rectangle {
+                        width: 42; height: 42; radius: 21
+                        color: prevMa.containsMouse ? bar.glassHover : "transparent"
+                        border.width: 1
+                        border.color: media.canPrev ? bar.glassBorder : "#333"
+                        opacity: media.canPrev ? 1.0 : 0.4
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "󰒮"
+                            font.pixelSize: 20
+                            color: bar.text
+                        }
+                        MouseArea {
+                            id: prevMa
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: media.canPrev
+                            onClicked: media.prevTrack()
+                        }
+                    }
+
+                    Rectangle {
+                        width: 58; height: 58; radius: 29
+                        color: playMa.containsMouse ? bar.accent : bar.glassHover
+                        border.width: 1
+                        border.color: bar.accent
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: media.isPlaying ? "󰏤" : "󰐊"
+                            font.pixelSize: 26
+                            color: playMa.containsMouse ? bar.bg : bar.text
+                        }
+                        MouseArea {
+                            id: playMa
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: media.toggleCurrent()
+                        }
+                    }
+
+                    Rectangle {
+                        width: 42; height: 42; radius: 21
+                        color: nextMa.containsMouse ? bar.glassHover : "transparent"
+                        border.width: 1
+                        border.color: media.canNext ? bar.glassBorder : "#333"
+                        opacity: media.canNext ? 1.0 : 0.4
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "󰒭"
+                            font.pixelSize: 20
+                            color: bar.text
+                        }
+                        MouseArea {
+                            id: nextMa
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: media.canNext
+                            onClicked: media.nextTrack()
+                        }
+                    }
+                }
+
+                // Seek bar
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: media.canSeek && media.lengthSupported && media.length > 0
+                    spacing: 4
+
+                    Rectangle {
+                        id: seekTrack
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 6
+                        radius: 3
+                        color: bar.surface
+
+                        Rectangle {
+                            width: Math.max(0, Math.min(parent.width, (media.position / media.length) * parent.width))
+                            height: parent.height
+                            radius: 3
+                            color: bar.accent
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: (m) => {
+                                if (media.length > 0) {
+                                    const frac = m.x / width;
+                                    media.seekTo(frac * media.length);
+                                }
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            text: Qt.formatTime(new Date(media.position), "mm:ss")
+                            color: bar.overlay
+                            font.pixelSize: 11
+                            font.family: "monospace"
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: Qt.formatTime(new Date(media.length), "mm:ss")
+                            color: bar.overlay
+                            font.pixelSize: 11
+                            font.family: "monospace"
+                        }
+                    }
+                }
+
+                // Player selector
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: media.players.length > 1
+                    spacing: 4
+
+                    Text {
+                        text: "Active streams"
+                        color: bar.accent
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 58
+                        contentWidth: playerRow.implicitWidth
+                        clip: true
+
+                        Row {
+                            id: playerRow
+                            spacing: 6
+
+                            Repeater {
+                                model: media.players
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    required property int index
+
+                                    width: 170
+                                    height: 52
+                                    radius: 6
+                                    color: index === media.currentIndex ? Qt.rgba(0.55, 0.71, 0.98, 0.18) : bar.surface
+                                    border.width: index === media.currentIndex ? 1 : 0
+                                    border.color: bar.accent
+
+                                    Column {
+                                        anchors.fill: parent
+                                        anchors.margins: 5
+                                        spacing: 1
+
+                                        Row {
+                                            width: parent.width
+                                            spacing: 4
+                                            Text {
+                                                text: modelData.identity || modelData.desktopEntry || "Player"
+                                                color: bar.text
+                                                font.pixelSize: 11
+                                                font.bold: true
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                        Text {
+                                            text: (modelData.trackTitle || "").substring(0, 26)
+                                            color: bar.subtext
+                                            font.pixelSize: 10
+                                            elide: Text.ElideRight
+                                            width: parent.width
+                                        }
+                                        Text {
+                                            visible: modelData.dbusName
+                                            text: (modelData.dbusName || "").replace("org.mpris.MediaPlayer2.", "")
+                                            color: bar.overlay
+                                            font.pixelSize: 8
+                                            elide: Text.ElideRight
+                                            width: parent.width
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: media.selectPlayer(index);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // PipeWire section
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: media.browserAudioNodes.length > 0
+                    spacing: 4
+                    Layout.topMargin: 8
+
+                    Text {
+                        text: "Audio sources from PipeWire"
+                        color: bar.accent
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Repeater {
+                            model: media.browserAudioNodes
+                            delegate: Text {
+                                required property var modelData
+                                readonly property string volInfo: modelData.muted ? " (muted)" :
+                                    (modelData.volume > 0 ? " • vol " + Math.round(modelData.volume * 100) + "%" : "")
+
+                                text: modelData.app + (modelData.mediaName ? " — " + modelData.mediaName : "") + (modelData.role ? " [" + modelData.role + "]" : "") + volInfo
+                                color: bar.subtext
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                                width: parent.width
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "Direct PipeWire nodes (browsers + Audacious, mpv, etc). Independent of MPRIS."
+                        color: bar.overlay
+                        font.pixelSize: 9
+                        font.italic: true
+                    }
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            onClicked: mediaPopup.visible = false
+        }
+    }
 }

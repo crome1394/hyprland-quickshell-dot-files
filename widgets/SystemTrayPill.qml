@@ -4,9 +4,14 @@ import Quickshell
 import Quickshell.Services.SystemTray
 import Quickshell.Widgets
 
-// SystemTrayPill.qml
-// System tray icons pill + dynamic right-click menu popup (with submenu support).
-// Extracted from the original monolithic shell.qml.
+// =============================================================================
+// SystemTrayPill.qml — System tray with styled menus
+// =============================================================================
+//
+// Repeater of tray icons using IconImage.
+// Right-click opens a custom glassmorphic menu that supports submenus,
+// check items, radio items, and separators via QsMenuOpener.
+// =============================================================================
 
 Rectangle {
     id: root

@@ -2,9 +2,13 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 
-// QuickLaunchPill.qml
-// Encapsulated quick launch icons pill (VSCodium, Firefox, Logseq, LM Studio, etc.)
-// Extracted from the original monolithic shell.qml.
+// =============================================================================
+// QuickLaunchPill.qml — Quick launch row
+// =============================================================================
+//
+// Row of icon buttons that launch common apps via rofi or direct commands.
+// Currently launches the rofi app drawer on the first icon.
+// =============================================================================
 
 Rectangle {
     id: root

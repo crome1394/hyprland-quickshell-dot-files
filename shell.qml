@@ -13,67 +13,84 @@ import Quickshell.Io as Io
 import "components"
 import "widgets"
 
-PanelWindow {
-    id: bar
+// =============================================================================
+// shell.qml — Main Quickshell entry point for the Hyprland status bar
+// =============================================================================
+//
+// This file is intentionally kept small. All widget logic lives in:
+//   - widgets/*.qml     (self-contained pills and menus)
+//   - components/*.qml  (reusable low-level pieces like VolumeBar, CavaVisualizer)
+//   - Theme.qml         (single source of truth for colors and metrics)
+//   - HelpMenu.qml      (the rich centered help overlay)
+//
+// The bar uses a glassmorphic / frosted acrylic aesthetic with Catppuccin-inspired colors.
+//
+// IPC integration:
+//   - `qs ipc call help toggle` opens the HelpMenu (bound in hyprland.lua)
+//
+// See the git history for the incremental extraction process (one widget at a time).
+// =============================================================================
 
-    anchors.top: true
-    anchors.left: true
-    anchors.right: true
-    implicitHeight: 54   // Increased for ultrawide readability (was 46)
-    color: "transparent"
+ShellRoot {
+    // The main bar window. All visual widgets live inside or as siblings under this.
+    PanelWindow {
+        id: bar
 
-    // ===== Theme (centralized — see Theme.qml) =====
-    // Single source of truth. All values (including glassmorphic tokens,
-    // workspace colors, pill metrics, and audio widget sizing) live in Theme.qml.
-    // The aliases below provide 100% backward compatibility so the other 3300+
-    // lines of this file (and any code using bar.accent, bar.pillRadius, etc.)
-    // continue to work with zero other changes during the split.
-    Theme { id: theme }
+        anchors.top: true
+        anchors.left: true
+        anchors.right: true
+        implicitHeight: 54   // Increased for ultrawide readability (was 46)
+        color: "transparent"
 
-    property alias bg: theme.bg
-    property alias surface: theme.surface
-    property alias text: theme.text
-    property alias subtext: theme.subtext
-    property alias overlay: theme.overlay
-    property alias accent: theme.accent
-    property alias todayBg: theme.todayBg
-    property alias weekday: theme.weekday
-    property alias clock: theme.clock
-    property alias muted: theme.muted
-    property alias barRadius: theme.barRadius
-    property alias sideMargin: theme.sideMargin
+        // ===== Theme (centralized — see Theme.qml) =====
+        // Single source of truth. All values (including glassmorphic tokens,
+        // workspace colors, pill metrics, and audio widget sizing) live in Theme.qml.
+        // The aliases below provide 100% backward compatibility so widgets can keep
+        // using `bar.accent`, `bar.pillRadius`, etc. without changes.
+        Theme { id: theme }
 
-    readonly property alias glassBg: theme.glassBg
-    readonly property alias glassBorder: theme.glassBorder
-    readonly property alias glassHighlight: theme.glassHighlight
-    readonly property alias glassPillBg: theme.glassPillBg
-    readonly property alias glassHover: theme.glassHover
-    readonly property alias glassPopupBg: theme.glassPopupBg
-    readonly property alias glassPopupBorder: theme.glassPopupBorder
-    readonly property alias glassPopupHighlight: theme.glassPopupHighlight
+        property alias bg: theme.bg
+        property alias surface: theme.surface
+        property alias text: theme.text
+        property alias subtext: theme.subtext
+        property alias overlay: theme.overlay
+        property alias accent: theme.accent
+        property alias todayBg: theme.todayBg
+        property alias weekday: theme.weekday
+        property alias clock: theme.clock
+        property alias muted: theme.muted
+        property alias barRadius: theme.barRadius
+        property alias sideMargin: theme.sideMargin
 
-    readonly property alias menuBtnNone: theme.menuBtnNone
-    readonly property alias menuBtnCheck: theme.menuBtnCheck
-    readonly property alias menuBtnRadio: theme.menuBtnRadio
+        readonly property alias glassBg: theme.glassBg
+        readonly property alias glassBorder: theme.glassBorder
+        readonly property alias glassHighlight: theme.glassHighlight
+        readonly property alias glassPillBg: theme.glassPillBg
+        readonly property alias glassHover: theme.glassHover
+        readonly property alias glassPopupBg: theme.glassPopupBg
+        readonly property alias glassPopupBorder: theme.glassPopupBorder
+        readonly property alias glassPopupHighlight: theme.glassPopupHighlight
 
-    readonly property alias wsHoverYellow: theme.wsHoverYellow
-    readonly property alias wsActiveBg: theme.wsActiveBg
-    readonly property alias wsText: theme.wsText
-    readonly property alias wsActiveText: theme.wsActiveText
+        readonly property alias menuBtnNone: theme.menuBtnNone
+        readonly property alias menuBtnCheck: theme.menuBtnCheck
+        readonly property alias menuBtnRadio: theme.menuBtnRadio
 
-    readonly property alias pillBg: theme.pillBg
-    readonly property alias pillBorder: theme.pillBorder
-    readonly property alias pillRadius: theme.pillRadius
+        readonly property alias wsHoverYellow: theme.wsHoverYellow
+        readonly property alias wsActiveBg: theme.wsActiveBg
+        readonly property alias wsText: theme.wsText
+        readonly property alias wsActiveText: theme.wsActiveText
 
-    readonly property alias audioViewContentWidth: theme.audioViewContentWidth
-    readonly property alias audioViewSidePadding: theme.audioViewSidePadding
+        readonly property alias pillBg: theme.pillBg
+        readonly property alias pillBorder: theme.pillBorder
+        readonly property alias pillRadius: theme.pillRadius
+
+        readonly property alias audioViewContentWidth: theme.audioViewContentWidth
+        readonly property alias audioViewSidePadding: theme.audioViewSidePadding
 
 
-
-    // ===== NOTIFICATIONS (swaync-backed bell widget) =====
-    // Uses swaync-client -s (subscribe) for live count + DND state.
-    // This is purely event-driven (no polling timers). The client process
-    // only emits when swaync has changes. Keeps resource use minimal.
+        // ===== GLOBAL NOTIFICATION STATE =====
+    // Shared state for the NotificationBell widget. Updated by the swaync subscribe process below.
+    // Kept as a small QtObject here so it can be passed into the widget.
     QtObject {
         id: notif
         property int count: 0
@@ -87,37 +104,12 @@ PanelWindow {
     }
 
 
-
     Component.onCompleted: {
         audio.refreshDevices();
-        // Ensure we pick up any MPRIS players that were already registered before the
-        // Connections below became active (e.g. Audacious, Spotify, etc. left running).
-        Qt.callLater(media.refreshPlayers);
-        media.refreshBrowserAudioNodes();
-
-
+        // Media initialization (refreshPlayers + browser nodes) now lives inside
+        // widgets/MediaPill.qml so the component is fully self-contained.
     }
-
-
-
-    // Lightweight periodic rescan for MPRIS.
-    // Many native players (Audacious, mpv, some VLC configs, etc.) register a single
-    // MPRIS object once and then mutate Metadata + PlaybackStatus in place when you
-    // press play or change tracks. This does *not* emit valuesChanged on the players list.
-    // Browser media often spawns fresh MPRIS objects, which is why the "streams like
-    // in the browser" path felt more reliable before.
-    // A cheap 1.5s poll guarantees we notice title/playback changes quickly without
-    // noticeable CPU cost (the actual work is a tiny loop over < 10 objects).
-    Timer {
-        interval: 1500
-        running: true
-        repeat: true
-        onTriggered: media.refreshPlayers()
-    }
-
-
-
-    // (Media logic has been moved into widgets/MediaPill.qml)
+    // (Media logic + its 1.5s rescan Timer have been moved into widgets/MediaPill.qml)
 
 
 
@@ -278,18 +270,17 @@ PanelWindow {
             }
         }
     }
-
     MediaPill {
         id: mediaPill
         bar: bar
         barBg: barBg
     }
-
     SysStatsPill {
         bar: bar
         barBg: barBg
         mediaActive: mediaPill.hasMedia
     }
+
 
 
 
@@ -346,4 +337,21 @@ PanelWindow {
             console.log("swaync subscribe exited with code", code);
         }
     }
+}
+
+// ===== Hyprland Help Menu (polished version from ~/.config/quickshell-help) =====
+// Centered floating panel with colored key pills, env vars, and rich System Info
+// (fastfetch + clickable copy-to-clipboard + logo).
+// Toggled via IPC:  qs ipc call help toggle   (wire to a key in hyprland.lua)
+HelpMenu { id: helpMenu }
+
+Io.IpcHandler {
+    target: "help"
+
+    function toggle() {
+        if (helpMenu && helpMenu.toggle) {
+            helpMenu.toggle()
+        }
+    }
+}
 }

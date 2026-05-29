@@ -3,10 +3,16 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
 
-// WorkspacesPill.qml
-// Workspace pills showing only occupied/active workspaces with icons,
-// scroll-to-switch, and cold-start polling.
-// Extracted from the original monolithic shell.qml.
+// =============================================================================
+// WorkspacesPill.qml — Dynamic workspace pills
+// =============================================================================
+//
+// Shows only occupied + active workspaces (filtered).
+// - Icons are mapped in getWsIcon()
+// - Scroll wheel switches workspaces relative to the current filtered list
+// - Cold-start poller helps when Hyprland IPC is slow on login
+// - Two Hyprland Connections keep the list reactive
+// =============================================================================
 
 Rectangle {
     id: root
