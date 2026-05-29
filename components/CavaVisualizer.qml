@@ -17,7 +17,7 @@ import QtQuick
 Item {
     id: root
 
-    required property var bar   // for future theme-driven colors if desired
+    property var bar   // for future theme-driven colors if desired - supplied via Loader onLoaded
 
     property bool active: false
     property color barColor: Qt.rgba(1, 1, 1, 0.18)

@@ -16,7 +16,7 @@ import QtQuick
 Item {
     id: root
 
-    required property var bar   // theme source (accent, surface, muted)
+    property var bar   // theme source (accent, surface, muted) - supplied by Loader onLoaded for now
 
     property real value: 0.0
     property var onSet: function(v){}

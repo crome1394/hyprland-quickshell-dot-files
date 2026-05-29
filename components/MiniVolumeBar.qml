@@ -10,7 +10,7 @@ import QtQuick
 Item {
     id: root
 
-    required property var bar
+    property var bar   // supplied via Loader onLoaded
 
     property real value: 0.0
     property var onSet: function(v){}
