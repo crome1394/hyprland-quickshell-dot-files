@@ -40,6 +40,18 @@ Item {
 
     readonly property real effectiveValue: Math.max(0, Math.min(1, value))
 
+    // Compute the actual fill color from the passed `fill` if valid,
+    // otherwise derive it from `bar` (handles muted state correctly).
+    readonly property color actualFillColor: {
+        if (root.fill && root.fill.toString() !== "#000000") {
+            return root.fill;
+        }
+        if (root.bar) {
+            return root.bar.muted ? root.bar.muted : root.bar.accent;
+        }
+        return "#89b4fa";
+    }
+
     // Track (background)
     Rectangle {
         anchors.centerIn: parent
@@ -64,7 +76,7 @@ Item {
             width: fillContainer.width * root.effectiveValue
             height: parent.height
             radius: height / 2
-            color: root.fill
+            color: root.actualFillColor
         }
     }
 
