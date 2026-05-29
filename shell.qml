@@ -95,139 +95,160 @@ ShellRoot {
             // widgets/MediaPill.qml so the component is fully self-contained.
         }
         // (Media logic + its 1.5s rescan Timer have been moved into widgets/MediaPill.qml)
-    // ===== Bar Content =====
-    // Glassmorphic styling throughout bar + all popups (frosted acrylic style)
-    // (Easy to revert - the glass* properties control most of it)
-    Rectangle {
-        id: barBg
-        anchors.fill: parent
-        anchors.leftMargin: bar.sideMargin
-        anchors.rightMargin: bar.sideMargin
-        anchors.topMargin: 4
-        anchors.bottomMargin: 4
-        radius: bar.barRadius
-        color: bar.glassBg
-        border.width: 1
-        border.color: bar.glassBorder
-        // Stronger top light edge for classic glassmorphism
+
+        // ===== Bar Content =====
+        // Glassmorphic styling throughout bar + all popups (frosted acrylic style)
+        // (Easy to revert - the glass* properties control most of it)
         Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: 1.5
-            color: bar.glassHighlight
-            radius: parent.radius
-        }
-        // Very subtle bottom inner shadow for depth
-        Rectangle {
-            anchors.bottom: parent.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: 1
-            color: Qt.rgba(0, 0, 0, 0.25)
-            radius: parent.radius
-        }
-        RowLayout {
+            id: barBg
             anchors.fill: parent
-            anchors.leftMargin: 20   // Slightly more breathing room for ultrawide
-            anchors.rightMargin: 20
-            spacing: 14
-            // Left side - Workspaces (from eww migration: icons+num, only active/occupied,
+            anchors.leftMargin: bar.sideMargin
+            anchors.rightMargin: bar.sideMargin
+            anchors.topMargin: 4
+            anchors.bottomMargin: 4
+            radius: bar.barRadius
+            color: bar.glassBg
+            border.width: 1
+            border.color: bar.glassBorder
+
+            // Stronger top light edge for classic glassmorphism
             Rectangle {
-                id: launcherPill
-                Layout.preferredWidth: 42
-                Layout.preferredHeight: 36
-                radius: bar.pillRadius
-                color: launcherMouse.containsMouse ? bar.glassHover : bar.pillBg
-                border.width: 1
-                border.color: launcherMouse.containsMouse ? bar.accent : bar.pillBorder
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰀻"   // Change this icon if you want (see note below)
-                    font.pixelSize: 18
-                    font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
-                    color: launcherMouse.containsMouse ? bar.accent : bar.subtext
-                }
-                MouseArea {
-                    id: launcherMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        Quickshell.execDetached(["sh", "-c", "~/.local/bin/rofi-app-drawer"])
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 1.5
+                color: bar.glassHighlight
+                radius: parent.radius
+            }
+
+            // Very subtle bottom inner shadow for depth
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 1
+                color: Qt.rgba(0, 0, 0, 0.25)
+                radius: parent.radius
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 20   // Slightly more breathing room for ultrawide
+                anchors.rightMargin: 20
+                spacing: 14
+
+                // Left side - Workspaces (from eww migration: icons+num, only active/occupied,
+                Rectangle {
+                    id: launcherPill
+                    Layout.preferredWidth: 42
+                    Layout.preferredHeight: 36
+                    radius: bar.pillRadius
+                    color: launcherMouse.containsMouse ? bar.glassHover : bar.pillBg
+                    border.width: 1
+                    border.color: launcherMouse.containsMouse ? bar.accent : bar.pillBorder
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰀻"   // Change this icon if you want (see note below)
+                        font.pixelSize: 18
+                        font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                        color: launcherMouse.containsMouse ? bar.accent : bar.subtext
                     }
+
+                    MouseArea {
+                        id: launcherMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            Quickshell.execDetached(["sh", "-c", "~/.local/bin/rofi-app-drawer"])
+                        }
+                    }
+
+                    ToolTip.text: "App Launcher"
+                    ToolTip.visible: launcherMouse.containsMouse
+                    ToolTip.delay: 500
                 }
-                ToolTip.text: "App Launcher"
-                ToolTip.visible: launcherMouse.containsMouse
-                ToolTip.delay: 500
-            }
-            // Subtle modern vertical divider
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 18
-                Layout.alignment: Qt.AlignVCenter
-                color: Qt.rgba(1, 1, 1, 0.12)
-            }
-            WorkspacesPill {
-                bar: bar
-            }
-            Item { Layout.fillWidth: true }
-            // ===== QUICK LAUNCH APPS (encapsulated pill, left of system tray) =====
-            QuickLaunchPill {
-                bar: bar
-            }
-            // Subtle modern vertical divider
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 18
-                Layout.alignment: Qt.AlignVCenter
-                color: Qt.rgba(1, 1, 1, 0.12)
-            }
-            // ===== SYSTEM TRAY (right side, left of volume widget, pill style, comfortable spacing, efficient reactive) =====
-            SystemTrayPill {
-                bar: bar
-                barBg: barBg
-            }
-            // Subtle modern vertical divider
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 18
-                Layout.alignment: Qt.AlignVCenter
-                color: Qt.rgba(1, 1, 1, 0.12)
-            }
-            AudioPill {
-                bar: bar
-                barBg: barBg
-            }
-            // Subtle modern vertical divider
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 18
-                Layout.alignment: Qt.AlignVCenter
-                color: Qt.rgba(1, 1, 1, 0.12)
-            }
-            // ===== CLOCK + CALENDAR (coupled pair) =====
-            ClockPill {
-                bar: bar
-                barBg: barBg
-            }
-            // ===== NOTIFICATION BELL (right of clock, swaync backed) =====
-            NotificationBell {
-                bar: bar
-                notif: notif
-            }
-            // Subtle modern vertical divider (between notifications and power menu)
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 18
-                Layout.alignment: Qt.AlignVCenter
-                color: Qt.rgba(1, 1, 1, 0.12)
-            }
-            // ===== POWER / SESSION MENU (right of notification bell) =====
-            PowerMenu {
-                bar: bar
-                barBg: barBg
-            }
+
+                // Subtle modern vertical divider
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 18
+                    Layout.alignment: Qt.AlignVCenter
+                    color: Qt.rgba(1, 1, 1, 0.12)
+                }
+
+                WorkspacesPill {
+                    bar: bar
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // ===== QUICK LAUNCH APPS (encapsulated pill, left of system tray) =====
+                QuickLaunchPill {
+                    bar: bar
+                }
+
+                // Subtle modern vertical divider
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 18
+                    Layout.alignment: Qt.AlignVCenter
+                    color: Qt.rgba(1, 1, 1, 0.12)
+                }
+
+                // ===== SYSTEM TRAY (right side, left of volume widget, pill style, comfortable spacing, efficient reactive) =====
+                SystemTrayPill {
+                    bar: bar
+                    barBg: barBg
+                }
+
+                // Subtle modern vertical divider
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 18
+                    Layout.alignment: Qt.AlignVCenter
+                    color: Qt.rgba(1, 1, 1, 0.12)
+                }
+
+                AudioPill {
+                    bar: bar
+                    barBg: barBg
+                }
+
+                // Subtle modern vertical divider
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 18
+                    Layout.alignment: Qt.AlignVCenter
+                    color: Qt.rgba(1, 1, 1, 0.12)
+                }
+
+                // ===== CLOCK + CALENDAR (coupled pair) =====
+                ClockPill {
+                    bar: bar
+                    barBg: barBg
+                }
+
+                // ===== NOTIFICATION BELL (right of clock, swaync backed) =====
+                NotificationBell {
+                    bar: bar
+                    notif: notif
+                }
+
+                // Subtle modern vertical divider (between notifications and power menu)
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 18
+                    Layout.alignment: Qt.AlignVCenter
+                    color: Qt.rgba(1, 1, 1, 0.12)
+                }
+
+                // ===== POWER / SESSION MENU (right of notification bell) =====
+                PowerMenu {
+                    bar: bar
+                    barBg: barBg
+                }
         }
     }
     MediaPill {
@@ -277,18 +298,23 @@ ShellRoot {
             console.log("swaync subscribe exited with code", code);
         }
     }
-}
-// ===== Hyprland Help Menu (polished version from ~/.config/quickshell-help) =====
-// Centered floating panel with colored key pills, env vars, and rich System Info
-// (fastfetch + clickable copy-to-clipboard + logo).
-// Toggled via IPC:  qs ipc call help toggle   (wire to a key in hyprland.lua)
-HelpMenu { id: helpMenu }
-Io.IpcHandler {
-    target: "help"
-    function toggle() {
-        if (helpMenu && helpMenu.toggle) {
-            helpMenu.toggle()
+
+    // ===== Hyprland Help Menu (polished version from ~/.config/quickshell-help) =====
+    // Centered floating panel with colored key pills, env vars, and rich System Info
+    // (fastfetch + clickable copy-to-clipboard + logo).
+    // Toggled via IPC:  qs ipc call help toggle   (wire to a key in hyprland.lua)
+    HelpMenu { id: helpMenu }
+
+    Io.IpcHandler {
+        target: "help"
+        function toggle() {
+            if (helpMenu && helpMenu.toggle) {
+                helpMenu.toggle()
+            }
         }
     }
 }
+
+// End of ShellRoot
+// All top-level items (PanelWindow bar + floating components like HelpMenu) live inside this.
 }

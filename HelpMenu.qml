@@ -107,7 +107,14 @@ Item {
     // Parsing Functions for hyprland.lua
     // -------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------
+    // Data Parsing
+    // These functions turn the user's hyprland.lua into nice structured data
+    // for the three tabs in the HelpMenu overlay.
+    // -------------------------------------------------------------------------
+
     // Parses hl.bind() lines that have a --# comment for the help overlay.
+    // Also does some light formatting (SUPER, pretty key names, etc.).
     function parseKeybinds(text) {
         if (!text) return []
         const lines = text.split("\n")
