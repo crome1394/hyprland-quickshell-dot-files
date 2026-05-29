@@ -95,10 +95,7 @@ PanelWindow {
         Qt.callLater(media.refreshPlayers);
         media.refreshBrowserAudioNodes();
 
-        // Kick the CPU/GPU stats pill poller immediately so the centered widget appears fast
-        Qt.callLater(function() {
-            if (!statsPoller.running) statsPoller.running = true
-        })
+
     }
 
 
@@ -445,56 +442,7 @@ PanelWindow {
         function onValuesChanged() { media.refreshPlayers(); }
     }
 
-    // ===== CENTERED CPU+GPU STATS (lightweight poller for top bar pill) =====
-    // Polls a minimal ~80ms script every 1.6s. Provides live util + temp for the
-    // AMD 9950X3D (k10temp) and NVIDIA RTX 5080. Used exclusively by the centered
-    // sysPill when no media is playing.
-    property real cpuUtil: 0
-    property int  cpuTemp: 0
-    property real gpuUtil: 0
-    property int  gpuTemp: 0
-    property bool sysStatsReady: false
 
-    function updateSysStats(d) {
-        if (d.cpu) {
-            cpuUtil = Number(d.cpu.util) || 0
-            cpuTemp = Math.round(Number(d.cpu.temp) || 0)
-        }
-        if (d.gpu) {
-            gpuUtil = Number(d.gpu.util) || 0
-            gpuTemp = Math.round(Number(d.gpu.temp) || 0)
-        }
-        sysStatsReady = true
-    }
-
-    Io.Process {
-        id: statsPoller
-        command: ["/home/crome/.config/quickshell/scripts/bar-stats.sh"]
-        stdout: Io.SplitParser {
-            splitMarker: "\n"
-            onRead: (line) => {
-                const trimmed = line.trim()
-                if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return
-                try {
-                    const d = JSON.parse(trimmed)
-                    bar.updateSysStats(d)
-                } catch (e) {}
-            }
-        }
-        onExited: (code) => {
-            // ready for next timer kick
-        }
-    }
-
-    Timer {
-        id: statsTimer
-        interval: 1600
-        running: true
-        repeat: true
-        onTriggered: {
-            if (!statsPoller.running) statsPoller.running = true
-        }
-    }
 
     // ===== Bar Content =====
     // Glassmorphic styling throughout bar + all popups (frosted acrylic style)
@@ -965,193 +913,10 @@ PanelWindow {
         }
     }
 
-    // ===== CPU + GPU MONITOR PILL (centered, glassmorphic, mutually exclusive with media pill) =====
-    // Shows a compact dual visual bar + temperature display.
-    // - Horizontal progress bars for utilization (color: green/yellow/red by load)
-    // - Temperatures to the right of each bar (color: yellow/red by temp severity)
-    // - Entire pill is centered exactly like the media pill using anchors.centerIn
-    // - Right-click on CPU half launches kitty + btop
-    // - Right-click on GPU half launches kitty + nvtop
-    // - Only visible when no MPRIS media is actively playing (keeps center clean and purposeful)
-    Rectangle {
-        id: sysPill
-        anchors.centerIn: barBg
-        z: 5
-        visible: media.title === "" && bar.sysStatsReady
-        width: 385
-        implicitHeight: 40
-        radius: bar.pillRadius
-        color: sysHover.containsMouse ? bar.glassHover : bar.glassPillBg
-        border.width: 1
-        border.color: sysHover.containsMouse ? bar.accent : bar.glassBorder
-
-        // Subtle top glass highlight
-        Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: 1
-            color: bar.glassHighlight
-            radius: parent.radius
-        }
-
-        MouseArea {
-            id: sysHover
-            anchors.fill: parent
-            hoverEnabled: true
-            // Whole pill hover only; clicks are handled by the two child areas below
-        }
-
-        Row {
-            anchors.centerIn: parent
-            spacing: 17
-
-            // ----- CPU HALF -----
-            Item {
-                width: 162
-                height: 26
-                MouseArea {
-                    id: cpuClick
-                    anchors.fill: parent
-                    acceptedButtons: Qt.RightButton
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: (mouse) => {
-                        if (mouse.button === Qt.RightButton) {
-                            Quickshell.execDetached(["kitty", "-e", "btop"])
-                        }
-                    }
-                    ToolTip.text: "Right-click to launch btop"
-                    ToolTip.visible: cpuClick.containsMouse
-                    ToolTip.delay: 650
-                }
-
-                Row {
-                    anchors.centerIn: parent
-                    spacing: 7
-
-                    Text {
-                        text: "CPU"
-                        font.pixelSize: 13
-                        font.bold: true
-                        font.family: "JetBrains Mono Nerd Font, monospace"
-                        color: cpuClick.containsMouse ? bar.accent : bar.subtext
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    // Visual utilization bar (compact, animated)
-                    Item {
-                        width: 73
-                        height: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 4
-                            color: Qt.rgba(1, 1, 1, 0.09)
-                        }
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Math.max(2, Math.min(parent.width, parent.width * (bar.cpuUtil / 100)))
-                            height: 8
-                            radius: 4
-                            color: bar.cpuUtil > 85 ? "#f38ba8" :
-                                   (bar.cpuUtil > 65 ? "#f9e2af" : bar.accent)
-                            Behavior on width {
-                                NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
-                            }
-                        }
-                    }
-
-                    // Temp (always shown, color coded)
-                    Text {
-                        text: bar.cpuTemp + "°"
-                        font.pixelSize: 13
-                        font.bold: true
-                        color: bar.cpuTemp > 85 ? "#f38ba8" :
-                               (bar.cpuTemp > 70 ? "#f9e2af" : bar.text)
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-            }
-
-            // Thin vertical divider between CPU and GPU sections
-            Rectangle {
-                width: 1
-                height: 17
-                color: Qt.rgba(1, 1, 1, 0.13)
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            // ----- GPU HALF -----
-            Item {
-                width: 162
-                height: 26
-                MouseArea {
-                    id: gpuClick
-                    anchors.fill: parent
-                    acceptedButtons: Qt.RightButton
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: (mouse) => {
-                        if (mouse.button === Qt.RightButton) {
-                            Quickshell.execDetached(["kitty", "-e", "nvtop"])
-                        }
-                    }
-                    ToolTip.text: "Right-click to launch nvtop"
-                    ToolTip.visible: gpuClick.containsMouse
-                    ToolTip.delay: 650
-                }
-
-                Row {
-                    anchors.centerIn: parent
-                    spacing: 7
-
-                    Text {
-                        text: "GPU"
-                        font.pixelSize: 13
-                        font.bold: true
-                        font.family: "JetBrains Mono Nerd Font, monospace"
-                        color: gpuClick.containsMouse ? bar.accent : bar.subtext
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    // Visual utilization bar (compact, animated)
-                    Item {
-                        width: 73
-                        height: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 4
-                            color: Qt.rgba(1, 1, 1, 0.09)
-                        }
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Math.max(2, Math.min(parent.width, parent.width * (bar.gpuUtil / 100)))
-                            height: 8
-                            radius: 4
-                            color: bar.gpuUtil > 85 ? "#f38ba8" :
-                                   (bar.gpuUtil > 65 ? "#f9e2af" : bar.accent)
-                            Behavior on width {
-                                NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
-                            }
-                        }
-                    }
-
-                    // Temp (always shown, color coded)
-                    Text {
-                        text: bar.gpuTemp + "°"
-                        font.pixelSize: 13
-                        font.bold: true
-                        color: bar.gpuTemp > 85 ? "#f38ba8" :
-                               (bar.gpuTemp > 70 ? "#f9e2af" : bar.text)
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-            }
-        }
+    SysStatsPill {
+        bar: bar
+        barBg: barBg
+        mediaActive: media.title !== ""
     }
 
 
