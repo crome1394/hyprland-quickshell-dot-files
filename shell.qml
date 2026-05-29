@@ -68,41 +68,7 @@ PanelWindow {
     readonly property alias audioViewContentWidth: theme.audioViewContentWidth
     readonly property alias audioViewSidePadding: theme.audioViewSidePadding
 
-    function getWsIcon(id) {
-        switch (id) {
-            case 1: return "";     // code
-            case 2: return "🦁";    // Brave Browser
-            case 3: return "";     // chats
-            case 4: return "";     // Google Chrome
-            case 5: return "🕹";    // game
-            case 6: return "";     // Misc
-            case 7: return "󰈹";     // Firefox
-            case 8: return "";     // term
-            case 9: return "󰨞";     // vscode
-            case 10: return "";    // Misc
-            default: return "󰈸";
-        }
-    }
 
-    property var shownWorkspaces: []
-
-    function updateShownWorkspaces() {
-        if (!Hyprland.workspaces || !Hyprland.workspaces.values) {
-            bar.shownWorkspaces = [];
-            return;
-        }
-        const filtered = Hyprland.workspaces.values.filter(function(w) {
-            if (!w || w.id <= 0) return false;
-            let hasWindows = false;
-            if (w.toplevels) {
-                if (typeof w.toplevels.count === "number") hasWindows = w.toplevels.count > 0;
-                else if (w.toplevels.values && typeof w.toplevels.values.length === "number") hasWindows = w.toplevels.values.length > 0;
-            }
-            return hasWindows || w.active || w.focused;
-        });
-        filtered.sort(function(a, b) { return a.id - b.id; });
-        bar.shownWorkspaces = filtered;
-    }
 
     // ===== NOTIFICATIONS (swaync-backed bell widget) =====
     // Uses swaync-client -s (subscribe) for live count + DND state.
@@ -120,25 +86,10 @@ PanelWindow {
         }
     }
 
-    function switchToRelative(delta) {
-        if (!bar.shownWorkspaces || bar.shownWorkspaces.length === 0) return;
-        const activeId = (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id) ? Hyprland.focusedWorkspace.id : 1;
-        let idx = -1;
-        for (let i = 0; i < bar.shownWorkspaces.length; i++) {
-            if (bar.shownWorkspaces[i].id === activeId) { idx = i; break; }
-        }
-        if (idx < 0) idx = 0;
-        let newIdx = idx + delta;
-        if (newIdx < 0) newIdx = 0;
-        if (newIdx >= bar.shownWorkspaces.length) newIdx = bar.shownWorkspaces.length - 1;
-        const target = bar.shownWorkspaces[newIdx];
-        if (target && target.activate) target.activate();
-    }
+
 
     Component.onCompleted: {
-        bar.updateShownWorkspaces();
         audio.refreshDevices();
-        wsColdStartPoller.start();   // cold-start burst to catch full workspace state on qs launch
         // Ensure we pick up any MPRIS players that were already registered before the
         // Connections below became active (e.g. Audacious, Spotify, etc. left running).
         Qt.callLater(media.refreshPlayers);
@@ -150,35 +101,7 @@ PanelWindow {
         })
     }
 
-    Connections {
-        target: Hyprland.workspaces
-        function onValuesChanged() { bar.updateShownWorkspaces(); }
-    }
-    Connections {
-        target: Hyprland
-        function onFocusedWorkspaceChanged() { bar.updateShownWorkspaces(); }
-    }
-    // Note: toplevel open/close is reflected via workspaces.values updates in practice (Hyprland IPC pushes changes).
-    // If some windows don't appear/disappear immediately, a manual refresh button or extra Hyprland.toplevels connection can be added.
 
-    // Cold-start workspace polling (fixes "only shows current workspace on qs launch after cold boot/reboot")
-    // When quickshell starts while Hyprland is already running with windows on other workspaces,
-    // the Hyprland IPC model (especially per-workspace toplevel counts) is often incomplete for the
-    // first 200-900ms. A short burst of forced refreshes ensures occupied workspaces appear immediately.
-    property int _wsColdPollCount: 0
-    Timer {
-        id: wsColdStartPoller
-        interval: 130
-        repeat: true
-        onTriggered: {
-            bar.updateShownWorkspaces();
-            bar._wsColdPollCount += 1;
-            if (bar._wsColdPollCount >= 7) {   // ~910ms of coverage (130*7) — enough to catch delayed IPC state
-                stop();
-                bar._wsColdPollCount = 0;
-            }
-        }
-    }
 
     // Lightweight periodic rescan for MPRIS.
     // Many native players (Audacious, mpv, some VLC configs, etc.) register a single
@@ -657,88 +580,9 @@ PanelWindow {
             }
 
 
-            // reactive via Quickshell.Hyprland (no polling), yellow hover, active highlight,
-            // scroll wheel, click to focus)
-            // Encapsulated in a pill (matching eww module pill style: #1a1a1a bg, rounded, subtle border)
-            Rectangle {
-                id: workspacesPill
-                color: bar.glassPillBg
-                radius: bar.pillRadius
-                border.width: 1
-                border.color: bar.glassBorder
-
-                Layout.preferredWidth: wsRow.implicitWidth + 16
-                Layout.preferredHeight: 40   // Taller pill for ultrawide readability
-                Layout.alignment: Qt.AlignVCenter
-
-                // Mouse wheel: up advances "next" in the shown list (per requirements)
-                WheelHandler {
-                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                    onWheel: (event) => {
-                        const delta = (event.angleDelta.y > 0) ? 1 : -1;
-                        bar.switchToRelative(delta);
-                    }
-                }
-
-                Row {
-                    id: wsRow
-                    anchors.centerIn: parent
-                    spacing: 4
-
-                    Repeater {
-                        model: bar.shownWorkspaces
-                        delegate: Rectangle {
-                            id: wsBtn
-                            required property var modelData // HyprlandWorkspace
-                            required property int index
-                            property bool isActive: modelData && (modelData.active || modelData.focused)
-                            property bool isHovered: wsMouse.containsMouse
-
-                            width: 42   // Slightly wider for bigger text
-                            height: 32
-                            radius: 8
-                            color: isActive ? Qt.rgba(0.53, 0.69, 0.96, 0.22) :   // Glassy accent tint when active
-                                   (isHovered ? bar.wsHoverYellow : "transparent")
-                            border.width: isActive ? 1 : 0
-                            border.color: isActive ? Qt.rgba(0.53, 0.69, 0.96, 0.6) : "#45475a"
-
-                            Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
-
-                            MouseArea {
-                                id: wsMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (modelData) modelData.activate();
-                                }
-                            }
-
-                            // Icon + number (matching eww mapping)
-                            // Text is white + bold like the date/time clock, slightly larger
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 3
-                                Text {
-                                    text: bar.getWsIcon(modelData ? modelData.id : 0)
-                                    font.pixelSize: 17   // Increased for ultrawide readability
-                                    color: isActive ? "#e0e7ff" :
-                                           (isHovered ? "#111111" : bar.clock)
-                                    font.family: "JetBrains Mono Nerd Font, Symbols Nerd Font, monospace"
-                                    font.bold: true
-                                }
-                                Text {
-                                    text: modelData ? modelData.id : ""
-                                    font.pixelSize: 15   // Increased for ultrawide readability
-                                    font.bold: true
-                                    color: isActive ? "#e0e7ff" :
-                                           (isHovered ? "#111111" : bar.clock)
-                                }
-                            }
-                        }
-                    }
-                }
-            }  // closes workspacesPill Rectangle
+            WorkspacesPill {
+                bar: bar
+            }
 
             Item { Layout.fillWidth: true }
 
