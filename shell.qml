@@ -10,6 +10,8 @@ import Quickshell.Services.SystemTray
 import Quickshell.Services.Mpris
 import Quickshell.Io as Io
 
+import "components"
+
 PanelWindow {
     id: bar
 
@@ -570,147 +572,6 @@ PanelWindow {
         }
     }
 
-    // Reusable volume bar (clickable fill)
-    Component {
-        id: volumeBar
-        Item {
-            id: vbar
-            property real value: 0.0
-            property var onSet: function(v){}
-            property color fill: bar.accent
-            property color track: bar.surface
-            property int barHeight: 6
-            implicitWidth: 110
-            implicitHeight: barHeight + 4
-            Rectangle {
-                anchors.centerIn: parent
-                width: parent.width
-                height: vbar.barHeight
-                radius: height / 2
-                color: vbar.track
-            }
-            Rectangle {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(0, Math.min(parent.width, parent.width * vbar.value))
-                height: vbar.barHeight
-                radius: height / 2
-                color: vbar.fill
-            }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: (m) => { var f = Math.max(0, Math.min(1, m.x / width)); vbar.onSet(f); }
-            }
-        }
-    }
-
-    // Mini volume bar for dual view
-    Component {
-        id: miniVolumeBar
-        Item {
-            id: mbar
-            property real value: 0.0
-            property var onSet: function(v){}
-            property color fill: bar.accent
-            property color track: bar.surface
-            implicitWidth: 48
-            implicitHeight: 5
-            Rectangle {
-                anchors.fill: parent
-                radius: 2
-                color: mbar.track
-            }
-            Rectangle {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.max(0, Math.min(parent.width, parent.width * mbar.value))
-                height: parent.height
-                radius: 2
-                color: mbar.fill
-            }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: (m) => { var f = Math.max(0, Math.min(1, m.x / width)); mbar.onSet(f); }
-            }
-        }
-    }
-
-    // ===== MEDIA VISUALIZER (cava-like bars, pure QML, no external binary) =====
-    // Used as subtle animated background behind the title in the centered media pill.
-    // Organic sine motion + amplitude boost when actively playing.
-    // Bars now dynamically sized to span the full width of the media pill widget.
-    // Efficiency tweaks: 40 bars, timer rate drops dramatically when paused.
-    Component {
-        id: mediaVisualizer
-        Item {
-            id: viz
-            property bool active: false          // drives amplitude
-            property color barColor: Qt.rgba(1, 1, 1, 0.18)
-            property color barColorActive: Qt.rgba(0.55, 0.71, 0.98, 0.35)  // accent-ish when playing
-
-            readonly property int barCount: 40
-            readonly property int barGap: 1
-
-            // Bar width is computed on the fly so the waveform always spans the entire pill width
-            // (Loader anchors this item to pill minus small margins).
-            readonly property int barWidth: {
-                const avail = viz.width > 20 ? viz.width : 580;
-                const gaps = (barCount - 1) * barGap;
-                return Math.max(1, Math.floor((avail - gaps) / barCount));
-            }
-
-            // Efficiency: when paused we run the animation at very low rate (or stop it).
-            // This is the highest-cost part of the media widget when the pill is visible for long periods.
-            readonly property int animationInterval: viz.active ? 95 : 420
-
-            implicitHeight: 22
-
-            // Animation driver — deliberately cheap when nothing is playing.
-            property real phase: 0
-            Timer {
-                running: viz.visible && viz.barCount > 0
-                interval: viz.animationInterval
-                repeat: true
-                onTriggered: viz.phase = (viz.phase + 0.28) % (Math.PI * 2)
-            }
-
-            Row {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: viz.barGap
-
-                Repeater {
-                    model: viz.barCount
-                    Rectangle {
-                        width: viz.barWidth
-                        radius: 1
-                        color: viz.active ? viz.barColorActive : viz.barColor
-
-                        // Each bar has its own phase offset for organic "cava" motion
-                        property real offset: (index * 0.9) + (index % 3) * 0.7
-
-                        // Height animates smoothly between a floor and peak
-                        property real h: {
-                            const t = viz.phase + offset;
-                            const base = viz.active ? 5 : 3;
-                            const amp = viz.active ? 17 : 11;
-                            const s = Math.sin(t) * 0.6 + Math.sin(t * 1.7) * 0.4;
-                            return Math.max(2, base + s * amp);
-                        }
-
-                        height: h
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-                    }
-                }
-            }
-        }
-    }
-
     // ===== Bar Content =====
     // Glassmorphic styling throughout bar + all popups (frosted acrylic style)
     // (Easy to revert - the glass* properties control most of it)
@@ -1127,8 +988,9 @@ PanelWindow {
                             Loader {
                                 id: spkBar
                                 anchors.centerIn: parent
-                                sourceComponent: volumeBar
+                                sourceComponent: VolumeBar
                                 onLoaded: {
+                                    item.bar = bar;
                                     item.value = Qt.binding(function(){ return audio.speakerVolume; });
                                     item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
                                     item.fill = Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; });
@@ -1174,8 +1036,9 @@ PanelWindow {
                             Loader {
                                 id: micBar
                                 anchors.centerIn: parent
-                                sourceComponent: volumeBar
+                                sourceComponent: VolumeBar
                                 onLoaded: {
+                                    item.bar = bar;
                                     item.value = Qt.binding(function(){ return audio.micVolume; });
                                     item.onSet = function(v){ audio.setVolume(audio.mic, v); };
                                     item.fill = Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; });
@@ -1225,7 +1088,7 @@ PanelWindow {
                                 anchors.verticalCenter: parent.verticalCenter
                                 Loader {
                                     anchors.centerIn: parent
-                                    sourceComponent: miniVolumeBar
+                                    sourceComponent: MiniVolumeBar
                                     onLoaded: {
                                         item.value = Qt.binding(function(){ return audio.speakerVolume; });
                                         item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
@@ -1258,7 +1121,7 @@ PanelWindow {
                                 anchors.verticalCenter: parent.verticalCenter
                                 Loader {
                                     anchors.centerIn: parent
-                                    sourceComponent: miniVolumeBar
+                                    sourceComponent: MiniVolumeBar
                                     onLoaded: {
                                         item.value = Qt.binding(function(){ return audio.micVolume; });
                                         item.onSet = function(v){ audio.setVolume(audio.mic, v); };
@@ -1484,8 +1347,9 @@ PanelWindow {
             id: vizLoader
             anchors.fill: parent
             anchors.margins: 4
-            sourceComponent: mediaVisualizer
+            sourceComponent: CavaVisualizer
             onLoaded: {
+                item.bar = bar;
                 item.active = Qt.binding(function(){ return media.isPlaying; });
             }
         }
@@ -2083,8 +1947,9 @@ PanelWindow {
                             Loader {
                                 anchors.fill: parent
                                 anchors.verticalCenter: parent.verticalCenter
-                                sourceComponent: volumeBar
+                                sourceComponent: VolumeBar
                                 onLoaded: {
+                                    item.bar = bar;
                                     item.value = Qt.binding(function(){ return audio.speakerVolume; });
                                     item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
                                     item.barHeight = 8;
@@ -2195,8 +2060,9 @@ PanelWindow {
                             Loader {
                                 anchors.fill: parent
                                 anchors.verticalCenter: parent.verticalCenter
-                                sourceComponent: volumeBar
+                                sourceComponent: VolumeBar
                                 onLoaded: {
+                                    item.bar = bar;
                                     item.value = Qt.binding(function(){ return audio.micVolume; });
                                     item.onSet = function(v){ audio.setVolume(audio.mic, v); };
                                     item.barHeight = 8;
