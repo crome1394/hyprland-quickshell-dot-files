@@ -1068,77 +1068,9 @@ PanelWindow {
             }
 
             // ===== NOTIFICATION BELL (right of clock, swaync backed) =====
-            // Pill style to match clock + tray + audio widgets. Icon + live count badge.
-            // Left click: toggle swaync control center (your full rich history + actions + replies)
-            // Right click: toggle DND (icon changes to crossed bell, state synced live)
-            Rectangle {
-                id: notifBell
-                Layout.preferredWidth: bellRow.implicitWidth + 18
-                Layout.preferredHeight: 36
-                radius: bar.pillRadius
-                color: bellMouse.containsMouse ? bar.glassHover : bar.pillBg
-                border.width: 1
-                border.color: bellMouse.containsMouse ? bar.accent : bar.pillBorder
-
-                Row {
-                    id: bellRow
-                    anchors.centerIn: parent
-                    spacing: 6
-
-                    Text {
-                        id: bellIcon
-                        text: notif.icon
-                        font.pixelSize: 16
-                        font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
-                        color: notif.dnd ? bar.muted : (notif.count > 0 ? bar.accent : bar.subtext)
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    // Counter badge (only when > 0). Compact pill or circle-ish.
-                    Rectangle {
-                        visible: notif.count > 0
-                        width: Math.max(18, countLabel.implicitWidth + 8)
-                        height: 18
-                        radius: 9
-                        color: notif.dnd ? Qt.rgba(0.6, 0.2, 0.2, 0.9) : bar.accent
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        Text {
-                            id: countLabel
-                            anchors.centerIn: parent
-                            text: notif.count > 99 ? "99+" : notif.count
-                            color: "#111111"
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: "monospace"
-                        }
-                    }
-                }
-
-                MouseArea {
-                    id: bellMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-                    // Attached ToolTip (works because QtQuick.Controls is imported)
-                    ToolTip.text: {
-                        if (notif.dnd) return notif.count + " notifications (DND enabled)";
-                        if (notif.count > 0) return notif.count + " notifications";
-                        return "No notifications";
-                    }
-                    ToolTip.visible: containsMouse
-                    ToolTip.delay: 650
-
-                    onClicked: (mouse) => {
-                        if (mouse.button === Qt.RightButton) {
-                            toggleDnd()
-                        } else if (mouse.button === Qt.LeftButton) {
-                            toggleNotifPanel()
-                        }
-                    }
-                }
+            NotificationBell {
+                bar: bar
+                notif: notif
             }
 
             // Subtle modern vertical divider (between notifications and power menu)
@@ -1915,18 +1847,7 @@ PanelWindow {
 
 
 
-    // ===== NOTIFICATION ACTION HELPERS (swaync-client one-shots, fire-and-forget) =====
-    function toggleNotifPanel() {
-        Quickshell.execDetached(["swaync-client", "-t", "-sw"])
-    }
 
-    function toggleDnd() {
-        Quickshell.execDetached(["swaync-client", "-d", "-sw"])
-    }
-
-    function clearAllNotifications() {
-        Quickshell.execDetached(["swaync-client", "-C", "-sw"])
-    }
 
     // ===== MEDIA POPUP HELPERS =====
     function showMediaPopup() {
