@@ -24,21 +24,27 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
+    // Track
     Rectangle {
         anchors.fill: parent
         radius: 2
         color: root.track
     }
 
-    // Fill - simpler width expression + explicit root.width
-    Rectangle {
-        anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
-        width: root.width * root.value
-        height: parent.height
-        radius: 2
-        color: root.fill
-        visible: root.value > 0
+    // Fill layer using clipped container (most reliable pattern for dynamic width bars)
+    Item {
+        id: fillContainer
+        anchors.fill: parent
+        clip: true
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: fillContainer.width * root.value
+            height: parent.height
+            radius: 2
+            color: root.fill
+        }
     }
 
     MouseArea {

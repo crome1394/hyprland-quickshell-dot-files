@@ -27,13 +27,12 @@ Item {
     implicitWidth: 110
     implicitHeight: barHeight + 4
 
-    // Force actual size from implicit when the component is centered
-    // via anchors.centerIn (common in the bar pill). Anchors.fill cases
-    // from the caller will override this.
+    // Force actual size from implicit when used with anchors.centerIn.
+    // (anchors.fill from caller will take precedence)
     width: implicitWidth
     height: implicitHeight
 
-    // Track
+    // Track (background)
     Rectangle {
         anchors.centerIn: parent
         width: parent.width
@@ -42,15 +41,23 @@ Item {
         color: root.track
     }
 
-    // Fill - use root.width explicitly for more reliable binding
-    Rectangle {
-        anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
-        width: root.width * root.value
+    // Fill layer - use a clipped container for maximum reliability with dynamic width.
+    // This pattern avoids most anchor + binding calculation problems.
+    Item {
+        id: fillContainer
+        anchors.centerIn: parent
+        width: parent.width
         height: root.barHeight
-        radius: height / 2
-        color: root.fill
-        visible: root.value > 0
+        clip: true
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: fillContainer.width * root.value
+            height: parent.height
+            radius: height / 2
+            color: root.fill
+        }
     }
 
     MouseArea {
