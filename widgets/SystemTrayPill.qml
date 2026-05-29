@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.SystemTray
+import Quickshell.Widgets
 
 // SystemTrayPill.qml
 // System tray icons pill + dynamic right-click menu popup (with submenu support).
