@@ -49,9 +49,6 @@ Item {
         else show()
     }
 
-    function show() { ... }   // (see implementation below)
-    function hide() { helpWindow.visible = false }
-
     // --- Internal State ---
     property int currentTab: 0
     property string bindFilter: ""
@@ -106,6 +103,11 @@ Item {
         refreshLua()
     }
 
+    // -------------------------------------------------------------------------
+    // Parsing Functions for hyprland.lua
+    // -------------------------------------------------------------------------
+
+    // Parses hl.bind() lines that have a --# comment for the help overlay.
     function parseKeybinds(text) {
         if (!text) return []
         const lines = text.split("\n")
@@ -148,6 +150,7 @@ Item {
         return out
     }
 
+    // Parses hl.env() lines (both new --# style and older -- style comments).
     function parseEnvVars(text) {
         if (!text) return []
         const lines = text.split("\n")
@@ -171,6 +174,7 @@ Item {
         return out
     }
 
+    // Parses the output of `fastfetch --logo none` into label/value pairs for the System Info tab.
     function parseFastfetchOutput(raw) {
         if (!raw) return []
         const lines = raw.split("\n")
