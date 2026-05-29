@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Quickshell
 
 // NotificationBell.qml
 // Swaync-backed notification bell pill with count badge and DND support.
