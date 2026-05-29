@@ -51,7 +51,7 @@ Item {
             width: fillContainer.width * root.effectiveValue
             height: parent.height
             radius: 2
-            color: root.fill || (root.bar ? root.bar.accent : "#89b4fa")
+            color: root.fill
         }
     }
 
