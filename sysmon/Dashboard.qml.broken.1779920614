@@ -1,0 +1,834 @@
+import Quickshell
+import QtQuick
+import QtQuick.Layouts
+import Quickshell.Io as Io
+
+// Local components
+import "components" as Components
+
+// Dashboard.qml
+// Follows the exact architecture that makes the HelpMenu appear reliably:
+// - Item as root
+// - Nested PanelWindow (starts invisible)
+// - show() function with defensive x/y assignment
+// - Explicit visible control
+
+Item {
+    id: root
+
+    // ==================== THEME ====================
+    readonly property color text: "#cdd6f4"
+    readonly property color subtext: "#a6adc8"
+    readonly property color accent: "#89b4fa"
+    readonly property color debugBg: "#1e1e2e"
+
+    // Visibility state (mirrors HelpMenu pattern)
+    property bool open: window.visible
+
+    // Data model
+    property var data: ({})
+    property bool autoPoll: false
+    property int pollIntervalMs: 2500
+    property bool isRefreshing: false
+    property string lastError: ""
+    property string lastStatus: "Idle"
+
+    property var cpuHistory: []
+    property var gpuHistory: []
+
+    // New histories for visualization
+    property var netRxHistory: []
+    property var netTxHistory: []
+    property var diskReadHistory: []
+    property var diskWriteHistory: []
+
+    // ==================== POLLER ====================
+    function updateHistory() {
+        if (!data.cpu) return
+
+        // CPU
+        let ch = cpuHistory.slice()
+        ch.push(data.cpu.util || 0)
+        if (ch.length > 48) ch.shift()
+        cpuHistory = ch
+
+        // GPU
+        let gh = gpuHistory.slice()
+        gh.push(data.gpu ? data.gpu.util : 0)
+        if (gh.length > 48) gh.shift()
+        gpuHistory = gh
+
+        // Network (in KB/s for nicer numbers)
+        let nrh = netRxHistory.slice()
+        nrh.push(data.network ? (data.network.rx_rate / 1024) : 0)
+        if (nrh.length > 48) nrh.shift()
+        netRxHistory = nrh
+
+        let nth = netTxHistory.slice()
+        nth.push(data.network ? (data.network.tx_rate / 1024) : 0)
+        if (nth.length > 48) nth.shift()
+        netTxHistory = nth
+
+        // Disk (in KiB/s)
+        let drh = diskReadHistory.slice()
+        drh.push(data.disk ? (data.disk.read_rate / 1024) : 0)
+        if (drh.length > 48) drh.shift()
+        diskReadHistory = drh
+
+        let dwh = diskWriteHistory.slice()
+        dwh.push(data.disk ? (data.disk.write_rate / 1024) : 0)
+        if (dwh.length > 48) dwh.shift()
+        diskWriteHistory = dwh
+    }
+
+    Io.Process {
+        id: poller
+        command: ["/home/crome/.config/quickshell/sysmon/scripts/poller.sh"]
+
+        // Capture stdout (the JSON line)
+        stdout: Io.SplitParser {
+            splitMarker: "\n"
+            onRead: (line) => {
+                const trimmed = line.trim()
+                if (!trimmed) return
+
+                // Only attempt to parse lines that look like they could be our full JSON object
+                if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+                    return
+                }
+
+                try {
+                    const parsed = JSON.parse(trimmed)
+                    if (parsed.error) {
+                        root.lastError = parsed.error
+                        root.lastStatus = "Poller error: " + parsed.error
+                        console.log("sysmon poller error from script:", parsed.error)
+                    } else if (parsed.timestamp && parsed.cpu) {
+                        root.data = parsed
+                        root.updateHistory()
+                        root.lastError = ""
+                        root.lastStatus = "Data received at " + new Date().toLocaleTimeString()
+                        console.log("sysmon: successfully parsed data, cpu util =", root.data.cpu.util)
+                    } else {
+                        // Some other JSON object — ignore
+                    }
+                } catch (e) {
+                    root.lastError = "JSON parse failed: " + e
+                    root.lastStatus = "Bad JSON from poller"
+                    console.log("sysmon JSON parse fail:", trimmed.substring(0, 120))
+                }
+                root.isRefreshing = false
+            }
+        }
+
+        // Capture any stderr from the script for debugging
+        stderr: Io.SplitParser {
+            splitMarker: "\n"
+            onRead: (line) => {
+                if (line.trim()) {
+                    root.lastError = "stderr: " + line.trim()
+                    console.log("sysmon poller stderr:", line)
+                }
+            }
+        }
+
+        onExited: (code) => {
+            root.isRefreshing = false
+
+            if (code === 0) {
+                // Normal exit — data should have arrived via stdout handler
+                if (!root.lastError) {
+                    root.lastStatus = "Poller finished cleanly (exit 0)"
+                }
+            } else {
+                if (!root.lastError) {
+                    root.lastError = "Poller exited with code " + code
+                    root.lastStatus = "Poller failed (exit " + code + ")"
+                }
+            }
+        }
+
+        onStarted: {
+            root.lastStatus = "Poller started..."
+        }
+    }
+
+    Timer {
+        interval: root.pollIntervalMs
+        running: root.autoPoll
+        repeat: true
+        onTriggered: root.refresh()
+    }
+
+    function refresh() {
+        if (poller.running) {
+            root.lastStatus = "Poller already running..."
+            return
+        }
+        root.isRefreshing = true
+        root.lastStatus = "Starting poller..."
+        root.lastError = ""
+        poller.running = true
+        // IMPORTANT: Do NOT force-kill the process.
+        // The script is one-shot and will exit by itself when done.
+        // Previously this Qt.callLater killer was terminating it with exit 15 before it could output JSON.
+    }
+
+    // ==================== SHOW / HIDE (the proven pattern) ====================
+    function show() {
+        const sw = window.screen ? window.screen.width : 1920
+        const sh = window.screen ? window.screen.height : 1080
+
+        // Defensive check — this is what makes positioning safe in HelpMenu
+        if (typeof window.x === "number") {
+            window.x = Math.max(40, Math.round((sw - window.width) / 2))
+            window.y = Math.max(40, Math.round(sh * 0.68))   // biased bottom-center
+        }
+
+        window.visible = true
+        Qt.callLater(function() {
+            root.lastStatus = "Window shown — click Refresh to load data"
+            // We no longer auto-refresh on show to avoid race conditions during early startup
+        })
+    }
+
+    function hide() {
+        // Stop all polling activity when closing the window
+        root.autoPoll = false
+        if (poller.running) {
+            poller.running = false
+        }
+        root.isRefreshing = false
+        window.visible = false
+    }
+
+    // ==================== THE ACTUAL FLOATING WINDOW ====================
+    PanelWindow {
+        id: window
+        visible: false
+        color: "transparent"
+        exclusiveZone: 0
+
+        // Use implicit* instead of direct width/height (avoids deprecation warning)
+        implicitWidth: 1000
+        implicitHeight: 720   // More room for the staggered layout you described
+
+        // Note: Free dragging is limited with PanelWindow in this setup.
+        // Use the "Re-center" button in the header instead.
+
+        // ==================== REAL DASHBOARD VISUAL ====================
+        Rectangle {
+            id: dashboard
+            anchors.fill: parent
+            color: "#1e1e2e"
+            radius: 14
+
+            // Subtle top highlight
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 1.5
+                color: Qt.rgba(1, 1, 1, 0.12)
+                radius: parent.radius
+            }
+
+            // Right-click anywhere (except buttons) to open simple settings
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                onClicked: root.toggleSettingsMenu()
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 10
+
+                // === HEADER ===
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Text {
+                        text: "sysmon"
+                        color: "#cdd6f4"
+                        font.pixelSize: 18
+                        font.bold: true
+                    }
+
+                    Text {
+                        text: "Thelio Mira"
+                        color: "#6c7086"
+                        font.pixelSize: 13
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Refresh
+                    MouseArea {
+                        Layout.preferredWidth: 72
+                        Layout.preferredHeight: 26
+                        onClicked: root.refresh()
+                        cursorShape: Qt.PointingHandCursor
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: root.isRefreshing ? "#444455" : Qt.rgba(1,1,1,0.06)
+                            border.width: 1
+                            border.color: Qt.rgba(1,1,1,0.1)
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.isRefreshing ? "..." : "Refresh"
+                            color: "#89b4fa"
+                            font.pixelSize: 12
+                            font.bold: true
+                        }
+                    }
+
+                    // Auto toggle
+                    MouseArea {
+                        Layout.preferredWidth: 90
+                        Layout.preferredHeight: 26
+                        onClicked: root.autoPoll = !root.autoPoll
+                        cursorShape: Qt.PointingHandCursor
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: root.autoPoll ? Qt.rgba(0.65, 0.9, 0.6, 0.18) : Qt.rgba(1,1,1,0.06)
+                            border.width: 1
+                            border.color: root.autoPoll ? "#a6e3a1" : Qt.rgba(1,1,1,0.1)
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.autoPoll ? "Auto: ON" : "Auto: OFF"
+                            color: root.autoPoll ? "#a6e3a1" : "#a6adc8"
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    // Re-center
+                    MouseArea {
+                        Layout.preferredWidth: 78
+                        Layout.preferredHeight: 26
+                        onClicked: root.recenter()
+                        cursorShape: Qt.PointingHandCursor
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: Qt.rgba(1,1,1,0.06)
+                            border.width: 1
+                            border.color: Qt.rgba(1,1,1,0.1)
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Re-center"
+                            color: "#a6adc8"
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    // Close
+                    MouseArea {
+                        Layout.preferredWidth: 26
+                        Layout.preferredHeight: 26
+                        onClicked: root.hide()
+                        cursorShape: Qt.PointingHandCursor
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "✕"
+                            color: "#6c7086"
+                            font.pixelSize: 16
+                        }
+                    }
+                }
+
+                // === NEW STAGGERED LAYOUT (your exact suggestion) ===
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 10
+
+                        // CPU Gauge (left) + Top Processes (right) will be inserted in next step
+
+                        // Memory + Swap
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 85
+                            radius: 10
+                            color: Qt.rgba(0.12, 0.12, 0.14, 0.95)
+                            border.width: 1
+                            border.color: Qt.rgba(1,1,1,0.06)
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 16
+
+                                ColumnLayout {
+                                    spacing: 3
+                                    Layout.fillWidth: true
+                                    Text { text: "MEMORY (RAM)"; color: "#cdd6f4"; font.pixelSize: 12; font.bold: true }
+                                    RowLayout {
+                                        spacing: 6
+                                        Rectangle {
+                                            Layout.preferredWidth: 130
+                                            Layout.preferredHeight: 8
+                                            radius: 4
+                                            color: "#2a2a3a"
+                                            Rectangle {
+                                                width: parent.width * Math.min(1, (root.data.memory ? root.data.memory.ram_pct : 0) / 100)
+                                                height: parent.height
+                                                radius: 4
+                                                color: (root.data.memory && root.data.memory.ram_pct > 85) ? "#f38ba8" :
+                                                       (root.data.memory && root.data.memory.ram_pct > 65) ? "#f9e2af" : "#a6e3a1"
+                                            }
+                                        }
+                                        Text {
+                                            text: root.data.memory ? root.data.memory.ram_pct.toFixed(1) + "% (" +
+                                                  root.data.memory.ram_used + "/" + root.data.memory.ram_total + " MiB)" : "--"
+                                            color: "#a6adc8"
+                                            font.pixelSize: 11
+                                        }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    spacing: 3
+                                    Layout.preferredWidth: 170
+                                    Text { text: "SWAP"; color: "#cdd6f4"; font.pixelSize: 12; font.bold: true }
+                                    Text {
+                                        text: root.data.memory ? root.data.memory.swap_pct.toFixed(1) + "% (" +
+                                              root.data.memory.swap_used + "/" + root.data.memory.swap_total + " MiB)" : "--"
+                                        color: "#a6adc8"
+                                        font.pixelSize: 11
+                                    }
+                                }
+                            }
+                        }
+
+                        // Top Processes (vertical, compact, grouped with CPU/Mem)
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumHeight: 110
+                            radius: 10
+                            color: Qt.rgba(0.12, 0.12, 0.14, 0.95)
+                            border.width: 1
+                            border.color: Qt.rgba(1,1,1,0.06)
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 3
+
+                                Text {
+                                    text: "TOP PROCESSES (CPU)"
+                                    color: "#cdd6f4"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                }
+
+                                Repeater {
+                                    model: root.data.top_processes ? root.data.top_processes.slice(0, 6) : []
+                                    delegate: Text {
+                                        text: modelData.name + "  " + modelData.cpu.toFixed(1) + "% / " + modelData.mem.toFixed(1) + "%"
+                                        color: "#a6adc8"
+                                        font.pixelSize: 10
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ========== RIGHT COLUMN: GPU + Storage + Network ==========
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: 1.0
+                        spacing: 8
+
+                        // GPU Card
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumHeight: 200
+                            radius: 10
+                            color: Qt.rgba(0.12, 0.12, 0.14, 0.95)
+                            border.width: 1
+                            border.color: Qt.rgba(1,1,1,0.06)
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 6
+
+                                MouseArea {
+                                    Layout.preferredWidth: 110
+                                    Layout.preferredHeight: 18
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Quickshell.execDetached(["sh", "-c", "kitty -e nvtop"])
+
+                                    Text {
+                                        anchors.fill: parent
+                                        text: "GPU (RTX 5080)"
+                                        color: "#cdd6f4"
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                    }
+                                }
+
+                                RowLayout {
+                                    spacing: 12
+                                    Layout.fillWidth: true
+
+                                    Components.CircularGauge {
+                                        size: 100
+                                        value: root.data.gpu ? root.data.gpu.util : 0
+                                        label: ""
+                                        subValue: root.data.gpu ? root.data.gpu.temp.toFixed(0) + "°C" : ""
+                                        lowColor: "#a6e3a1"
+                                        midColor: "#f9e2af"
+                                        highColor: "#f38ba8"
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+
+                                        Text {
+                                            text: root.data.gpu ? root.data.gpu.util.toFixed(0) + "%" : "--"
+                                            color: "#cdd6f4"
+                                            font.pixelSize: 26
+                                            font.bold: true
+                                        }
+
+                                        Text {
+                                            text: root.data.gpu
+                                                ? "VRAM " + (root.data.gpu.vram_used / 1024).toFixed(1) + " / " +
+                                                  (root.data.gpu.vram_total / 1024).toFixed(1) + " GiB  (" +
+                                                  root.data.gpu.vram_pct.toFixed(1) + "%)"
+                                                : "No data"
+                                            color: "#a6adc8"
+                                            font.pixelSize: 10
+                                        }
+
+                                        Rectangle {
+                                            Layout.preferredWidth: 120
+                                            Layout.preferredHeight: 7
+                                            radius: 3
+                                            color: "#2a2a3a"
+                                            Rectangle {
+                                                width: parent.width * Math.min(1, (root.data.gpu ? root.data.gpu.vram_pct : 0) / 100)
+                                                height: parent.height
+                                                radius: 3
+                                                color: (root.data.gpu && root.data.gpu.vram_pct > 85) ? "#f38ba8" :
+                                                       (root.data.gpu && root.data.gpu.vram_pct > 65) ? "#f9e2af" : "#a6e3a1"
+                                            }
+                                        }
+
+                                        Text {
+                                            text: root.data.gpu ? "Fan " + root.data.gpu.fan.toFixed(0) + " RPM" : ""
+                                            color: "#6c7086"
+                                            font.pixelSize: 10
+                                        }
+
+                                        Components.Sparkline {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 52
+                                            history: root.gpuHistory
+                                            lineColor: "#a6e3a1"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Storage (Disk + NVMe)
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 130
+                            radius: 10
+                            color: Qt.rgba(0.12, 0.12, 0.14, 0.95)
+                            border.width: 1
+                            border.color: Qt.rgba(1,1,1,0.06)
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 4
+
+                                MouseArea {
+                                    Layout.preferredWidth: 200
+                                    Layout.preferredHeight: 16
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Quickshell.execDetached(["sh", "-c", "kitty -e iotop"])
+
+                                    Text {
+                                        anchors.fill: parent
+                                        text: "STORAGE  [click for iotop]"
+                                        color: "#cdd6f4"
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                    }
+                                }
+
+                                // Disk I/O sparklines
+                                RowLayout {
+                                    spacing: 12
+                                    Layout.fillWidth: true
+
+                                    ColumnLayout {
+                                        spacing: 1
+                                        Layout.fillWidth: true
+                                        Text {
+                                            text: "Read " + (root.data.disk ? (root.data.disk.read_rate/1024/1024).toFixed(2) : "0") + " MiB/s"
+                                            color: "#89b4fa"
+                                            font.pixelSize: 10
+                                        }
+                                        Components.Sparkline {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 32
+                                            history: root.diskReadHistory
+                                            lineColor: "#89b4fa"
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        spacing: 1
+                                        Layout.fillWidth: true
+                                        Text {
+                                            text: "Write " + (root.data.disk ? (root.data.disk.write_rate/1024/1024).toFixed(2) : "0") + " MiB/s"
+                                            color: "#f9e2af"
+                                            font.pixelSize: 10
+                                        }
+                                        Components.Sparkline {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 32
+                                            history: root.diskWriteHistory
+                                            lineColor: "#f9e2af"
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: root.data.disk ? "Root: " + root.data.disk.root_pct.toFixed(1) + "%  (" +
+                                          root.data.disk.root_used.toFixed(1) + " / " + root.data.disk.root_total.toFixed(1) + " GiB)" : ""
+                                    color: "#a6adc8"
+                                    font.pixelSize: 10
+                                }
+                            }
+                        }
+
+                        // Network
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumHeight: 100
+                            radius: 10
+                            color: Qt.rgba(0.12, 0.12, 0.14, 0.95)
+                            border.width: 1
+                            border.color: Qt.rgba(1,1,1,0.06)
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 4
+
+                                MouseArea {
+                                    Layout.preferredWidth: 200
+                                    Layout.preferredHeight: 16
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Quickshell.execDetached(["sh", "-c", "kitty -e nmtui"])
+
+                                    Text {
+                                        anchors.fill: parent
+                                        text: "NETWORK (" + (root.data.network ? root.data.network.iface : "?") + ")  [nmtui]"
+                                        color: "#cdd6f4"
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                    }
+                                }
+
+                                RowLayout {
+                                    spacing: 12
+                                    Layout.fillWidth: true
+
+                                    ColumnLayout {
+                                        spacing: 1
+                                        Layout.fillWidth: true
+                                        Text {
+                                            text: "RX " + (root.data.network ? (root.data.network.rx_rate/1024).toFixed(1) : "0") + " KB/s"
+                                            color: "#89b4fa"
+                                            font.pixelSize: 10
+                                        }
+                                        Components.Sparkline {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 32
+                                            history: root.netRxHistory
+                                            lineColor: "#89b4fa"
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        spacing: 1
+                                        Layout.fillWidth: true
+                                        Text {
+                                            text: "TX " + (root.data.network ? (root.data.network.tx_rate/1024).toFixed(1) : "0") + " KB/s"
+                                            color: "#a6e3a1"
+                                            font.pixelSize: 10
+                                        }
+                                        Components.Sparkline {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 32
+                                            history: root.netTxHistory
+                                            lineColor: "#a6e3a1"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // === BOTTOM INFO BAR ===
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 32
+                    radius: 6
+                    color: Qt.rgba(0.10, 0.10, 0.12, 0.9)
+                    border.width: 1
+                    border.color: Qt.rgba(1,1,1,0.05)
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 16
+
+                        Text {
+                            text: root.data.load ? "Load: " + root.data.load[0].toFixed(2) + " " + root.data.load[1].toFixed(2) + " " + root.data.load[2].toFixed(2) : "Load: --"
+                            color: "#a6adc8"
+                            font.pixelSize: 10
+                        }
+                        Text {
+                            text: root.data.uptime ? "Uptime: " + Math.floor(root.data.uptime/3600) + "h " + Math.floor((root.data.uptime%3600)/60) + "m" : ""
+                            color: "#a6adc8"
+                            font.pixelSize: 10
+                        }
+                        Text {
+                            text: root.data.ccache ? "ccache: " + root.data.ccache.hit_rate.toFixed(1) + "%" : ""
+                            color: "#a6adc8"
+                            font.pixelSize: 10
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: root.lastError !== "" ? root.lastError : root.lastStatus
+                            color: root.lastError !== "" ? "#f38ba8" : "#6c7086"
+                            font.pixelSize: 10
+                        }
+                    }
+                }
+            }
+
+            // ==================== BASIC SETTINGS MENU (right-click) ====================
+            Rectangle {
+                visible: root.showSettingsMenu && root.showSettingsMenu === true
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 8
+                width: 220
+                height: 160
+                radius: 8
+                color: Qt.rgba(0.08, 0.08, 0.10, 0.98)
+                border.width: 1
+                border.color: Qt.rgba(1,1,1,0.12)
+                z: 100
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.showSettingsMenu = false
+                }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 6
+
+                    Text {
+                        text: "sysmon — Quick Settings"
+                        color: "#cdd6f4"
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+
+                    MouseArea {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 22
+                        onClicked: {
+                            root.autoPoll = !root.autoPoll
+                            root.showSettingsMenu = false
+                        }
+                        Text {
+                            text: "Toggle Auto Poll (currently " + (root.autoPoll ? "ON" : "OFF") + ")"
+                            color: "#a6adc8"
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    MouseArea {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 22
+                        onClicked: {
+                            root.recenter()
+                            root.showSettingsMenu = false
+                        }
+                        Text {
+                            text: "Re-center Window (free drag is limited)"
+                            color: "#a6adc8"
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    MouseArea {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 22
+                        onClicked: root.hide()
+                        Text {
+                            text: "Close Dashboard"
+                            color: "#a6adc8"
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    Item { Layout.fillHeight: true }
+
+                    Text {
+                        text: "(Right-click again to close this menu)"
+                        color: "#6c7086"
+                        font.pixelSize: 9
+                    }
+                }
+            }
+        }
+    }
+
+    // Helper to re-center the window
+    function recenter() {
+        const s = window.screen ? window.screen : (Quickshell.screens && Quickshell.screens[0])
+        if (s && typeof window.x === "number") {
+            window.x = Math.round((s.width - window.implicitWidth) / 2)
+            window.y = Math.round(s.height * 0.68)
+        }
+    }
+
+    // ==================== SIMPLE RIGHT-CLICK SETTINGS MENU ====================
+    property bool showSettingsMenu: false
+
+    function toggleSettingsMenu() {
+        showSettingsMenu = !showSettingsMenu
+    }
+}

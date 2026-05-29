@@ -1,0 +1,1454 @@
+import Quickshell
+import Quickshell.Wayland
+import QtQuick
+import QtQuick.Layouts
+import Quickshell.Hyprland
+import Quickshell.Widgets
+import Quickshell.Services.Pipewire
+
+PanelWindow {
+    id: bar
+
+    anchors.top: true
+    anchors.left: true
+    anchors.right: true
+    implicitHeight: 54   // Increased for ultrawide readability (was 46)
+    color: "transparent"
+
+    // ===== Theme =====
+    property color bg: "#1e1e2e"
+    property color surface: "#313244"
+    property color text: "#cdd6f4"
+    property color subtext: "#a6adc8"
+    property color overlay: "#6c7086"
+    property color accent: "#89b4fa"
+    property color todayBg: "#89b4fa"
+    property color weekday: "#ff5c5c"
+    property color clock: "#ffffff"
+    property color muted: "#f38ba8"
+    property int barRadius: 14
+    property int sideMargin: 10
+
+    // ===== Workspaces (eww migration) =====
+    // Yellow hover shade taken from eww working scss (rgb(253, 249, 219))
+    readonly property color wsHoverYellow: "#fdf9db"
+    readonly property color wsActiveBg: "#1e1e1e"
+    readonly property color wsText: "#64748b"
+    readonly property color wsActiveText: "#e2e8f0"
+
+    // Pill style (matching eww shared .uptime/.clock/.monitor-pill etc: dark #1a1a1a bg, radius 10, subtle border)
+    readonly property color pillBg: "#1a1a1a"
+    readonly property color pillBorder: "#45475a"
+    readonly property int pillRadius: 10
+
+    property var hoveredWorkspace: null
+
+    function getWsIcon(id) {
+        switch (id) {
+            case 1: return "";  // code
+            case 2: return "🦁";
+            case 3: return "";  // chat
+            case 4: return "";  // browser
+            case 5: return "🕹";  // game
+            case 6: return "";
+            case 7: return "󰨞";
+            case 8: return "󰈹";
+            case 9: return "";  // term
+            case 10: return "";
+            default: return "󰈸";
+        }
+    }
+
+    property var shownWorkspaces: []
+
+    function updateShownWorkspaces() {
+        if (!Hyprland.workspaces || !Hyprland.workspaces.values) {
+            bar.shownWorkspaces = [];
+            return;
+        }
+        const filtered = Hyprland.workspaces.values.filter(function(w) {
+            if (!w || w.id <= 0) return false;
+            let hasWindows = false;
+            if (w.toplevels) {
+                if (typeof w.toplevels.count === "number") hasWindows = w.toplevels.count > 0;
+                else if (w.toplevels.values && typeof w.toplevels.values.length === "number") hasWindows = w.toplevels.values.length > 0;
+            }
+            return hasWindows || w.active || w.focused;
+        });
+        filtered.sort(function(a, b) { return a.id - b.id; });
+        bar.shownWorkspaces = filtered;
+    }
+
+    function switchToRelative(delta) {
+        if (!bar.shownWorkspaces || bar.shownWorkspaces.length === 0) return;
+        const activeId = (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id) ? Hyprland.focusedWorkspace.id : 1;
+        let idx = -1;
+        for (let i = 0; i < bar.shownWorkspaces.length; i++) {
+            if (bar.shownWorkspaces[i].id === activeId) { idx = i; break; }
+        }
+        if (idx < 0) idx = 0;
+        let newIdx = idx + delta;
+        if (newIdx < 0) newIdx = 0;
+        if (newIdx >= bar.shownWorkspaces.length) newIdx = bar.shownWorkspaces.length - 1;
+        const target = bar.shownWorkspaces[newIdx];
+        if (target && target.activate) target.activate();
+    }
+
+    Component.onCompleted: {
+        bar.updateShownWorkspaces();
+        audio.refreshDevices();
+    }
+
+    Connections {
+        target: Hyprland.workspaces
+        function onValuesChanged() { bar.updateShownWorkspaces(); }
+    }
+    Connections {
+        target: Hyprland
+        function onFocusedWorkspaceChanged() { bar.updateShownWorkspaces(); }
+    }
+    // Note: toplevel open/close is reflected via workspaces.values updates in practice (Hyprland IPC pushes changes).
+    // If some windows don't appear/disappear immediately, a manual refresh button or extra Hyprland.toplevels connection can be added.
+
+    // ===== AUDIO WIDGET (Pipewire) =====
+    PwObjectTracker {
+        id: audioTracker
+        objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource].filter(function(n){ return !!n; })
+    }
+
+    QtObject {
+        id: audio
+        property int viewMode: 0  // 0=speaker, 1=mic, 2=dual
+
+        property var sinks: []
+        property var sources: []
+
+        readonly property var speaker: Pipewire.defaultAudioSink
+        readonly property var mic: Pipewire.defaultAudioSource
+
+        readonly property real speakerVolume: (speaker && speaker.audio) ? speaker.audio.volume : 0.0
+        readonly property bool speakerMuted: (speaker && speaker.audio) ? speaker.audio.muted : false
+        readonly property real micVolume: (mic && mic.audio) ? mic.audio.volume : 0.0
+        readonly property bool micMuted: (mic && mic.audio) ? mic.audio.muted : false
+
+        readonly property int speakerPercent: Math.round(speakerVolume * 100)
+        readonly property int micPercent: Math.round(micVolume * 100)
+
+        property bool deviceListForSink: true
+
+        function setVolume(node, v) {
+            if (node && node.audio) node.audio.volume = Math.max(0.0, Math.min(1.0, v));
+        }
+        function stepVolume(node, delta) {
+            if (!node || !node.audio) return;
+            var nv = Math.max(0.0, Math.min(1.0, node.audio.volume + delta));
+            node.audio.volume = nv;
+        }
+        function toggleMute(node) {
+            if (node && node.audio) node.audio.muted = !node.audio.muted;
+        }
+        function cycleView() { viewMode = (viewMode + 1) % 3; }
+
+        function refreshDevices() {
+            var s = [], r = [];
+            var vals = (Pipewire.nodes && Pipewire.nodes.values) ? Pipewire.nodes.values : [];
+            for (var i = 0; i < vals.length; i++) {
+                var n = vals[i];
+                if (!n || !n.audio) continue;
+                var nm = n.description || n.name || n.nickname || "Device";
+                if (n.isSink && !n.isStream) s.push({node: n, name: nm});
+                else if (!n.isSink && !n.isStream) r.push({node: n, name: nm});
+            }
+            var cmp = function(a,b){ return a.name.localeCompare(b.name); };
+            s.sort(cmp); r.sort(cmp);
+            audio.sinks = s;
+            audio.sources = r;
+        }
+
+        function getCurrentDeviceName(isSink) {
+            var def = isSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource;
+            if (!def) return "Default";
+            return def.description || def.name || def.nickname || "Device";
+        }
+    }
+
+    Connections {
+        target: Pipewire.nodes
+        function onValuesChanged() { audio.refreshDevices(); }
+    }
+
+    // Reusable volume bar (clickable fill)
+    Component {
+        id: volumeBar
+        Item {
+            id: vbar
+            property real value: 0.0
+            property var onSet: function(v){}
+            property color fill: bar.accent
+            property color track: bar.surface
+            property int barHeight: 6
+            implicitWidth: 110
+            implicitHeight: barHeight + 4
+            Rectangle {
+                anchors.centerIn: parent
+                width: parent.width
+                height: vbar.barHeight
+                radius: height / 2
+                color: vbar.track
+            }
+            Rectangle {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(0, Math.min(parent.width, parent.width * vbar.value))
+                height: vbar.barHeight
+                radius: height / 2
+                color: vbar.fill
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: (m) => { var f = Math.max(0, Math.min(1, m.x / width)); vbar.onSet(f); }
+            }
+        }
+    }
+
+    // Mini volume bar for dual view
+    Component {
+        id: miniVolumeBar
+        Item {
+            id: mbar
+            property real value: 0.0
+            property var onSet: function(v){}
+            property color fill: bar.accent
+            property color track: bar.surface
+            implicitWidth: 48
+            implicitHeight: 5
+            Rectangle {
+                anchors.fill: parent
+                radius: 2
+                color: mbar.track
+            }
+            Rectangle {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(0, Math.min(parent.width, parent.width * mbar.value))
+                height: parent.height
+                radius: 2
+                color: mbar.fill
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: (m) => { var f = Math.max(0, Math.min(1, m.x / width)); mbar.onSet(f); }
+            }
+        }
+    }
+
+    // ===== Bar Content =====
+    Rectangle {
+        id: barBg
+        anchors.fill: parent
+        anchors.leftMargin: bar.sideMargin
+        anchors.rightMargin: bar.sideMargin
+        anchors.topMargin: 3
+        anchors.bottomMargin: 3
+        radius: bar.barRadius
+        color: bar.bg
+        border.width: 1
+        border.color: "#45475a"
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 20   // Slightly more breathing room for ultrawide
+            anchors.rightMargin: 20
+            spacing: 14
+
+            // Left side - Workspaces (from eww migration: icons+num, only active/occupied,
+            // reactive via Quickshell.Hyprland (no polling), yellow hover, active highlight,
+            // scroll wheel, click to focus, hover preview support)
+            // Encapsulated in a pill (matching eww module pill style: #1a1a1a bg, rounded, subtle border)
+            Rectangle {
+                id: workspacesPill
+                color: bar.pillBg
+                radius: bar.pillRadius
+                border.width: 1
+                border.color: bar.pillBorder
+
+                Layout.preferredWidth: wsRow.implicitWidth + 16
+                Layout.preferredHeight: 40   // Taller pill for ultrawide readability
+                Layout.alignment: Qt.AlignVCenter
+
+                // Mouse wheel: up advances "next" in the shown list (per requirements)
+                WheelHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: (event) => {
+                        const delta = (event.angleDelta.y > 0) ? 1 : -1;
+                        bar.switchToRelative(delta);
+                    }
+                }
+
+                Row {
+                    id: wsRow
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    Repeater {
+                        model: bar.shownWorkspaces
+                        delegate: Rectangle {
+                            id: wsBtn
+                            required property var modelData // HyprlandWorkspace
+                            required property int index
+                            property bool isActive: modelData && (modelData.active || modelData.focused)
+                            property bool isHovered: wsMouse.containsMouse
+
+                            width: 42   // Slightly wider for bigger text
+                            height: 32
+                            radius: 8
+                            color: isActive ? bar.wsActiveBg :
+                                   (isHovered ? bar.wsHoverYellow : "transparent")
+                            border.width: isActive ? 1 : 0
+                            border.color: "#45475a"
+
+                            Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+
+                            MouseArea {
+                                id: wsMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    bar.hoveredWorkspace = null;
+                                    if (modelData) modelData.activate();
+                                }
+                                onEntered: { if (modelData) { wsPreviewHideTimer.stop(); bar.hoveredWorkspace = modelData; } }
+                                onExited: {
+                                    wsPreviewHideTimer.restart();
+                                }
+                            }
+
+                            // Icon + number (matching eww mapping)
+                            // Text is white + bold like the date/time clock, slightly larger
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 3
+                                Text {
+                                    text: bar.getWsIcon(modelData ? modelData.id : 0)
+                                    font.pixelSize: 17   // Increased for ultrawide readability
+                                    color: isActive ? bar.wsActiveText :
+                                           (isHovered ? "#111111" : bar.clock)
+                                    font.family: "JetBrains Mono Nerd Font, Symbols Nerd Font, monospace"
+                                    font.bold: true
+                                }
+                                Text {
+                                    text: modelData ? modelData.id : ""
+                                    font.pixelSize: 15   // Increased for ultrawide readability
+                                    font.bold: true
+                                    color: isActive ? bar.wsActiveText :
+                                           (isHovered ? "#111111" : bar.clock)
+                                }
+                            }
+                        }
+                    }
+                }
+            }  // closes workspacesPill Rectangle
+
+            Item { Layout.fillWidth: true }
+
+            // ===== AUDIO / VOLUME WIDGET (cycle speaker <-> mic <-> dual, popup on right-click) =====
+            Rectangle {
+                id: audioPill
+                Layout.preferredWidth: audioContent.implicitWidth + 18
+                Layout.preferredHeight: 36
+                radius: bar.pillRadius
+                color: audioHover.containsMouse ? bar.surface : bar.pillBg
+                border.width: 1
+                border.color: audioHover.containsMouse ? bar.accent : bar.pillBorder
+
+                // Main interaction area (left-click cycle, middle mute, right popup)
+                MouseArea {
+                    id: audioHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+
+                    onClicked: (mouse) => {
+                        if (mouse.button === Qt.LeftButton) {
+                            audio.cycleView();
+                        } else if (mouse.button === Qt.MiddleButton) {
+                            // Middle: mute the "primary" for current view
+                            if (audio.viewMode === 0) audio.toggleMute(audio.speaker);
+                            else if (audio.viewMode === 1) audio.toggleMute(audio.mic);
+                            else audio.toggleMute(audio.speaker);  // dual: speaker
+                        } else if (mouse.button === Qt.RightButton) {
+                            showAudioPopup();
+                        }
+                    }
+                }
+
+                // Content switches on viewMode
+                Item {
+                    id: audioContent
+                    anchors.centerIn: parent
+                    implicitWidth: audioRow.implicitWidth
+                    implicitHeight: audioRow.implicitHeight
+
+                    Row {
+                        id: audioRow
+                        spacing: 6
+                        anchors.centerIn: parent
+
+                        // ========== SPEAKER VIEW ==========
+                        Row {
+                            visible: audio.viewMode === 0
+                            spacing: 6
+
+                            Text {
+                                text: audio.speakerMuted ? "" : ""
+                                font.pixelSize: 16
+                                font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                                color: audio.speakerMuted ? bar.muted : bar.accent
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            // Clickable slider + wheel for speaker
+                            Item {
+                                width: 92; height: 16
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                Loader {
+                                    id: spkBar
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    sourceComponent: volumeBar
+                                    onLoaded: {
+                                        item.value = Qt.binding(function(){ return audio.speakerVolume; });
+                                        item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
+                                        item.fill = Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; });
+                                    }
+                                }
+
+                                WheelHandler {
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                    onWheel: (e) => {
+                                        const d = (e.angleDelta.y > 0) ? 0.05 : -0.05;
+                                        audio.stepVolume(audio.speaker, d);
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: audio.speakerPercent + "%"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: audio.speakerMuted ? bar.muted : bar.text
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        // ========== MIC VIEW ==========
+                        Row {
+                            visible: audio.viewMode === 1
+                            spacing: 6
+
+                            Text {
+                                text: audio.micMuted ? "󰍭" : "󰍬"
+                                font.pixelSize: 16
+                                font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                                color: audio.micMuted ? bar.muted : bar.accent
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Item {
+                                width: 92; height: 16
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                Loader {
+                                    id: micBar
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    sourceComponent: volumeBar
+                                    onLoaded: {
+                                        item.value = Qt.binding(function(){ return audio.micVolume; });
+                                        item.onSet = function(v){ audio.setVolume(audio.mic, v); };
+                                        item.fill = Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; });
+                                    }
+                                }
+
+                                WheelHandler {
+                                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                    onWheel: (e) => {
+                                        const d = (e.angleDelta.y > 0) ? 0.05 : -0.05;
+                                        audio.stepVolume(audio.mic, d);
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: audio.micPercent + "%"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: audio.micMuted ? bar.muted : bar.text
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        // ========== DUAL VIEW ==========
+                        Row {
+                            visible: audio.viewMode === 2
+                            spacing: 8
+
+                            // Speaker mini
+                            Row {
+                                spacing: 3
+                                Text {
+                                    text: audio.speakerMuted ? "" : ""
+                                    font.pixelSize: 14
+                                    font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                                    color: audio.speakerMuted ? bar.muted : bar.accent
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Item {
+                                    width: 44; height: 14
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Loader {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        sourceComponent: miniVolumeBar
+                                        onLoaded: {
+                                            item.value = Qt.binding(function(){ return audio.speakerVolume; });
+                                            item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
+                                            item.fill = Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; });
+                                        }
+                                    }
+                                    WheelHandler {
+                                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                        onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.speaker, d); }
+                                    }
+                                }
+                            }
+
+                            // Mic mini
+                            Row {
+                                spacing: 3
+                                Text {
+                                    text: audio.micMuted ? "󰍭" : "󰍬"
+                                    font.pixelSize: 14
+                                    font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                                    color: audio.micMuted ? bar.muted : bar.accent
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Item {
+                                    width: 44; height: 14
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Loader {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        sourceComponent: miniVolumeBar
+                                        onLoaded: {
+                                            item.value = Qt.binding(function(){ return audio.micVolume; });
+                                            item.onSet = function(v){ audio.setVolume(audio.mic, v); };
+                                            item.fill = Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; });
+                                        }
+                                    }
+                                    WheelHandler {
+                                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                        onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.mic, d); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ===== CLOCK (clickable) - encapsulated in pill (matching eww .clock style + workspaces pill) =====
+            Rectangle {
+                id: clockButton
+                Layout.preferredWidth: clockLabel.implicitWidth + 28
+                Layout.preferredHeight: 36   // Taller pill + text for ultrawide readability
+                radius: bar.pillRadius
+                color: clockArea.containsMouse ? bar.surface : bar.pillBg
+                border.width: 1
+                border.color: clockArea.containsMouse ? bar.accent : bar.pillBorder
+
+                Text {
+                    id: clockLabel
+                    anchors.centerIn: parent
+                    text: Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")
+                    color: bar.clock
+                    font.pixelSize: 15   // Increased for ultrawide readability (was 13)
+                    font.family: "monospace"
+                    font.bold: true
+                }
+
+                MouseArea {
+                    id: clockArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (calendarPopup.visible) {
+                            calendarPopup.visible = false
+                        } else {
+                            showCalendarPopup()
+                        }
+                    }
+                }
+
+                // Live updating clock
+                Timer {
+                    interval: 1000
+                    running: true
+                    repeat: true
+                    onTriggered: {
+                        clockLabel.text = Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")
+                    }
+                }
+            }
+        }
+    }
+
+    // ===== Calendar Logic =====
+    QtObject {
+        id: calendar
+        property int viewedMonth: new Date().getMonth()
+        property int viewedYear: new Date().getFullYear()
+
+        function goToToday() {
+            var now = new Date()
+            viewedMonth = now.getMonth()
+            viewedYear = now.getFullYear()
+        }
+
+        function changeMonth(delta) {
+            viewedMonth += delta
+            while (viewedMonth < 0) {
+                viewedMonth += 12
+                viewedYear -= 1
+            }
+            while (viewedMonth > 11) {
+                viewedMonth -= 12
+                viewedYear += 1
+            }
+        }
+    }
+
+    // ===== CALENDAR POPUP =====
+    PopupWindow {
+        id: calendarPopup
+        anchor.window: bar
+        implicitWidth: 310
+        implicitHeight: 355
+        visible: false
+
+        // Rounded popup background
+        Rectangle {
+            anchors.fill: parent
+            radius: 16
+            color: bar.bg
+            border.width: 1
+            border.color: "#45475a"
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 10
+
+                // Header: Month + Year + Navigation
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: Qt.formatDateTime(new Date(calendar.viewedYear, calendar.viewedMonth, 1), "MMMM yyyy")
+                        color: bar.text
+                        font.pixelSize: 17
+                        font.bold: true
+                        horizontalAlignment: Text.AlignLeft
+                    }
+
+                    // Nav buttons: year-, month-, today, month+, year+
+                    Repeater {
+                        model: [
+                            { sym: "«", delta: -12, tip: "Previous year" },
+                            { sym: "‹", delta: -1,  tip: "Previous month" },
+                            { sym: "›", delta:  1,  tip: "Next month" },
+                            { sym: "»", delta: 12,  tip: "Next year" }
+                        ]
+                        delegate: Rectangle {
+                            width: 26
+                            height: 26
+                            radius: 6
+                            color: navMa.containsMouse ? bar.surface : "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData.sym
+                                color: bar.accent
+                                font.pixelSize: 15
+                                font.bold: true
+                            }
+
+                            MouseArea {
+                                id: navMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: calendar.changeMonth(modelData.delta)
+                            }
+                        }
+                    }
+
+                    // Today button
+                    Rectangle {
+                        width: 52
+                        height: 24
+                        radius: 6
+                        color: todayBtnMa.containsMouse ? bar.accent : bar.surface
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Today"
+                            color: todayBtnMa.containsMouse ? bar.bg : bar.text
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+
+                        MouseArea {
+                            id: todayBtnMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: calendar.goToToday()
+                        }
+                    }
+                }
+
+                // Weekday headers (Monday first)
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    Repeater {
+                        model: ["M", "T", "W", "T", "F", "S", "S"]
+                        delegate: Text {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            text: modelData
+                            color: bar.weekday
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+                }
+
+                // Calendar grid (42 cells)
+                GridLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    columns: 7
+                    rowSpacing: 3
+                    columnSpacing: 3
+
+                    Repeater {
+                        model: 42
+                        delegate: Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumHeight: 30
+
+                            // ===== Day calculation =====
+                            property int firstDay: new Date(calendar.viewedYear, calendar.viewedMonth, 1).getDay() // 0=Sun
+                            property int leadingEmpty: (firstDay === 0) ? 6 : (firstDay - 1)
+                            property int daysInMonth: new Date(calendar.viewedYear, calendar.viewedMonth + 1, 0).getDate()
+                            property int dayNum: index - leadingEmpty + 1
+
+                            property bool isCurrentMonth: dayNum >= 1 && dayNum <= daysInMonth
+                            property int displayNum: {
+                                if (isCurrentMonth) return dayNum
+                                if (dayNum < 1) {
+                                    // previous month
+                                    var prevDays = new Date(calendar.viewedYear, calendar.viewedMonth, 0).getDate()
+                                    return prevDays + dayNum
+                                }
+                                // next month
+                                return dayNum - daysInMonth
+                            }
+
+                            property bool isToday: {
+                                var now = new Date()
+                                return isCurrentMonth &&
+                                       calendar.viewedYear === now.getFullYear() &&
+                                       calendar.viewedMonth === now.getMonth() &&
+                                       dayNum === now.getDate()
+                            }
+
+                            // Today highlight circle
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 26
+                                height: 26
+                                radius: 13
+                                color: bar.todayBg
+                                visible: isToday
+                            }
+
+                            // Day number
+                            Text {
+                                anchors.centerIn: parent
+                                text: displayNum > 0 ? displayNum : ""
+                                color: isToday ? bar.bg :
+                                       (isCurrentMonth ? bar.text : bar.overlay)
+                                font.pixelSize: isToday ? 13 : 12
+                                font.bold: isToday || isCurrentMonth
+                            }
+                        }
+                    }
+                }
+
+                // Footer
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Current day is highlighted"
+                        color: bar.overlay
+                        font.pixelSize: 10
+                    }
+
+                    Text {
+                        text: "click clock to close"
+                        color: bar.overlay
+                        font.pixelSize: 10
+                    }
+                }
+            }
+        }
+    }
+
+    // ===== AUDIO POPUP (device selectors + full sliders + mutes) =====
+    PopupWindow {
+        id: audioPopup
+        anchor.window: bar
+        implicitWidth: 420
+        implicitHeight: 315   // Increased ~50% for more breathing room (was 210)
+        visible: false
+        color: "transparent"
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 12
+            color: bar.bg
+            border.width: 1
+            border.color: "#45475a"
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 16
+
+                // Header
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "Audio Controls"
+                        color: bar.text
+                        font.pixelSize: 16
+                        font.bold: true
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: "right-click pill or outside to close"
+                        color: bar.overlay
+                        font.pixelSize: 11
+                    }
+                }
+
+                // OUTPUT section
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Text {
+                        text: "Playback"
+                        color: bar.accent
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
+
+                    // Device selector (click to open list)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
+                        radius: 6
+                        color: outDevMouse.containsMouse ? bar.surface : "#2a2a3a"
+                        border.width: 1
+                        border.color: "#45475a"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
+                            Text {
+                                Layout.fillWidth: true
+                                text: audio.getCurrentDeviceName(true)
+                                color: bar.text
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: "▼"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        MouseArea {
+                            id: outDevMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: openAudioDeviceList(true, outDevMouse)
+                        }
+                    }
+
+                    // Slider row
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Text {
+                            text: audio.speakerMuted ? "" : ""
+                            font.pixelSize: 17
+                            font.family: "Symbols Nerd Font"
+                            color: audio.speakerMuted ? bar.muted : bar.accent
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 18
+                            Loader {
+                                anchors.fill: parent
+                                anchors.verticalCenter: parent.verticalCenter
+                                sourceComponent: volumeBar
+                                onLoaded: {
+                                    item.value = Qt.binding(function(){ return audio.speakerVolume; });
+                                    item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
+                                    item.barHeight = 8;
+                                    item.fill = Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; });
+                                }
+                            }
+                            WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.speaker, d); }
+                            }
+                        }
+
+                        Text {
+                            text: audio.speakerPercent + "%"
+                            color: audio.speakerMuted ? bar.muted : bar.text
+                            font.pixelSize: 13
+                            font.bold: true
+                            Layout.preferredWidth: 42
+                        }
+
+                        // Mute toggle button
+                        Rectangle {
+                            width: 52; height: 22; radius: 5
+                            color: muteOutMa.containsMouse ? (audio.speakerMuted ? bar.muted : bar.accent) : bar.surface
+                            border.width: 1
+                            border.color: "#45475a"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: audio.speakerMuted ? "Unmute" : "Mute"
+                                color: muteOutMa.containsMouse ? bar.bg : bar.text
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            MouseArea {
+                                id: muteOutMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: audio.toggleMute(audio.speaker)
+                            }
+                        }
+                    }
+                }
+
+                // INPUT section
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Text {
+                        text: "Recording"
+                        color: bar.accent
+                        font.pixelSize: 13
+                        font.bold: true
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
+                        radius: 6
+                        color: inDevMouse.containsMouse ? bar.surface : "#2a2a3a"
+                        border.width: 1
+                        border.color: "#45475a"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
+                            Text {
+                                Layout.fillWidth: true
+                                text: audio.getCurrentDeviceName(false)
+                                color: bar.text
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: "▼"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                            }
+                        }
+
+                        MouseArea {
+                            id: inDevMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: openAudioDeviceList(false, inDevMouse)
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Text {
+                            text: audio.micMuted ? "󰍭" : "󰍬"
+                            font.pixelSize: 17
+                            font.family: "Symbols Nerd Font"
+                            color: audio.micMuted ? bar.muted : bar.accent
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 18
+                            Loader {
+                                anchors.fill: parent
+                                anchors.verticalCenter: parent.verticalCenter
+                                sourceComponent: volumeBar
+                                onLoaded: {
+                                    item.value = Qt.binding(function(){ return audio.micVolume; });
+                                    item.onSet = function(v){ audio.setVolume(audio.mic, v); };
+                                    item.barHeight = 8;
+                                    item.fill = Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; });
+                                }
+                            }
+                            WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.mic, d); }
+                            }
+                        }
+
+                        Text {
+                            text: audio.micPercent + "%"
+                            color: audio.micMuted ? bar.muted : bar.text
+                            font.pixelSize: 13
+                            font.bold: true
+                            Layout.preferredWidth: 42
+                        }
+
+                        Rectangle {
+                            width: 52; height: 22; radius: 5
+                            color: muteInMa.containsMouse ? (audio.micMuted ? bar.muted : bar.accent) : bar.surface
+                            border.width: 1
+                            border.color: "#45475a"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: audio.micMuted ? "Unmute" : "Mute"
+                                color: muteInMa.containsMouse ? bar.bg : bar.text
+                                font.pixelSize: 11
+                                font.bold: true
+                            }
+                            MouseArea {
+                                id: muteInMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: audio.toggleMute(audio.mic)
+                            }
+                        }
+                    }
+                }
+
+                // Extra breathing room for the taller popup
+                Item { Layout.preferredHeight: 8 }
+            }
+        }
+
+        // Close on click outside content (simple: whole popup mouse)
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            onClicked: audioPopup.visible = false
+        }
+    }
+
+    // Device list popup (shared for output/input)
+    PopupWindow {
+        id: audioDeviceListPopup
+        anchor.window: bar
+        implicitWidth: 320
+        implicitHeight: Math.min(280, Math.max(80, (audio.deviceListForSink ? audio.sinks.length : audio.sources.length) * 26 + 60))
+        visible: false
+        color: "transparent"
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 10
+            color: bar.bg
+            border.width: 1
+            border.color: "#45475a"
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 4
+
+                Text {
+                    text: audio.deviceListForSink ? "Select Playback Device" : "Select Recording Device"
+                    color: bar.text
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+
+                Item { Layout.preferredHeight: 4 }
+
+                // Device rows
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Repeater {
+                        model: audio.deviceListForSink ? audio.sinks : audio.sources
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 24
+                            radius: 4
+                            color: rowDevMa.containsMouse ? bar.surface : "transparent"
+
+                            required property var modelData
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.name
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    visible: isCurrentDevice(modelData)
+                                    text: "✓"
+                                    color: bar.accent
+                                    font.pixelSize: 13
+                                }
+                            }
+
+                            MouseArea {
+                                id: rowDevMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    var node = modelData.node;
+                                    if (audio.deviceListForSink) {
+                                        Pipewire.preferredDefaultAudioSink = node;
+                                    } else {
+                                        Pipewire.preferredDefaultAudioSource = node;
+                                    }
+                                    audioDeviceListPopup.visible = false;
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: (audio.deviceListForSink ? audio.sinks.length : audio.sources.length) === 0
+                        text: "(no devices)"
+                        color: bar.overlay
+                        font.pixelSize: 11
+                        font.italic: true
+                    }
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            onClicked: audioDeviceListPopup.visible = false
+        }
+    }
+
+    function isCurrentDevice(dev) {
+        if (!dev || !dev.node) return false;
+        var def = audio.deviceListForSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource;
+        if (!def) return false;
+        return (def.name === dev.node.name) || (def.description === dev.node.description);
+    }
+
+    function openAudioDeviceList(forSink, targetItem) {
+        audio.deviceListForSink = forSink;
+        var popupW = audioDeviceListPopup.implicitWidth;
+        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920;
+
+        // Better position using mapToItem (relative to barBg like calendar)
+        var p = (audioPill && barBg) ? audioPill.mapToItem(barBg, 0, audioPill.height) : {x: 200, y: 0};
+        var baseX = bar.sideMargin + p.x;
+        audioDeviceListPopup.anchor.rect.x = Math.min(baseX, screenW - popupW - 12);
+        audioDeviceListPopup.anchor.rect.y = bar.implicitHeight + 46;
+        audioDeviceListPopup.visible = true;
+    }
+
+    function showAudioPopup() {
+        if (audioPopup.visible) {
+            audioPopup.visible = false;
+            audioDeviceListPopup.visible = false;
+            return;
+        }
+        var pos = audioPill.mapToItem(barBg, audioPill.width / 2, audioPill.height);
+        var popupW = audioPopup.implicitWidth;
+        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920;
+
+        var targetX = bar.sideMargin + pos.x - (popupW / 2);
+        var minX = 12;
+        var maxX = screenW - popupW - 12;
+        audioPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX));
+        audioPopup.anchor.rect.y = bar.implicitHeight + 2;
+
+        audioPopup.visible = true;
+        audioDeviceListPopup.visible = false;
+    }
+
+    // Helper to position + show popup nicely under the clock
+    function showCalendarPopup() {
+        // Map relative to the visual bar background (reliable QQuickItem target)
+        var pos = clockButton.mapToItem(barBg, clockButton.width / 2, clockButton.height)
+        var popupWidth = calendarPopup.implicitWidth
+
+        // The barBg has leftMargin, so add the bar's side margin for correct window-relative x
+        var targetX = bar.sideMargin + pos.x - (popupWidth / 2)
+
+        // Clamp to screen edges using the screen the bar is on
+        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
+        var minX = 12
+        var maxX = screenW - popupWidth - 12
+        calendarPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
+        calendarPopup.anchor.rect.y = bar.implicitHeight + 2
+
+        calendarPopup.visible = true
+    }
+
+    // ===== Workspace Hover Preview Popup (simple text list of windows on hovered ws) =====
+    // Efficient: only shows on hover, content driven by reactive Hyprland model (no polling)
+    // Positioned under left side of bar. Hides shortly after mouse leaves (with popup protection).
+    Timer {
+        id: wsPreviewHideTimer
+        interval: 280
+        onTriggered: bar.hoveredWorkspace = null
+    }
+
+    PopupWindow {
+        id: wsPreviewPopup
+        anchor.window: bar
+        implicitWidth: 340
+        implicitHeight: {
+            const ws = bar.hoveredWorkspace;
+            const count = (ws && ws.toplevels && typeof ws.toplevels.count === "number") ? ws.toplevels.count : 0;
+
+            if (count === 0) return 95;
+
+            // Accurate accounting of every visual element so the popup can grow to fit
+            // the icons + text + the generous margins/spacers the user wants.
+            const topMargin = 12;
+            const topSpacer = 4;
+            const headerHeight = 20;
+            const outerSpacing = 6;          // between header and list
+            const perWindowRow = 26;         // IconImage 18px + text + vertical padding in the RowLayout
+            const innerListSpacing = 4;      // spacing between window rows
+            const bottomSpacer = 14;
+            const bottomMargin = 14;
+            const safetyBuffer = 12;         // extra breathing room
+
+            const total = topMargin + topSpacer + headerHeight + outerSpacing
+                        + (count * perWindowRow) + ((count - 1) * innerListSpacing)
+                        + bottomSpacer + bottomMargin + safetyBuffer;
+
+            // Allow the popup to grow as needed (doubled max per user request for workspaces with many windows)
+            return Math.max(90, Math.min(760, total));
+        }
+        visible: bar.hoveredWorkspace !== null
+        color: "transparent"
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 10
+            color: bar.bg
+            border.width: 1
+            border.color: "#45475a"
+
+            ColumnLayout {
+                anchors.fill: parent
+                // Generous top and bottom margins as requested
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                anchors.topMargin: 12
+                anchors.bottomMargin: 14
+                spacing: 6
+
+                // Extra visible blank space above the header
+                Item {
+                    Layout.preferredHeight: 4
+                }
+
+                Text {
+                    text: bar.hoveredWorkspace ? ("Workspace " + bar.hoveredWorkspace.id + "  ·  " + (bar.hoveredWorkspace.toplevels && bar.hoveredWorkspace.toplevels.count ? bar.hoveredWorkspace.toplevels.count : 0) + " window(s)") : ""
+                    color: bar.text
+                    font.pixelSize: 12
+                    font.bold: true
+                }
+
+                // Window list with application icons
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    // Removed fillHeight: true so the list sizes naturally to its children.
+                    // This helps the outer implicitHeight drive the popup size correctly.
+                    spacing: 4
+                    Repeater {
+                        model: (bar.hoveredWorkspace && bar.hoveredWorkspace.toplevels) ? bar.hoveredWorkspace.toplevels : []
+                        delegate: Rectangle {
+                            id: windowRow
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: 26
+                            radius: 4
+                            color: rowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.07) : "transparent"
+
+                            // Make the entire row (icon + text) clickable
+                            MouseArea {
+                                id: rowMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                onClicked: {
+                                    // Capture values before we clear the popup
+                                    const ws = bar.hoveredWorkspace;
+                                    const addr = modelData && modelData.addressStr ? modelData.addressStr() : "";
+
+                                    // Hide the popup immediately — popups can steal focus back
+                                    bar.hoveredWorkspace = null;
+
+                                    if (ws) {
+                                        // Explicitly switch to the workspace first
+                                        Hyprland.dispatch(`workspace ${ws.id}`);
+                                    }
+
+                                    if (addr) {
+                                        // Focus the specific window slightly later.
+                                        // This gives Hyprland time to settle the workspace switch
+                                        // and ensures the popup has fully released focus.
+                                        Qt.callLater(function() {
+                                            Hyprland.dispatch(`focuswindow address:0x${addr}`);
+                                        });
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 6
+                                anchors.rightMargin: 6
+                                spacing: 8
+
+                                IconImage {
+                                    Layout.preferredWidth: 18
+                                    Layout.preferredHeight: 18
+                                    Layout.alignment: Qt.AlignVCenter
+                                    source: {
+                                        const klass = (modelData && modelData.lastIpcObject && modelData.lastIpcObject["class"]) || "";
+                                        return Quickshell.iconPath(klass, "application-x-executable");
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: {
+                                        if (!modelData) return "";
+                                        const t = modelData.title || "";
+                                        const klass = (modelData.lastIpcObject && modelData.lastIpcObject["class"]) ? " (" + modelData.lastIpcObject["class"] + ")" : "";
+                                        return (t.length > 40 ? t.substring(0,37) + "…" : t) + klass;
+                                    }
+                                    color: bar.subtext
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: bar.hoveredWorkspace && (!bar.hoveredWorkspace.toplevels || bar.hoveredWorkspace.toplevels.count === 0)
+                        text: "(empty workspace - only active)"
+                        color: bar.overlay
+                        font.pixelSize: 10
+                        font.italic: true
+                    }
+                }
+
+                // Generous bottom spacer for the blank space below the last item
+                Item {
+                    Layout.preferredHeight: 14
+                }
+            }
+        }
+
+        // Keep preview open if mouse enters the popup itself
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onEntered: wsPreviewHideTimer.stop()
+            onExited: wsPreviewHideTimer.restart()
+        }
+    }
+
+    // Helper: show/position workspace preview popup (called on hover in ws buttons via hoveredWorkspace binding)
+    function updateWsPreviewPosition() {
+        if (!wsPreviewPopup.visible || !bar.hoveredWorkspace) return;
+        const popupW = wsPreviewPopup.implicitWidth;
+        const targetX = bar.sideMargin + 4;
+        const screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920;
+        wsPreviewPopup.anchor.rect.x = Math.min(targetX, screenW - popupW - 12);
+        wsPreviewPopup.anchor.rect.y = bar.implicitHeight + 4;
+    }
+
+    onHoveredWorkspaceChanged: {
+        if (bar.hoveredWorkspace) {
+            wsPreviewHideTimer.stop();
+            // small delay position update
+            Qt.callLater(bar.updateWsPreviewPosition);
+        } else {
+            wsPreviewHideTimer.stop();
+        }
+    }
+}
