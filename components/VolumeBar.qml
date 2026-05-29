@@ -20,7 +20,7 @@ Item {
 
     property real value: 0.0
     property var onSet: function(v){}
-    property color fill: bar ? bar.accent : "#89b4fa"
+    property color fill: "#89b4fa"  // parent always overrides via binding with correct muted/accent logic
     property color track: bar ? bar.surface : "#313244"
     property int barHeight: 6
 
