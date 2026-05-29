@@ -985,13 +985,18 @@ PanelWindow {
                             width: 110; height: 18
                             anchors.verticalCenter: parent.verticalCenter
 
+                            // ========== DIAGNOSTIC TEST (temporary) ==========
+                            // Hard-coding value + obvious color to determine if the
+                            // problem is (A) the value binding not reaching the component,
+                            // or (B) the width calculation inside VolumeBar still failing.
                             VolumeBar {
                                 anchors.centerIn: parent
                                 bar: bar
-                                value: Qt.binding(function(){ return audio.speakerVolume; })
+                                value: 0.75                    // hard-coded 75% for test
                                 onSet: function(v){ audio.setVolume(audio.speaker, v); }
-                                fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
+                                fill: "#ff00ff"                // bright magenta - impossible to miss
                             }
+                            // ==================================================
 
                             WheelHandler {
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -1029,13 +1034,15 @@ PanelWindow {
                             width: 110; height: 18
                             anchors.verticalCenter: parent.verticalCenter
 
+                            // ========== DIAGNOSTIC TEST (temporary) ==========
                             VolumeBar {
                                 anchors.centerIn: parent
                                 bar: bar
-                                value: Qt.binding(function(){ return audio.micVolume; })
+                                value: 0.75
                                 onSet: function(v){ audio.setVolume(audio.mic, v); }
-                                fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
+                                fill: "#ff00ff"
                             }
+                            // ==================================================
 
                             WheelHandler {
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
