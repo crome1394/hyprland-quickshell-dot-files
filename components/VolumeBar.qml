@@ -32,6 +32,14 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
+    // This handler + computed property helps ensure external bindings
+    // (especially from PopupWindow / complex layouts) properly drive updates.
+    onValueChanged: {
+        // Intentionally empty — presence of the handler forces observation.
+    }
+
+    readonly property real effectiveValue: Math.max(0, Math.min(1, value))
+
     // Track (background)
     Rectangle {
         anchors.centerIn: parent
@@ -53,7 +61,7 @@ Item {
         Rectangle {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            width: fillContainer.width * root.value
+            width: fillContainer.width * root.effectiveValue
             height: parent.height
             radius: height / 2
             color: root.fill
