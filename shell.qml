@@ -985,16 +985,12 @@ PanelWindow {
                             width: 110; height: 18
                             anchors.verticalCenter: parent.verticalCenter
 
-                            Loader {
-                                id: spkBar
+                            VolumeBar {
                                 anchors.centerIn: parent
-                                sourceComponent: VolumeBar
-                                onLoaded: {
-                                    item.bar = bar;
-                                    item.value = Qt.binding(function(){ return audio.speakerVolume; });
-                                    item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
-                                    item.fill = Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; });
-                                }
+                                bar: bar
+                                value: Qt.binding(function(){ return audio.speakerVolume; })
+                                onSet: function(v){ audio.setVolume(audio.speaker, v); }
+                                fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
                             }
 
                             WheelHandler {
@@ -1033,16 +1029,12 @@ PanelWindow {
                             width: 110; height: 18
                             anchors.verticalCenter: parent.verticalCenter
 
-                            Loader {
-                                id: micBar
+                            VolumeBar {
                                 anchors.centerIn: parent
-                                sourceComponent: VolumeBar
-                                onLoaded: {
-                                    item.bar = bar;
-                                    item.value = Qt.binding(function(){ return audio.micVolume; });
-                                    item.onSet = function(v){ audio.setVolume(audio.mic, v); };
-                                    item.fill = Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; });
-                                }
+                                bar: bar
+                                value: Qt.binding(function(){ return audio.micVolume; })
+                                onSet: function(v){ audio.setVolume(audio.mic, v); }
+                                fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
                             }
 
                             WheelHandler {
@@ -1086,14 +1078,12 @@ PanelWindow {
                             Item {
                                 width: 58; height: 16
                                 anchors.verticalCenter: parent.verticalCenter
-                                Loader {
+                                MiniVolumeBar {
                                     anchors.centerIn: parent
-                                    sourceComponent: MiniVolumeBar
-                                    onLoaded: {
-                                        item.value = Qt.binding(function(){ return audio.speakerVolume; });
-                                        item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
-                                        item.fill = Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; });
-                                    }
+                                    bar: bar
+                                    value: Qt.binding(function(){ return audio.speakerVolume; })
+                                    onSet: function(v){ audio.setVolume(audio.speaker, v); }
+                                    fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
                                 }
                                 WheelHandler {
                                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -1119,14 +1109,12 @@ PanelWindow {
                             Item {
                                 width: 58; height: 16
                                 anchors.verticalCenter: parent.verticalCenter
-                                Loader {
+                                MiniVolumeBar {
                                     anchors.centerIn: parent
-                                    sourceComponent: MiniVolumeBar
-                                    onLoaded: {
-                                        item.value = Qt.binding(function(){ return audio.micVolume; });
-                                        item.onSet = function(v){ audio.setVolume(audio.mic, v); };
-                                        item.fill = Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; });
-                                    }
+                                    bar: bar
+                                    value: Qt.binding(function(){ return audio.micVolume; })
+                                    onSet: function(v){ audio.setVolume(audio.mic, v); }
+                                    fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
                                 }
                                 WheelHandler {
                                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -1343,15 +1331,11 @@ PanelWindow {
         }
 
         // The cava-like visualizer as background layer (spans full pill width via dynamic bars)
-        Loader {
-            id: vizLoader
+        CavaVisualizer {
             anchors.fill: parent
             anchors.margins: 4
-            sourceComponent: CavaVisualizer
-            onLoaded: {
-                item.bar = bar;
-                item.active = Qt.binding(function(){ return media.isPlaying; });
-            }
+            bar: bar
+            active: Qt.binding(function(){ return media.isPlaying; })
         }
 
         Row {
@@ -1944,17 +1928,14 @@ PanelWindow {
                         Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 18
-                            Loader {
+                            VolumeBar {
                                 anchors.fill: parent
                                 anchors.verticalCenter: parent.verticalCenter
-                                sourceComponent: VolumeBar
-                                onLoaded: {
-                                    item.bar = bar;
-                                    item.value = Qt.binding(function(){ return audio.speakerVolume; });
-                                    item.onSet = function(v){ audio.setVolume(audio.speaker, v); };
-                                    item.barHeight = 8;
-                                    item.fill = Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; });
-                                }
+                                bar: bar
+                                value: Qt.binding(function(){ return audio.speakerVolume; })
+                                onSet: function(v){ audio.setVolume(audio.speaker, v); }
+                                barHeight: 8
+                                fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
                             }
                             WheelHandler {
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -2057,17 +2038,14 @@ PanelWindow {
                         Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 18
-                            Loader {
+                            VolumeBar {
                                 anchors.fill: parent
                                 anchors.verticalCenter: parent.verticalCenter
-                                sourceComponent: VolumeBar
-                                onLoaded: {
-                                    item.bar = bar;
-                                    item.value = Qt.binding(function(){ return audio.micVolume; });
-                                    item.onSet = function(v){ audio.setVolume(audio.mic, v); };
-                                    item.barHeight = 8;
-                                    item.fill = Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; });
-                                }
+                                bar: bar
+                                value: Qt.binding(function(){ return audio.micVolume; })
+                                onSet: function(v){ audio.setVolume(audio.mic, v); }
+                                barHeight: 8
+                                fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
                             }
                             WheelHandler {
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
