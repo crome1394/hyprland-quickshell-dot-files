@@ -19,55 +19,51 @@ PanelWindow {
     implicitHeight: 54   // Increased for ultrawide readability (was 46)
     color: "transparent"
 
-    // ===== Theme =====
-    property color bg: "#3B3B3F"
-    property color surface: "#313244"
-    property color text: "#cdd6f4"
-    property color subtext: "#a6adc8"
-    property color overlay: "#6c7086"
-    property color accent: "#89b4fa"
-    property color todayBg: "#89b4fa"
-    property color weekday: "#ff5c5c"
-    property color clock: "#ffffff"
-    property color muted: "#f38ba8"
-    property int barRadius: 14
-    property int sideMargin: 10
+    // ===== Theme (centralized — see Theme.qml) =====
+    // Single source of truth. All values (including glassmorphic tokens,
+    // workspace colors, pill metrics, and audio widget sizing) live in Theme.qml.
+    // The aliases below provide 100% backward compatibility so the other 3300+
+    // lines of this file (and any code using bar.accent, bar.pillRadius, etc.)
+    // continue to work with zero other changes during the split.
+    Theme { id: theme }
 
-    // ===== Glassmorphic Theme =====
-    // Frosted glass / acrylic style for a more premium, modern look
-    readonly property color glassBg: Qt.rgba(0.08, 0.08, 0.10, 0.82)
-    readonly property color glassBorder: Qt.rgba(1, 1, 1, 0.10)
-    readonly property color glassHighlight: Qt.rgba(1, 1, 1, 0.22)
-    readonly property color glassPillBg: Qt.rgba(0.06, 0.06, 0.08, 0.75)
-    readonly property color glassHover: Qt.rgba(0.15, 0.15, 0.18, 0.65)
+    property alias bg: theme.bg
+    property alias surface: theme.surface
+    property alias text: theme.text
+    property alias subtext: theme.subtext
+    property alias overlay: theme.overlay
+    property alias accent: theme.accent
+    property alias todayBg: theme.todayBg
+    property alias weekday: theme.weekday
+    property alias clock: theme.clock
+    property alias muted: theme.muted
+    property alias barRadius: theme.barRadius
+    property alias sideMargin: theme.sideMargin
 
-    // Dedicated glassmorphic popup styling (slightly more opaque than the bar for readability)
-    readonly property color glassPopupBg: Qt.rgba(0.07, 0.07, 0.09, 0.90)
-    readonly property color glassPopupBorder: Qt.rgba(1, 1, 1, 0.13)
-    readonly property color glassPopupHighlight: Qt.rgba(1, 1, 1, 0.18)
+    readonly property alias glassBg: theme.glassBg
+    readonly property alias glassBorder: theme.glassBorder
+    readonly property alias glassHighlight: theme.glassHighlight
+    readonly property alias glassPillBg: theme.glassPillBg
+    readonly property alias glassHover: theme.glassHover
+    readonly property alias glassPopupBg: theme.glassPopupBg
+    readonly property alias glassPopupBorder: theme.glassPopupBorder
+    readonly property alias glassPopupHighlight: theme.glassPopupHighlight
 
-    // Tray menu button type enums (safe local mirrors of QsMenuButtonType)
-    readonly property int menuBtnNone: 0
-    readonly property int menuBtnCheck: 1
-    readonly property int menuBtnRadio: 2
+    readonly property alias menuBtnNone: theme.menuBtnNone
+    readonly property alias menuBtnCheck: theme.menuBtnCheck
+    readonly property alias menuBtnRadio: theme.menuBtnRadio
 
-    // ===== Workspaces (eww migration) =====
-    // Yellow hover shade taken from eww working scss (rgb(253, 249, 219))
-    readonly property color wsHoverYellow: "#fdf9db"
-    readonly property color wsActiveBg: "#1e1e1e"
-    readonly property color wsText: "#64748b"
-    readonly property color wsActiveText: "#e2e8f0"
+    readonly property alias wsHoverYellow: theme.wsHoverYellow
+    readonly property alias wsActiveBg: theme.wsActiveBg
+    readonly property alias wsText: theme.wsText
+    readonly property alias wsActiveText: theme.wsActiveText
 
-    // Glassmorphic pill defaults (translucent backgrounds + light borders)
-    readonly property color pillBg: bar.glassPillBg
-    readonly property color pillBorder: Qt.rgba(1, 1, 1, 0.08)
-    readonly property int pillRadius: 10
+    readonly property alias pillBg: theme.pillBg
+    readonly property alias pillBorder: theme.pillBorder
+    readonly property alias pillRadius: theme.pillRadius
 
-    // Fixed content width for audio widget (speaker/mic/dual all produce identical pill size).
-    // Dual view speaker icon is positioned to line up exactly with speaker view.
-    // Dual uses left+right anchoring + side padding so it truly spans the full inner width.
-    readonly property int audioViewContentWidth: 172
-    readonly property int audioViewSidePadding: 3
+    readonly property alias audioViewContentWidth: theme.audioViewContentWidth
+    readonly property alias audioViewSidePadding: theme.audioViewSidePadding
 
     function getWsIcon(id) {
         switch (id) {

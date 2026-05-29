@@ -4,18 +4,24 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell.Io as Io
 
+// Use the single source of truth defined in Theme.qml (prevents drift from the bar).
+import "."
+
 Item {
     id: root
 
-    // Glass theme (keep in sync with your bar)
-    readonly property color glassPopupBg: Qt.rgba(0.07, 0.07, 0.09, 0.92)
-    readonly property color glassPopupBorder: Qt.rgba(1, 1, 1, 0.13)
-    readonly property color glassPopupHighlight: Qt.rgba(1, 1, 1, 0.18)
-    readonly property color text: "#cdd6f4"
-    readonly property color subtext: "#a6adc8"
-    readonly property color overlay: "#6c7086"
-    readonly property color accent: "#89b4fa"
-    readonly property color surface: "#313244"
+    Theme { id: th }
+
+    // Glass + color theme now sourced from the shared Theme.qml.
+    // (Previously duplicated here with a tiny opacity difference on glassPopupBg.)
+    readonly property color glassPopupBg: th.glassPopupBg
+    readonly property color glassPopupBorder: th.glassPopupBorder
+    readonly property color glassPopupHighlight: th.glassPopupHighlight
+    readonly property color text: th.text
+    readonly property color subtext: th.subtext
+    readonly property color overlay: th.overlay
+    readonly property color accent: th.accent
+    readonly property color surface: th.surface
 
     readonly property bool open: helpWindow.visible
     property int currentTab: 0
