@@ -986,11 +986,16 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
 
                             VolumeBar {
+                                id: spkBar
                                 anchors.centerIn: parent
                                 bar: bar
-                                value: Qt.binding(function(){ return audio.speakerVolume; })
                                 onSet: function(v){ audio.setVolume(audio.speaker, v); }
                                 fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
+                            }
+                            Binding {
+                                target: spkBar
+                                property: "value"
+                                value: audio.speakerVolume
                             }
 
                             WheelHandler {
@@ -1030,11 +1035,16 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
 
                             VolumeBar {
+                                id: micBar
                                 anchors.centerIn: parent
                                 bar: bar
-                                value: Qt.binding(function(){ return audio.micVolume; })
                                 onSet: function(v){ audio.setVolume(audio.mic, v); }
                                 fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
+                            }
+                            Binding {
+                                target: micBar
+                                property: "value"
+                                value: audio.micVolume
                             }
 
                             WheelHandler {
@@ -1079,11 +1089,16 @@ PanelWindow {
                                 width: 58; height: 16
                                 anchors.verticalCenter: parent.verticalCenter
                                 MiniVolumeBar {
+                                    id: spkMiniBar
                                     anchors.centerIn: parent
                                     bar: bar
-                                    value: Qt.binding(function(){ return audio.speakerVolume; })
                                     onSet: function(v){ audio.setVolume(audio.speaker, v); }
                                     fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
+                                }
+                                Binding {
+                                    target: spkMiniBar
+                                    property: "value"
+                                    value: audio.speakerVolume
                                 }
                                 WheelHandler {
                                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -1110,11 +1125,16 @@ PanelWindow {
                                 width: 58; height: 16
                                 anchors.verticalCenter: parent.verticalCenter
                                 MiniVolumeBar {
+                                    id: micMiniBar
                                     anchors.centerIn: parent
                                     bar: bar
-                                    value: Qt.binding(function(){ return audio.micVolume; })
                                     onSet: function(v){ audio.setVolume(audio.mic, v); }
                                     fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
+                                }
+                                Binding {
+                                    target: micMiniBar
+                                    property: "value"
+                                    value: audio.micVolume
                                 }
                                 WheelHandler {
                                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -1929,13 +1949,18 @@ PanelWindow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 18
                             VolumeBar {
+                                id: popupSpkBar
                                 anchors.fill: parent
                                 anchors.verticalCenter: parent.verticalCenter
                                 bar: bar
-                                value: Qt.binding(function(){ return audio.speakerVolume; })
                                 onSet: function(v){ audio.setVolume(audio.speaker, v); }
                                 barHeight: 8
                                 fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
+                            }
+                            Binding {
+                                target: popupSpkBar
+                                property: "value"
+                                value: audio.speakerVolume
                             }
                             WheelHandler {
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -2039,13 +2064,18 @@ PanelWindow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 18
                             VolumeBar {
+                                id: popupMicBar
                                 anchors.fill: parent
                                 anchors.verticalCenter: parent.verticalCenter
                                 bar: bar
-                                value: Qt.binding(function(){ return audio.micVolume; })
                                 onSet: function(v){ audio.setVolume(audio.mic, v); }
                                 barHeight: 8
                                 fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
+                            }
+                            Binding {
+                                target: popupMicBar
+                                property: "value"
+                                value: audio.micVolume
                             }
                             WheelHandler {
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
