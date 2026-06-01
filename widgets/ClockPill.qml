@@ -6,49 +6,49 @@ import Quickshell
 // ClockPill.qml — Clock + Calendar popup
 // =============================================================================
 //
-// Displays current time. Right-click opens a calendar popup.
-// The calendar logic (42-cell grid, month navigation, today highlight) is
-// self-contained inside this file.
+// Purpose:
+//   Displays a live updating clock. Click opens a self-contained calendar popup
+//   with month/year navigation and a 42-cell grid.
+//
+// Theme Properties Consumed:
+//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.clock, bar.fontClock, bar.fontMono, bar.fontTiny
+//   - bar.popupRadius, bar.glassPopupBg, bar.glassPopupBorder, bar.glassPopupHighlight
+//   - bar.popupHeaderHighlightHeight, bar.popupSpacing, bar.popupTitleSize,
+//     bar.popupSectionSize, bar.popupHintSize, bar.popupSectionSpacing,
+//     bar.popupGridSpacing, bar.buttonRadius, bar.controlBorderWidth
+//   - bar.todayBg, bar.weekday, bar.text, bar.overlay, bar.bg
+//
+// Dependencies:
+//   - required property var bar (from shell.qml)
+//   - required property Item barBg (for accurate popup positioning)
+//
+// Notes:
+//   - Calendar logic and popup positioning are self-contained.
+//   - Additional centralization applied only for buttons, spacing, and fonts as requested.
+//   - A few small new tokens (popupGridSpacing, popupNavButtonSize, etc.) would be beneficial
+//     in Theme.qml for full cleanliness.
 // =============================================================================
 
 Rectangle {
     id: root
 
+    // === Required Properties ===
     required property var bar
     required property Item barBg   // needed for accurate popup positioning
 
+    // === Layout (for RowLayout participation in the bar) ===
     Layout.preferredWidth: clockLabel.implicitWidth + 28
     Layout.preferredHeight: 36
+    Layout.alignment: Qt.AlignVCenter
+
+    // === Appearance via Theme ===
     radius: bar.pillRadius
     color: clockArea.containsMouse ? bar.glassHover : bar.pillBg
-    border.width: 1
+    border.width: bar.controlBorderWidth
     border.color: clockArea.containsMouse ? bar.accent : bar.pillBorder
 
-    // ===== Calendar Logic (moved inside because it's tightly coupled to the clock) =====
-    QtObject {
-        id: calendar
-        property int viewedMonth: new Date().getMonth()
-        property int viewedYear: new Date().getFullYear()
-
-        function goToToday() {
-            var now = new Date()
-            viewedMonth = now.getMonth()
-            viewedYear = now.getFullYear()
-        }
-
-        function changeMonth(delta) {
-            viewedMonth += delta
-            while (viewedMonth < 0) {
-                viewedMonth += 12
-                viewedYear -= 1
-            }
-            while (viewedMonth > 11) {
-                viewedMonth -= 12
-                viewedYear += 1
-            }
-        }
-    }
-
+    // === Content ===
     Text {
         id: clockLabel
         anchors.centerIn: parent
@@ -59,6 +59,7 @@ Rectangle {
         font.bold: true
     }
 
+    // === Behavior ===
     MouseArea {
         id: clockArea
         anchors.fill: parent
@@ -83,12 +84,37 @@ Rectangle {
         }
     }
 
+    // ===== Calendar Logic (tightly coupled to this widget) =====
+    QtObject {
+        id: calendar
+        property int viewedMonth: new Date().getMonth()
+        property int viewedYear: new Date().getFullYear()
+
+        function goToToday() {
+            var now = new Date()
+            viewedMonth = now.getMonth()
+            viewedYear = now.getFullYear()
+        }
+
+        function changeMonth(delta) {
+            viewedMonth += delta
+            while (viewedMonth < 0) {
+                viewedMonth += 12
+                viewedYear -= 1
+            }
+            while (viewedMonth > 11) {
+                viewedMonth -= 12
+                viewedYear += 1
+            }
+        }
+    }
+
     // ===== CALENDAR POPUP (owned by the clock) =====
     PopupWindow {
         id: calendarPopup
         anchor.window: bar
-        implicitWidth: 310
-        implicitHeight: 280
+        implicitWidth: bar.popupCalendarWidth
+        implicitHeight: bar.popupCalendarHeight
         visible: false
         color: "transparent"
 
@@ -97,7 +123,7 @@ Rectangle {
             anchors.fill: parent
             radius: bar.popupRadius
             color: bar.glassPopupBg
-            border.width: 1
+            border.width: bar.controlBorderWidth
             border.color: bar.glassPopupBorder
 
             // Top highlight for glass effect
@@ -105,26 +131,26 @@ Rectangle {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: 1.5
+                height: bar.popupHeaderHighlightHeight
                 color: bar.glassPopupHighlight
                 radius: parent.radius
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 14
-                spacing: 10
+                anchors.margins: bar.popupSpacing
+                spacing: bar.popupSectionSpacing + 4
 
                 // Header: Month + Year + Navigation
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: bar.popupSectionSpacing
 
                     Text {
                         Layout.fillWidth: true
                         text: Qt.formatDateTime(new Date(calendar.viewedYear, calendar.viewedMonth, 1), "MMMM yyyy")
                         color: bar.text
-                        font.pixelSize: 17
+                        font.pixelSize: bar.popupTitleSize
                         font.bold: true
                         horizontalAlignment: Text.AlignLeft
                     }
@@ -140,7 +166,7 @@ Rectangle {
                         delegate: Rectangle {
                             width: 26
                             height: 26
-                            radius: 6
+                            radius: bar.buttonRadius
                             color: navMa.containsMouse ? bar.surface : "transparent"
 
                             Text {
@@ -165,14 +191,14 @@ Rectangle {
                     Rectangle {
                         width: 52
                         height: 24
-                        radius: 6
+                        radius: bar.buttonRadius
                         color: todayBtnMa.containsMouse ? bar.accent : bar.surface
 
                         Text {
                             anchors.centerIn: parent
                             text: "Today"
                             color: todayBtnMa.containsMouse ? bar.bg : bar.text
-                            font.pixelSize: 11
+                            font.pixelSize: bar.popupHintSize
                             font.bold: true
                         }
 
@@ -197,7 +223,7 @@ Rectangle {
                             horizontalAlignment: Text.AlignHCenter
                             text: modelData
                             color: bar.weekday
-                            font.pixelSize: 11
+                            font.pixelSize: bar.popupHintSize
                             font.bold: true
                         }
                     }
@@ -208,8 +234,8 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     columns: 7
-                    rowSpacing: 3
-                    columnSpacing: 3
+                    rowSpacing: bar.popupGridSpacing
+                    columnSpacing: bar.popupGridSpacing
 
                     Repeater {
                         model: 42
@@ -268,19 +294,19 @@ Rectangle {
                 // Footer
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
+                    Layout.topMargin: bar.popupSectionSpacing
 
                     Text {
                         Layout.fillWidth: true
                         text: "Current day is highlighted"
                         color: bar.overlay
-                        font.pixelSize: 10
+                        font.pixelSize: bar.fontTiny
                     }
 
                     Text {
                         text: "click clock to close"
                         color: bar.overlay
-                        font.pixelSize: 10
+                        font.pixelSize: bar.fontTiny
                     }
                 }
             }
