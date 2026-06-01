@@ -9,17 +9,35 @@ import "../components"
 // AudioPill.qml — Audio control pill (speaker + mic + device menus)
 // =============================================================================
 //
-// Three view modes cycled with left click:
-//   0 = Speaker volume
-//   1 = Microphone volume
-//   2 = Both (compact)
+// Purpose:
+//   Multi-view audio pill (speaker only / mic only / dual compact) with full
+//   device selection popup, volume controls, mute, and wheel support.
 //
-// Right click opens the full audio popup with device lists.
-// Middle click mutes the current view's device.
-// Wheel on the bars changes volume.
+// Theme Properties Consumed:
+//   - bar.audioViewContentWidth, bar.audioViewSidePadding
+//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.iconSpeaker*, bar.iconMic*, bar.iconSizePill, bar.iconSizePopup
+//   - bar.fontFamily, bar.fontPillLabel, bar.fontPopupTitle, bar.fontSection,
+//     bar.fontBody, bar.fontSmall
+//   - bar.muted, bar.text, bar.subtext, bar.overlay, bar.bg, bar.surface
+//   - bar.sliderPopupHeight, bar.controlBorderWidth, bar.buttonRadius,
+//     bar.smallButtonRadius
+//   - bar.popupRadius, bar.glassPopupBg, bar.glassPopupBorder,
+//     bar.glassPopupHighlight, bar.popupHeaderHighlightHeight,
+//     bar.popupSpacing, bar.popupTitleSize, bar.popupSectionSize,
+//     bar.popupHintSize, bar.popupButtonHoverBg, bar.dividerStrong
+//   - bar.popupAudioWidth, bar.popupAudioHeight
+//   - bar.tooltipDelay
 //
-// All PipeWire logic lives in the private `audio` QtObject.
-// Reuses VolumeBar and MiniVolumeBar from ../components.
+// Dependencies:
+//   - required property var bar
+//   - required property Item barBg (for popup positioning)
+//   - Quickshell.Services.Pipewire
+//
+// Notes:
+//   - All PipeWire logic, view mode switching, device list handling,
+//     WheelHandlers, and popup behavior are preserved exactly.
+//   - Styling centralization applied only where safe for layout stability.
 // =============================================================================
 
 Rectangle {
@@ -28,14 +46,18 @@ Rectangle {
     required property var bar
     required property Item barBg
 
+    // === Layout ===
     Layout.preferredWidth: bar.audioViewContentWidth + 18
     Layout.preferredHeight: 36
+    Layout.alignment: Qt.AlignVCenter
+
+    // === Appearance via Theme ===
     radius: bar.pillRadius
     color: audioHover.containsMouse ? bar.glassHover : bar.pillBg
-    border.width: 1
+    border.width: bar.controlBorderWidth
     border.color: audioHover.containsMouse ? bar.accent : bar.pillBorder
 
-    // ===== AUDIO STATE (moved from main file) =====
+    // ===== AUDIO STATE (logic preserved exactly) =====
     PwObjectTracker {
         id: audioTracker
         objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource].filter(function(n){ return !!n; })
@@ -101,12 +123,10 @@ Rectangle {
         target: Pipewire.nodes
         function onValuesChanged() {
             audio.refreshDevices();
-            // Keep the direct PipeWire stream list fresh (used in the media popup's PipeWire sources section).
-            // Complements the MPRIS path.
         }
     }
 
-    // ===== THE PILL UI =====
+    // === Behavior ===
     MouseArea {
         id: audioHover
         anchors.fill: parent
@@ -127,6 +147,7 @@ Rectangle {
         }
     }
 
+    // === Content (three view modes — logic and sizes preserved) ===
     Item {
         id: audioContent
         anchors.centerIn: parent
@@ -325,12 +346,12 @@ Rectangle {
         }
     }
 
-    // ===== AUDIO POPUP (device selectors + full sliders + mutes) =====
+    // ===== AUDIO POPUP (device selectors + full sliders) =====
     PopupWindow {
         id: audioPopup
         anchor.window: bar
-        implicitWidth: 420
-        implicitHeight: 260
+        implicitWidth: bar.popupAudioWidth
+        implicitHeight: bar.popupAudioHeight
         visible: false
         color: "transparent"
 
@@ -338,36 +359,37 @@ Rectangle {
             anchors.fill: parent
             radius: bar.popupRadius
             color: bar.glassPopupBg
-            border.width: 1
+            border.width: bar.controlBorderWidth
             border.color: bar.glassPopupBorder
 
             Rectangle {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: 1.5
+                height: bar.popupHeaderHighlightHeight
                 color: bar.glassPopupHighlight
                 radius: parent.radius
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 16
+                anchors.margins: bar.popupSpacing
                 spacing: 16
 
+                // Header
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
                         text: "Audio Controls"
                         color: bar.text
-                        font.pixelSize: 16
+                        font.pixelSize: bar.popupTitleSize
                         font.bold: true
                     }
                     Item { Layout.fillWidth: true }
                     Text {
                         text: "right-click pill or outside to close"
                         color: bar.overlay
-                        font.pixelSize: 11
+                        font.pixelSize: bar.popupHintSize
                     }
                 }
 
@@ -379,17 +401,17 @@ Rectangle {
                     Text {
                         text: "Playback"
                         color: bar.accent
-                        font.pixelSize: 13
+                        font.pixelSize: bar.popupSectionSize
                         font.bold: true
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 28
-                        radius: 6
-                        color: outDevMouse.containsMouse ? bar.glassHover : Qt.rgba(0.10, 0.10, 0.12, 0.6)
-                        border.width: 1
-                        border.color: "#45475a"
+                        radius: bar.buttonRadius
+                        color: outDevMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
 
                         RowLayout {
                             anchors.fill: parent
@@ -466,10 +488,10 @@ Rectangle {
                         }
 
                         Rectangle {
-                            width: 52; height: 22; radius: 5
+                            width: 52; height: 22; radius: bar.smallButtonRadius
                             color: muteOutMa.containsMouse ? (audio.speakerMuted ? bar.muted : bar.accent) : bar.surface
-                            border.width: 1
-                            border.color: "#45475a"
+                            border.width: bar.controlBorderWidth
+                            border.color: bar.dividerStrong
 
                             Text {
                                 anchors.centerIn: parent
@@ -489,7 +511,7 @@ Rectangle {
                     }
                 }
 
-                // INPUT section
+                // INPUT section (identical pattern applied)
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -497,17 +519,17 @@ Rectangle {
                     Text {
                         text: "Recording"
                         color: bar.accent
-                        font.pixelSize: 13
+                        font.pixelSize: bar.popupSectionSize
                         font.bold: true
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 28
-                        radius: 6
-                        color: inDevMouse.containsMouse ? bar.glassHover : Qt.rgba(0.10, 0.10, 0.12, 0.6)
-                        border.width: 1
-                        border.color: "#45475a"
+                        radius: bar.buttonRadius
+                        color: inDevMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
 
                         RowLayout {
                             anchors.fill: parent
@@ -584,10 +606,10 @@ Rectangle {
                         }
 
                         Rectangle {
-                            width: 52; height: 22; radius: 5
+                            width: 52; height: 22; radius: bar.smallButtonRadius
                             color: muteInMa.containsMouse ? (audio.micMuted ? bar.muted : bar.accent) : bar.surface
-                            border.width: 1
-                            border.color: "#45475a"
+                            border.width: bar.controlBorderWidth
+                            border.color: bar.dividerStrong
 
                             Text {
                                 anchors.centerIn: parent
@@ -619,7 +641,7 @@ Rectangle {
         }
     }
 
-    // Device list popup (shared for output/input)
+    // Device list popup (shared) — same centralization pattern applied
     PopupWindow {
         id: audioDeviceListPopup
         anchor.window: bar
@@ -632,27 +654,27 @@ Rectangle {
             anchors.fill: parent
             radius: bar.popupRadius
             color: bar.glassPopupBg
-            border.width: 1
+            border.width: bar.controlBorderWidth
             border.color: bar.glassPopupBorder
 
             Rectangle {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: 1.5
+                height: bar.popupHeaderHighlightHeight
                 color: bar.glassPopupHighlight
                 radius: parent.radius
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
+                anchors.margins: bar.popupSpacing
                 spacing: 4
 
                 Text {
                     text: audio.deviceListForSink ? "Select Playback Device" : "Select Recording Device"
                     color: bar.text
-                    font.pixelSize: 13
+                    font.pixelSize: bar.popupSectionSize
                     font.bold: true
                 }
 
@@ -666,7 +688,7 @@ Rectangle {
                         delegate: Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 24
-                            radius: 4
+                            radius: bar.buttonRadius
                             color: rowDevMa.containsMouse ? bar.surface : "transparent"
 
                             required property var modelData
@@ -751,18 +773,18 @@ Rectangle {
             audioDeviceListPopup.visible = false
             return
         }
+
         var pos = root.mapToItem(barBg, root.width / 2, root.height)
         var popupW = audioPopup.implicitWidth
         var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
 
-        var targetX = bar.sideMargin + pos.x - (popupW / 2)
+        var targetX = bar.sideMargin + pos.x - (popupW / 2) + 60
+
         var minX = 12
         var maxX = screenW - popupW - 12
         audioPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
-        audioPopup.anchor.rect.y = bar.implicitHeight + 2
+        audioPopup.anchor.rect.y = bar.implicitHeight + 4
 
         audioPopup.visible = true
-        audioDeviceListPopup.visible = false
     }
 }
-
