@@ -4,6 +4,8 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell.Io as Io
 
+import "../Theme.qml" as ThemeModule
+
 // =============================================================================
 // HelpMenu.qml — Rich centered help overlay for Hyprland keybindings
 // =============================================================================
@@ -36,7 +38,7 @@ Item {
     id: root
 
     // === Themed values (sourced from central Theme.qml) ===
-    Theme { id: th }
+    readonly property QtObject th: ThemeModule.Theme
 
     readonly property color glassPopupBg: th.glassPopupBg
     readonly property color glassPopupBorder: th.glassPopupBorder
