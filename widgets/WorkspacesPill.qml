@@ -7,11 +7,24 @@ import Quickshell.Hyprland
 // WorkspacesPill.qml — Dynamic workspace pills
 // =============================================================================
 //
-// Shows only occupied + active workspaces (filtered).
-// - Icons are mapped in getWsIcon()
-// - Scroll wheel switches workspaces relative to the current filtered list
-// - Cold-start poller helps when Hyprland IPC is slow on login
-// - Two Hyprland Connections keep the list reactive
+// Purpose:
+//   Shows only occupied + active Hyprland workspaces as a row of pills.
+//   Supports click activation and scroll wheel switching.
+//
+// Theme Properties Consumed:
+//   - bar.pillRadius, bar.glassPillBg, bar.glassBorder, bar.controlBorderWidth
+//   - bar.wsButtonWidth, bar.wsButtonHeight, bar.workspaceRadius
+//   - bar.wsSpacing, bar.wsIconSize, bar.wsNumberSize
+//   - bar.wsActiveBg, bar.wsActiveBorder, bar.wsActiveText
+//   - bar.wsHoverYellow, bar.clock, bar.fontFamily
+//
+// Dependencies:
+//   - required property var bar (from shell.qml)
+//   - Quickshell.Hyprland (for workspace state)
+//
+// Notes:
+//   - Filtering, cold-start polling, and scroll logic are preserved exactly.
+//   - Delegate styling has been aligned to theme tokens where possible.
 // =============================================================================
 
 Rectangle {
@@ -19,17 +32,18 @@ Rectangle {
 
     required property var bar
 
-    // Layout properties so this pill participates correctly in the parent RowLayout
+    // === Layout (for RowLayout participation in the bar) ===
     Layout.preferredWidth: wsRow.implicitWidth + 16
     Layout.preferredHeight: 40
     Layout.alignment: Qt.AlignVCenter
 
+    // === Appearance via Theme ===
     color: bar.glassPillBg
     radius: bar.pillRadius
-    border.width: 1
+    border.width: bar.controlBorderWidth
     border.color: bar.glassBorder
 
-    // ===== Workspace logic (moved from main file) =====
+    // ===== Workspace logic (tightly coupled to this widget) =====
     property var shownWorkspaces: []
 
     function getWsIcon(id) {
@@ -107,7 +121,6 @@ Rectangle {
         }
     }
 
-    // Initial update + start cold-start poller (called from parent onCompleted or we can do it here)
     Component.onCompleted: {
         root.updateShownWorkspaces();
         wsColdStartPoller.start();
@@ -122,6 +135,7 @@ Rectangle {
         }
     }
 
+    // === Content ===
     Row {
         id: wsRow
         anchors.centerIn: parent
@@ -139,10 +153,10 @@ Rectangle {
                 width: bar.wsButtonWidth
                 height: bar.wsButtonHeight
                 radius: bar.workspaceRadius
-                color: isActive ? Qt.rgba(0.53, 0.69, 0.96, 0.22) :
+                color: isActive ? bar.wsActiveBg :
                        (isHovered ? bar.wsHoverYellow : "transparent")
-                border.width: isActive ? 1 : 0
-                border.color: isActive ? Qt.rgba(0.53, 0.69, 0.96, 0.6) : "#45475a"
+                border.width: isActive ? bar.controlBorderWidth : 0
+                border.color: isActive ? bar.wsActiveBorder : "#45475a"
 
                 Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
@@ -159,19 +173,20 @@ Rectangle {
                 Row {
                     anchors.centerIn: parent
                     spacing: 3
+
                     Text {
                         text: root.getWsIcon(modelData ? modelData.id : 0)
                         font.pixelSize: bar.wsIconSize || 17
-                        color: isActive ? "#e0e7ff" :
+                        color: isActive ? bar.wsActiveText :
                                (isHovered ? "#111111" : bar.clock)
-                        font.family: "JetBrains Mono Nerd Font, Symbols Nerd Font, monospace"
+                        font.family: bar.fontFamily
                         font.bold: true
                     }
                     Text {
                         text: modelData ? modelData.id : ""
                         font.pixelSize: bar.wsNumberSize || 15
                         font.bold: true
-                        color: isActive ? "#e0e7ff" :
+                        color: isActive ? bar.wsActiveText :
                                (isHovered ? "#111111" : bar.clock)
                     }
                 }
