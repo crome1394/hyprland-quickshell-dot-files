@@ -188,7 +188,7 @@ QtObject {
     readonly property int popupTrayMaxHeight:  520
 
     // Popup internal layout tokens (standardizes the repeated glass card patterns)
-    readonly property int popupHeaderHighlightHeight: 1.5   // Top light edge on popup glass cards
+    readonly property real popupHeaderHighlightHeight: 1.5   // Top light edge on popup glass cards
     readonly property int popupTitleSize:             16    // "Audio Controls", "Power Menu", etc.
     readonly property int popupSectionSize:           13    // "Playback", "Recording", section headers
     readonly property int popupHintSize:              11    // "right-click pill or outside to close"
