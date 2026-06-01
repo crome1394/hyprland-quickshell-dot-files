@@ -1,26 +1,41 @@
 import QtQuick
 import "../Theme.qml" as ThemeModule
 
-// MiniVolumeBar.qml
-// Compact version used inside the dual (speaker+mic) view of the audio pill.
+// =============================================================================
+// MiniVolumeBar.qml — Compact volume bar for dual (speaker + mic) view
+// =============================================================================
 //
-// Now fully driven by the central Theme singleton (via bar.sliderMini* aliases).
-// The old hardcoded fill "#89b4fa" and radius 2 are gone — everything is in Theme.qml.
+// Purpose:
+//   Very small version of VolumeBar used exclusively inside the dual-view
+//   layout of AudioPill.qml.
+//
+// Theme Properties Consumed (with fallbacks):
+//   - bar.sliderFill / Theme.sliderFill
+//   - bar.sliderTrack / Theme.sliderTrack
+//   - bar.sliderMiniHeight / Theme.sliderMiniHeight
+//   - bar.sliderRadius / Theme.sliderRadius
+//
+// Dependencies:
+//   - Optional: property var bar (preferred)
+//   - Fallback: direct import of Theme.qml
+//
+// Notes:
+//   - This is the most space-constrained slider in the entire configuration.
+//   - Hybrid access pattern is intentional and preserved exactly.
+//   - All fallback defaults are kept in sync with Theme.qml.
+// =============================================================================
 
 Item {
     id: root
 
-    property var bar   // carries the new slider* properties from Theme
-
+    // === Properties ===
+    property var bar
     property real value: 0.0
     property var onSet: function(v){}
 
-    // === THEME-DRIVEN DEFAULTS (the centralization fix) ===
-    // Direct import of Theme.qml so the slider styling properties are always available
-    // inside the component (the original request).
+    // === THEME-DRIVEN DEFAULTS (hybrid access) ===
     readonly property QtObject t: ThemeModule.Theme
 
-    // `fill` is usually overridden by the parent for mute state logic.
     property color fill:     (bar && bar.sliderFill) ? bar.sliderFill : (t ? t.sliderFill : "#0095ff")
     property color track:    (bar && bar.sliderTrack) ? bar.sliderTrack : (t ? t.sliderTrack : "#313244")
     property int  barHeight: (bar && bar.sliderMiniHeight) ? bar.sliderMiniHeight : (t ? t.sliderMiniHeight : 5)
@@ -41,6 +56,7 @@ Item {
 
     readonly property real effectiveValue: Math.max(0, Math.min(1, value))
 
+    // === Appearance ===
     // Track
     Rectangle {
         anchors.fill: parent
@@ -48,7 +64,7 @@ Item {
         color: root.track
     }
 
-    // Fill layer (clipped container = reliable dynamic width)
+    // Fill layer (clipped)
     Item {
         id: fillContainer
         anchors.fill: parent
@@ -64,6 +80,7 @@ Item {
         }
     }
 
+    // === Behavior ===
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
