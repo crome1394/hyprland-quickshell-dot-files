@@ -277,8 +277,8 @@ Rectangle {
         // Play/pause indicator
         Text {
             text: media.isPlaying ? "▶" : "⏸"
-            font.pixelSize: 14
-            font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+            font.pixelSize: bar.iconSizePill
+            font.family: bar.fontFamily
             color: media.isPlaying ? bar.accent : bar.subtext
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -369,7 +369,7 @@ Rectangle {
 
         Rectangle {
             anchors.fill: parent
-            radius: 14
+            radius: bar.popupRadius
             color: bar.glassPopupBg
             border.width: 1
             border.color: bar.glassPopupBorder

@@ -8,13 +8,12 @@ Personal status bar configuration for Hyprland using Quickshell.
 - `widgets/` — Self-contained, reusable UI components (pills, popups, menus).
 - `components/` — Low-level reusable pieces (VolumeBar, CavaVisualizer, etc.).
 - `Theme.qml` — Single source of truth for all colors, glassmorphic tokens, spacing, and metrics.
-- `HelpMenu.qml` — Rich centered overlay showing keybindings (parsed from `hyprland.lua`), environment variables, and system info.
+- `widgets/HelpMenu.qml` — Rich centered overlay showing keybindings (parsed from `hyprland.lua`), environment variables, and system info.
 
 ## Design Goals
 
 - Clean modular architecture (extracted from a single ~3300 line file).
 - Glassmorphic / frosted acrylic aesthetic (Catppuccin-inspired).
-- Hardware security key authentication for the git repository.
 - IPC-driven features (e.g. `qs ipc call help toggle`).
 
 ## Key Widgets
@@ -26,9 +25,17 @@ Personal status bar configuration for Hyprland using Quickshell.
 | Audio            | Left (cycle view), Middle (mute), Right (device menu) | Speaker + Mic controls |
 | Help Menu        | `qs ipc call help toggle`          | Parsed live from your Hyprland config |
 
-## Theming
+## Theming (Fully Centralized)
 
-All visual tokens live in `Theme.qml`. Widgets receive them via the `bar` property (with many aliases for compatibility during the extraction).
+**All** visual properties live in a single `Theme.qml`.
+
+- Edit **only** `Theme.qml` — changes apply globally and instantly.
+- `shell.qml` instantiates it once and exposes every single property as an alias on the root `bar` object.
+- Widgets just use `bar.accent`, `bar.sliderFill`, `bar.iconSpeakerMuted`, `bar.popupRadiusLarge`, `bar.wsButtonWidth`, `bar.fontClock`, etc.
+- Low-level components (VolumeBar, MiniVolumeBar, CavaVisualizer) have safe fallbacks to the theme values.
+- Direct import also works: `import "Theme.qml" as T; T.Theme.muted`
+
+See the big comment header at the top of `Theme.qml` for the complete categorized list + usage guidance.
 
 ## Development Notes
 

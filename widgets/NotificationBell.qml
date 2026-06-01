@@ -33,8 +33,8 @@ Rectangle {
         Text {
             id: bellIcon
             text: notif.icon
-            font.pixelSize: 16
-            font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+            font.pixelSize: bar.iconSizePill
+            font.family: bar.fontFamily
             color: notif.dnd ? bar.muted : (notif.count > 0 ? bar.accent : bar.subtext)
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -73,7 +73,7 @@ Rectangle {
             return "No notifications";
         }
         ToolTip.visible: containsMouse
-        ToolTip.delay: 650
+        ToolTip.delay: 1750
 
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {

@@ -123,7 +123,7 @@ Rectangle {
                 }
                 ToolTip.text: "Right-click to launch btop"
                 ToolTip.visible: cpuClick.containsMouse
-                ToolTip.delay: 650
+                ToolTip.delay: 1750
             }
 
             Row {
@@ -141,20 +141,20 @@ Rectangle {
 
                 // Visual utilization bar (compact, animated)
                 Item {
-                    width: 73
-                    height: 8
+                    width: bar.statGaugeWidth
+                    height: bar.statGaugeHeight
                     anchors.verticalCenter: parent.verticalCenter
                     Rectangle {
                         anchors.fill: parent
-                        radius: 4
-                        color: Qt.rgba(1, 1, 1, 0.09)
+                        radius: bar.statGaugeRadius
+                        color: bar.statTrack
                     }
                     Rectangle {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.cpuUtil / 100)))
-                        height: 8
-                        radius: 4
+                        height: bar.statGaugeHeight
+                        radius: bar.statGaugeRadius
                         color: root.cpuUtil > 85 ? "#f38ba8" :
                                (root.cpuUtil > 65 ? "#f9e2af" : bar.accent)
                         Behavior on width {
@@ -179,7 +179,7 @@ Rectangle {
         Rectangle {
             width: 1
             height: 17
-            color: Qt.rgba(1, 1, 1, 0.13)
+            color: bar.divider
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -200,7 +200,7 @@ Rectangle {
                 }
                 ToolTip.text: "Right-click to launch nvtop"
                 ToolTip.visible: gpuClick.containsMouse
-                ToolTip.delay: 650
+                ToolTip.delay: 1750
             }
 
             Row {
@@ -218,20 +218,20 @@ Rectangle {
 
                 // Visual utilization bar (compact, animated)
                 Item {
-                    width: 73
-                    height: 8
+                    width: bar.statGaugeWidth
+                    height: bar.statGaugeHeight
                     anchors.verticalCenter: parent.verticalCenter
                     Rectangle {
                         anchors.fill: parent
-                        radius: 4
-                        color: Qt.rgba(1, 1, 1, 0.09)
+                        radius: bar.statGaugeRadius
+                        color: bar.statTrack
                     }
                     Rectangle {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.gpuUtil / 100)))
-                        height: 8
-                        radius: 4
+                        height: bar.statGaugeHeight
+                        radius: bar.statGaugeRadius
                         color: root.gpuUtil > 85 ? "#f38ba8" :
                                (root.gpuUtil > 65 ? "#f9e2af" : bar.accent)
                         Behavior on width {

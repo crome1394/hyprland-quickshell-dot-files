@@ -141,9 +141,9 @@ Rectangle {
             spacing: 6
 
             Text {
-                text: audio.speakerMuted ? "" : ""
-                font.pixelSize: 16
-                font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
+                font.pixelSize: bar.iconSizePill
+                font.family: bar.fontFamily
                 color: audio.speakerMuted ? bar.muted : bar.accent
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -157,7 +157,11 @@ Rectangle {
                     anchors.centerIn: parent
                     bar: bar
                     onSet: function(v){ audio.setVolume(audio.speaker, v); }
-                    fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
+                }
+                Binding {
+                    target: spkBar
+                    property: "fill"
+                    value: audio.speakerMuted ? bar.muted : bar.accent
                 }
                 Binding {
                     target: spkBar
@@ -176,7 +180,7 @@ Rectangle {
 
             Text {
                 text: audio.speakerPercent + "%"
-                font.pixelSize: 12
+                font.pixelSize: bar.fontPillLabel
                 font.bold: true
                 color: audio.speakerMuted ? bar.muted : bar.text
                 anchors.verticalCenter: parent.verticalCenter
@@ -190,9 +194,9 @@ Rectangle {
             spacing: 6
 
             Text {
-                text: audio.micMuted ? "󰍭" : "󰍬"
-                font.pixelSize: 16
-                font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
+                font.pixelSize: bar.iconSizePill
+                font.family: bar.fontFamily
                 color: audio.micMuted ? bar.muted : bar.accent
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -206,7 +210,11 @@ Rectangle {
                     anchors.centerIn: parent
                     bar: bar
                     onSet: function(v){ audio.setVolume(audio.mic, v); }
-                    fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
+                }
+                Binding {
+                    target: micBar
+                    property: "fill"
+                    value: audio.micMuted ? bar.muted : bar.accent
                 }
                 Binding {
                     target: micBar
@@ -225,7 +233,7 @@ Rectangle {
 
             Text {
                 text: audio.micPercent + "%"
-                font.pixelSize: 12
+                font.pixelSize: bar.fontPillLabel
                 font.bold: true
                 color: audio.micMuted ? bar.muted : bar.text
                 anchors.verticalCenter: parent.verticalCenter
@@ -244,9 +252,9 @@ Rectangle {
                 spacing: 3
 
                 Text {
-                    text: audio.speakerMuted ? "" : ""
-                    font.pixelSize: 16
-                    font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                    text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
+                    font.pixelSize: bar.iconSizePill
+                    font.family: bar.fontFamily
                     color: audio.speakerMuted ? bar.muted : bar.accent
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -258,7 +266,11 @@ Rectangle {
                         anchors.centerIn: parent
                         bar: bar
                         onSet: function(v){ audio.setVolume(audio.speaker, v); }
-                        fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
+                    }
+                    Binding {
+                        target: spkMiniBar
+                        property: "fill"
+                        value: audio.speakerMuted ? bar.muted : bar.accent
                     }
                     Binding {
                         target: spkMiniBar
@@ -279,9 +291,9 @@ Rectangle {
                 spacing: 3
 
                 Text {
-                    text: audio.micMuted ? "󰍭" : "󰍬"
-                    font.pixelSize: 14
-                    font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                    text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
+                    font.pixelSize: bar.iconSizePill
+                    font.family: bar.fontFamily
                     color: audio.micMuted ? bar.muted : bar.accent
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -293,7 +305,11 @@ Rectangle {
                         anchors.centerIn: parent
                         bar: bar
                         onSet: function(v){ audio.setVolume(audio.mic, v); }
-                        fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
+                    }
+                    Binding {
+                        target: micMiniBar
+                        property: "fill"
+                        value: audio.micMuted ? bar.muted : bar.accent
                     }
                     Binding {
                         target: micMiniBar
@@ -320,7 +336,7 @@ Rectangle {
 
         Rectangle {
             anchors.fill: parent
-            radius: 12
+            radius: bar.popupRadius
             color: bar.glassPopupBg
             border.width: 1
             border.color: bar.glassPopupBorder
@@ -408,9 +424,9 @@ Rectangle {
                         spacing: 8
 
                         Text {
-                            text: audio.speakerMuted ? "" : ""
-                            font.pixelSize: 17
-                            font.family: "Symbols Nerd Font"
+                            text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
+                            font.pixelSize: bar.iconSizePopup
+                            font.family: bar.fontFamily
                             color: audio.speakerMuted ? bar.muted : bar.accent
                         }
 
@@ -423,8 +439,12 @@ Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                                 bar: bar
                                 onSet: function(v){ audio.setVolume(audio.speaker, v); }
-                                barHeight: 8
-                                fill: Qt.binding(function(){ return audio.speakerMuted ? bar.muted : bar.accent; })
+                                barHeight: bar ? bar.sliderPopupHeight : 8
+                            }
+                            Binding {
+                                target: popupSpkBar
+                                property: "fill"
+                                value: audio.speakerMuted ? bar.muted : bar.accent
                             }
                             Binding {
                                 target: popupSpkBar
@@ -522,9 +542,9 @@ Rectangle {
                         spacing: 8
 
                         Text {
-                            text: audio.micMuted ? "󰍭" : "󰍬"
-                            font.pixelSize: 17
-                            font.family: "Symbols Nerd Font"
+                            text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
+                            font.pixelSize: bar.iconSizePopup
+                            font.family: bar.fontFamily
                             color: audio.micMuted ? bar.muted : bar.accent
                         }
 
@@ -537,8 +557,12 @@ Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                                 bar: bar
                                 onSet: function(v){ audio.setVolume(audio.mic, v); }
-                                barHeight: 8
-                                fill: Qt.binding(function(){ return audio.micMuted ? bar.muted : bar.accent; })
+                                barHeight: bar ? bar.sliderPopupHeight : 8
+                            }
+                            Binding {
+                                target: popupMicBar
+                                property: "fill"
+                                value: audio.micMuted ? bar.muted : bar.accent
                             }
                             Binding {
                                 target: popupMicBar
@@ -606,7 +630,7 @@ Rectangle {
 
         Rectangle {
             anchors.fill: parent
-            radius: 10
+            radius: bar.popupRadius
             color: bar.glassPopupBg
             border.width: 1
             border.color: bar.glassPopupBorder

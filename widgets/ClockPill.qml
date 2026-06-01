@@ -54,8 +54,8 @@ Rectangle {
         anchors.centerIn: parent
         text: Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")
         color: bar.clock
-        font.pixelSize: 15
-        font.family: "monospace"
+        font.pixelSize: bar.fontClock
+        font.family: bar.fontMono
         font.bold: true
     }
 
@@ -95,7 +95,7 @@ Rectangle {
         // Glassmorphic popup background
         Rectangle {
             anchors.fill: parent
-            radius: 16
+            radius: bar.popupRadius
             color: bar.glassPopupBg
             border.width: 1
             border.color: bar.glassPopupBorder

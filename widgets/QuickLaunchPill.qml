@@ -35,10 +35,10 @@ Rectangle {
 
         // VSCodium
         Item {
-            width: 20; height: 20
+            width: bar.quickLaunchIcon; height: bar.quickLaunchIcon
             Image {
                 anchors.centerIn: parent
-                width: 20; height: 20
+                width: bar.quickLaunchIcon; height: bar.quickLaunchIcon
                 source: "/home/crome/icons/vscodium.svg"
                 fillMode: Image.PreserveAspectFit
                 smooth: true
@@ -53,10 +53,10 @@ Rectangle {
 
         // Firefox
         Item {
-            width: 20; height: 20
+            width: bar.quickLaunchIcon; height: bar.quickLaunchIcon
             Image {
                 anchors.centerIn: parent
-                width: 20; height: 20
+                width: bar.quickLaunchIcon; height: bar.quickLaunchIcon
                 source: "/home/crome/icons/firefox.svg"
                 fillMode: Image.PreserveAspectFit
                 smooth: true
@@ -71,10 +71,10 @@ Rectangle {
 
         // Logseq
         Item {
-            width: 20; height: 20
+            width: bar.quickLaunchIcon; height: bar.quickLaunchIcon
             Image {
                 anchors.centerIn: parent
-                width: 20; height: 20
+                width: bar.quickLaunchIcon; height: bar.quickLaunchIcon
                 source: "/home/crome/icons/logseq-a.svg"
                 fillMode: Image.PreserveAspectFit
                 smooth: true
@@ -89,10 +89,10 @@ Rectangle {
 
         // LM Studio
         Item {
-            width: 20; height: 20
+            width: bar.quickLaunchIcon; height: bar.quickLaunchIcon
             Image {
                 anchors.centerIn: parent
-                width: 20; height: 20
+                width: bar.quickLaunchIcon; height: bar.quickLaunchIcon
                 source: "/home/crome/icons/lmstudio-dark.png"
                 fillMode: Image.PreserveAspectFit
                 smooth: true

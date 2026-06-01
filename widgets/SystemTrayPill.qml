@@ -49,13 +49,13 @@ Rectangle {
                 delegate: Item {
                     id: trayIconItem
                     required property var modelData
-                    width: 20
-                    height: 20
+                    width: bar.iconSizeTray + 2
+                    height: bar.iconSizeTray + 2
 
                     IconImage {
                         anchors.centerIn: parent
-                        width: 18
-                        height: 18
+                        width: bar.iconSizeTray
+                        height: bar.iconSizeTray
                         source: modelData ? modelData.icon : ""
                     }
 
@@ -155,7 +155,7 @@ Rectangle {
 
         Rectangle {
             anchors.fill: parent
-            radius: 10
+            radius: bar.popupRadius
             color: bar.glassPopupBg
             border.width: 1
             border.color: bar.glassPopupBorder

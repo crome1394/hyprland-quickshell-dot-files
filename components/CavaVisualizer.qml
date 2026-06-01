@@ -20,11 +20,12 @@ Item {
     property var bar   // for future theme-driven colors if desired - supplied via Loader onLoaded
 
     property bool active: false
-    property color barColor: Qt.rgba(1, 1, 1, 0.18)
-    property color barColorActive: Qt.rgba(0.55, 0.71, 0.98, 0.35)
+    // Pull from central theme when bar is provided; otherwise keep previous defaults
+    property color barColor: (bar && bar.cavaInactive) ? bar.cavaInactive : Qt.rgba(1, 1, 1, 0.18)
+    property color barColorActive: (bar && bar.cavaActive) ? bar.cavaActive : Qt.rgba(0.55, 0.71, 0.98, 0.35)
 
-    readonly property int barCount: 40
-    readonly property int barGap: 1
+    readonly property int barCount: (bar && bar.cavaBarCount) ? bar.cavaBarCount : 40
+    readonly property int barGap: (bar && bar.cavaBarGap !== undefined) ? bar.cavaBarGap : 1
 
     // Bar width computed dynamically so the waveform always spans the full available width.
     readonly property int barWidth: {
@@ -34,7 +35,9 @@ Item {
     }
 
     // Efficiency trick: slow the animation way down when nothing is playing.
-    readonly property int animationInterval: root.active ? 95 : 420
+    readonly property int animationInterval: root.active
+        ? ((bar && bar.cavaAnimFast) ? bar.cavaAnimFast : 95)
+        : ((bar && bar.cavaAnimSlow) ? bar.cavaAnimSlow : 420)
 
     implicitHeight: 22
 

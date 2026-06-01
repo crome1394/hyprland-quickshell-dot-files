@@ -22,14 +22,16 @@ import Quickshell.Io as Io
 // =============================================================================
 
 // Use the single source of truth defined in Theme.qml (prevents color drift).
-import "."
+import ".."
 
 Item {
     id: root
 
     Theme { id: th }
 
-    // --- Themed colors (sourced from central Theme.qml) ---
+    // --- Themed values (sourced from central singleton Theme.qml) ---
+    // This component deliberately keeps its own small mapping so it can run
+    // somewhat independently, but everything still originates in Theme.qml.
     readonly property color glassPopupBg: th.glassPopupBg
     readonly property color glassPopupBorder: th.glassPopupBorder
     readonly property color glassPopupHighlight: th.glassPopupHighlight
@@ -38,6 +40,11 @@ Item {
     readonly property color overlay: th.overlay
     readonly property color accent: th.accent
     readonly property color surface: th.surface
+
+    // New centralized metrics (with safe fallbacks)
+    readonly property int popupRadiusLarge: th.popupRadiusLarge || 16
+    readonly property int popupHelpWidth: th.popupHelpWidth || 1060
+    readonly property int popupHelpHeight: th.popupHelpHeight || 720
 
     // --- Public API ---
     property bool open: helpWindow.visible
@@ -269,8 +276,8 @@ Item {
         visible: false
         color: "transparent"
         exclusiveZone: 0
-        implicitWidth: 1060
-        implicitHeight: 720
+        implicitWidth: root.popupHelpWidth || 1060
+        implicitHeight: root.popupHelpHeight || 720
 
         Item {
             anchors.fill: parent
@@ -288,7 +295,7 @@ Item {
             anchors.centerIn: parent
             width: parent.width - 40
             height: parent.height - 40
-            radius: 18
+            radius: root.popupRadiusLarge || 16
             color: root.glassPopupBg
             border.width: 1
             border.color: root.glassPopupBorder

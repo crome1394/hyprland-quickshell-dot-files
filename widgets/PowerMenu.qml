@@ -27,9 +27,9 @@ Rectangle {
     Text {
         id: powerIcon
         anchors.centerIn: parent
-        text: "󰐥"
-        font.pixelSize: 18
-        font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+        text: bar.iconPower
+        font.pixelSize: bar.iconSizePillLarge
+        font.family: bar.fontFamily
         color: powerMouse.containsMouse ? bar.accent : bar.subtext
     }
 
@@ -41,7 +41,7 @@ Rectangle {
 
         ToolTip.text: "Power / Session"
         ToolTip.visible: containsMouse
-        ToolTip.delay: 650
+        ToolTip.delay: 1750
 
         onClicked: {
             if (powerPopup.visible) {
@@ -120,7 +120,7 @@ Rectangle {
 
         Rectangle {
             anchors.fill: parent
-            radius: 16
+            radius: bar.popupRadiusLarge
             color: bar.glassPopupBg
             border.width: 1
             border.color: bar.glassPopupBorder

@@ -125,7 +125,7 @@ Rectangle {
     Row {
         id: wsRow
         anchors.centerIn: parent
-        spacing: 4
+        spacing: bar.wsSpacing || 4
 
         Repeater {
             model: root.shownWorkspaces
@@ -136,9 +136,9 @@ Rectangle {
                 property bool isActive: modelData && (modelData.active || modelData.focused)
                 property bool isHovered: wsMouse.containsMouse
 
-                width: 42
-                height: 32
-                radius: 8
+                width: bar.wsButtonWidth
+                height: bar.wsButtonHeight
+                radius: bar.workspaceRadius
                 color: isActive ? Qt.rgba(0.53, 0.69, 0.96, 0.22) :
                        (isHovered ? bar.wsHoverYellow : "transparent")
                 border.width: isActive ? 1 : 0
@@ -161,7 +161,7 @@ Rectangle {
                     spacing: 3
                     Text {
                         text: root.getWsIcon(modelData ? modelData.id : 0)
-                        font.pixelSize: 17
+                        font.pixelSize: bar.wsIconSize || 17
                         color: isActive ? "#e0e7ff" :
                                (isHovered ? "#111111" : bar.clock)
                         font.family: "JetBrains Mono Nerd Font, Symbols Nerd Font, monospace"
@@ -169,7 +169,7 @@ Rectangle {
                     }
                     Text {
                         text: modelData ? modelData.id : ""
-                        font.pixelSize: 15
+                        font.pixelSize: bar.wsNumberSize || 15
                         font.bold: true
                         color: isActive ? "#e0e7ff" :
                                (isHovered ? "#111111" : bar.clock)

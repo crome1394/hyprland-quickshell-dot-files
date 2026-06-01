@@ -1,33 +1,42 @@
 import QtQuick
+import "../Theme.qml" as ThemeModule
 
 // MiniVolumeBar.qml
 // Compact version used inside the dual (speaker+mic) view of the audio pill.
-// Extracted from the original monolithic shell.qml.
 //
-// Slightly different proportions and fixed small radius (2) to match the
-// previous "mini" visual exactly.
+// Now fully driven by the central Theme singleton (via bar.sliderMini* aliases).
+// The old hardcoded fill "#89b4fa" and radius 2 are gone — everything is in Theme.qml.
 
 Item {
     id: root
 
-    property var bar
+    property var bar   // carries the new slider* properties from Theme
 
     property real value: 0.0
     property var onSet: function(v){}
-    property color fill: "#89b4fa"  // parent always overrides via binding with correct muted/accent logic
-    property color track: bar ? bar.surface : "#313244"
+
+    // === THEME-DRIVEN DEFAULTS (the centralization fix) ===
+    // Direct import of Theme.qml so the slider styling properties are always available
+    // inside the component (the original request).
+    readonly property QtObject t: ThemeModule.Theme
+
+    // `fill` is usually overridden by the parent for mute state logic.
+    property color fill:     (bar && bar.sliderFill) ? bar.sliderFill : (t ? t.sliderFill : "#0095ff")
+    property color track:    (bar && bar.sliderTrack) ? bar.sliderTrack : (t ? t.sliderTrack : "#313244")
+    property int  barHeight: (bar && bar.sliderMiniHeight) ? bar.sliderMiniHeight : (t ? t.sliderMiniHeight : 5)
+
+    readonly property int effectiveRadius: (bar && bar.sliderRadius !== undefined && bar.sliderRadius > 0)
+        ? bar.sliderRadius
+        : (t && t.sliderRadius !== undefined && t.sliderRadius > 0 ? t.sliderRadius : (barHeight / 2))
 
     implicitWidth: 48
-    implicitHeight: 5
+    implicitHeight: barHeight
 
-    // Force actual size from implicit when centered via anchors.centerIn
     width: implicitWidth
     height: implicitHeight
 
-    // This handler + computed property helps ensure external bindings
-    // (especially from PopupWindow / complex layouts) properly drive updates.
     onValueChanged: {
-        // Intentionally empty — presence of the handler forces observation.
+        // Intentionally empty — forces binding observation
     }
 
     readonly property real effectiveValue: Math.max(0, Math.min(1, value))
@@ -35,11 +44,11 @@ Item {
     // Track
     Rectangle {
         anchors.fill: parent
-        radius: 2
+        radius: root.effectiveRadius
         color: root.track
     }
 
-    // Fill layer using clipped container (most reliable pattern for dynamic width bars)
+    // Fill layer (clipped container = reliable dynamic width)
     Item {
         id: fillContainer
         anchors.fill: parent
@@ -50,7 +59,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: fillContainer.width * root.effectiveValue
             height: parent.height
-            radius: 2
+            radius: root.effectiveRadius
             color: root.fill
         }
     }
