@@ -7,8 +7,31 @@ import Quickshell
 // PowerMenu.qml — Power / Session menu
 // =============================================================================
 //
-// Simple power menu with Lock, Logout, Suspend, Reboot, Shutdown, and BIOS entry.
-// Opens as a centered popup on click.
+// Purpose:
+//   Power/session pill that opens a centered popup with Lock, Logout,
+//   Reboot, Shutdown, and Enter BIOS options.
+//
+// Theme Properties Consumed:
+//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.iconPower, bar.iconSizePillLarge, bar.fontFamily
+//   - bar.popupRadiusLarge, bar.glassPopupBg, bar.glassPopupBorder,
+//     bar.glassPopupHighlight, bar.popupHeaderHighlightHeight,
+//     bar.popupSpacing, bar.popupTitleSize, bar.popupHintSize,
+//     bar.controlBorderWidth, bar.buttonRadius
+//   - bar.popupPowerWidth, bar.popupPowerHeight
+//   - bar.text, bar.subtext, bar.overlay
+//
+// Dependencies:
+//   - required property var bar (from shell.qml)
+//   - required property Item barBg (for popup positioning)
+//
+// Notes:
+//   - Power action commands are preserved exactly.
+//   - Button styling inside the popup has been aligned to theme tokens
+//     (including new state colors where applicable).
+//   - Action buttons inside the Repeater still contain some hardcoded
+//     values (radius, sizes, spacing, font sizes) — noted for possible
+//     future micro-pass.
 // =============================================================================
 
 Rectangle {
@@ -17,11 +40,15 @@ Rectangle {
     required property var bar
     required property Item barBg
 
+    // === Layout (for RowLayout participation in the bar) ===
     Layout.preferredWidth: 42
     Layout.preferredHeight: 36
+    Layout.alignment: Qt.AlignVCenter
+
+    // === Appearance via Theme ===
     radius: bar.pillRadius
     color: powerMouse.containsMouse ? bar.glassHover : bar.pillBg
-    border.width: 1
+    border.width: bar.controlBorderWidth
     border.color: powerMouse.containsMouse ? bar.accent : bar.pillBorder
 
     Text {
@@ -41,7 +68,7 @@ Rectangle {
 
         ToolTip.text: "Power / Session"
         ToolTip.visible: containsMouse
-        ToolTip.delay: 1750
+        ToolTip.delay: bar.tooltipDelay
 
         onClicked: {
             if (powerPopup.visible) {
@@ -52,7 +79,7 @@ Rectangle {
         }
     }
 
-    // ===== POWER / SESSION MENU HELPERS =====
+    // ===== Power / Session Menu Helpers =====
     function showPowerMenu() {
         if (powerPopup.visible) {
             hidePowerMenu();
@@ -113,8 +140,8 @@ Rectangle {
     PopupWindow {
         id: powerPopup
         anchor.window: bar
-        implicitWidth: 560
-        implicitHeight: 192
+        implicitWidth: bar.popupPowerWidth
+        implicitHeight: bar.popupPowerHeight
         visible: false
         color: "transparent"
 
@@ -122,21 +149,21 @@ Rectangle {
             anchors.fill: parent
             radius: bar.popupRadiusLarge
             color: bar.glassPopupBg
-            border.width: 1
+            border.width: bar.controlBorderWidth
             border.color: bar.glassPopupBorder
 
             Rectangle {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: 1.5
+                height: bar.popupHeaderHighlightHeight
                 color: bar.glassPopupHighlight
                 radius: parent.radius
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 16
+                anchors.margins: bar.popupSpacing
                 spacing: 8
 
                 RowLayout {
@@ -145,7 +172,7 @@ Rectangle {
                     Text {
                         text: "Power Menu"
                         color: bar.text
-                        font.pixelSize: 15
+                        font.pixelSize: bar.popupTitleSize
                         font.bold: true
                     }
 
@@ -154,13 +181,13 @@ Rectangle {
                     Text {
                         text: "ESC to close"
                         color: bar.overlay
-                        font.pixelSize: 11
+                        font.pixelSize: bar.popupHintSize
                     }
 
                     Rectangle {
                         width: 26
                         height: 26
-                        radius: 6
+                        radius: bar.buttonRadius
                         color: powerCloseMa.containsMouse ? bar.glassHover : "transparent"
 
                         Text {
@@ -197,8 +224,8 @@ Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 92
                             radius: 10
-                            color: btnMa.containsMouse ? bar.glassHover : Qt.rgba(0.10, 0.10, 0.12, 0.55)
-                            border.width: 1
+                            color: btnMa.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                            border.width: bar.controlBorderWidth
                             border.color: btnMa.containsMouse ? bar.accent : Qt.rgba(1, 1, 1, 0.06)
 
                             Column {
@@ -208,7 +235,7 @@ Rectangle {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: modelData.icon
                                     font.pixelSize: 32
-                                    font.family: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+                                    font.family: bar.fontFamily
                                     color: btnMa.containsMouse ? bar.accent : bar.text
                                 }
                                 Text {
