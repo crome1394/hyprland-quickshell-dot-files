@@ -227,7 +227,7 @@ Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 92
                             radius: 10
-                            color: btnMa.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                            color: btnMa.containsMouse ? bar.popupButtonHoverBg : bar.popupButtonHoverBg
                             border.width: bar.controlBorderWidth
                             border.color: btnMa.containsMouse ? bar.accent : bar.dividerSubtle
 
