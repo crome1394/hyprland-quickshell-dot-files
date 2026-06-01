@@ -18,7 +18,7 @@ import Quickshell
 //     bar.glassPopupHighlight, bar.popupHeaderHighlightHeight,
 //     bar.popupSpacing, bar.popupTitleSize, bar.popupHintSize,
 //     bar.controlBorderWidth, bar.buttonRadius,
-//     bar.popupSectionSpacing
+//     bar.popupSectionSpacing, bar.dividerSubtle
 //   - bar.popupPowerWidth, bar.popupPowerHeight
 //   - bar.text, bar.subtext, bar.overlay
 //
@@ -227,7 +227,7 @@ Rectangle {
                             radius: 10
                             color: btnMa.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.55)
                             border.width: bar.controlBorderWidth
-                            border.color: btnMa.containsMouse ? bar.accent : Qt.rgba(1, 1, 1, 0.06)
+                            border.color: btnMa.containsMouse ? bar.accent : bar.dividerSubtle
 
                             Column {
                                 anchors.centerIn: parent
