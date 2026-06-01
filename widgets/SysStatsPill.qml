@@ -8,9 +8,26 @@ import Quickshell.Io as Io
 // SysStatsPill.qml — System resource gauges (CPU, GPU, RAM, Swap)
 // =============================================================================
 //
-// Right-click opens btop (CPU) or nvtop (GPU) in a new terminal.
-// Visibility is coupled to MediaPill.hasMedia — when media is playing the
-// gauges hide to reduce center clutter.
+// Purpose:
+//   Overlay gauges showing CPU + GPU utilization and temperatures.
+//   Right-click launches btop (CPU) or nvtop (GPU).
+//   Automatically hides when media is playing.
+//
+// Theme Properties Consumed:
+//   - bar.glassPillBg, bar.glassHover, bar.glassBorder, bar.glassHighlight
+//   - bar.pillRadius, bar.controlBorderWidth, bar.accent, bar.subtext, bar.text
+//   - bar.statGaugeWidth, bar.statGaugeHeight, bar.statGaugeRadius, bar.statTrack
+//   - bar.divider, bar.fontFamily, bar.tooltipDelay
+//   - bar.tempHot, bar.tempWarm (via threshold logic)
+//
+// Dependencies:
+//   - required property var bar (from shell.qml)
+//   - required property Item barBg (for positioning)
+//   - property bool mediaActive (from parent)
+//
+// Notes:
+//   - Polling via external script + timer logic is preserved exactly.
+//   - CPU/GPU sections remain structurally identical for consistency.
 // =============================================================================
 
 Rectangle {
@@ -27,7 +44,7 @@ Rectangle {
     implicitHeight: 40
     radius: bar.pillRadius
     color: sysHover.containsMouse ? bar.glassHover : bar.glassPillBg
-    border.width: 1
+    border.width: bar.controlBorderWidth
     border.color: sysHover.containsMouse ? bar.accent : bar.glassBorder
 
     // ===== Stats State & Polling =====
@@ -79,12 +96,12 @@ Rectangle {
     }
 
     Component.onCompleted: {
-        // Kick the poller immediately on startup
         Qt.callLater(function() {
             if (!statsPoller.running) statsPoller.running = true
         })
     }
 
+    // === Appearance via Theme ===
     // Subtle top glass highlight
     Rectangle {
         anchors.top: parent.top
@@ -110,6 +127,7 @@ Rectangle {
         Item {
             width: 162
             height: 26
+
             MouseArea {
                 id: cpuClick
                 anchors.fill: parent
@@ -123,7 +141,7 @@ Rectangle {
                 }
                 ToolTip.text: "Right-click to launch btop"
                 ToolTip.visible: cpuClick.containsMouse
-                ToolTip.delay: 1750
+                ToolTip.delay: bar.tooltipDelay
             }
 
             Row {
@@ -134,7 +152,7 @@ Rectangle {
                     text: "CPU"
                     font.pixelSize: 13
                     font.bold: true
-                    font.family: "JetBrains Mono Nerd Font, monospace"
+                    font.family: bar.fontFamily
                     color: cpuClick.containsMouse ? bar.accent : bar.subtext
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -144,19 +162,22 @@ Rectangle {
                     width: bar.statGaugeWidth
                     height: bar.statGaugeHeight
                     anchors.verticalCenter: parent.verticalCenter
+
                     Rectangle {
                         anchors.fill: parent
                         radius: bar.statGaugeRadius
                         color: bar.statTrack
                     }
+
                     Rectangle {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.cpuUtil / 100)))
                         height: bar.statGaugeHeight
                         radius: bar.statGaugeRadius
-                        color: root.cpuUtil > 85 ? "#f38ba8" :
-                               (root.cpuUtil > 65 ? "#f9e2af" : bar.accent)
+                        color: root.cpuUtil > 85 ? bar.tempHot :
+                               (root.cpuUtil > 65 ? bar.tempWarm : bar.accent)
+
                         Behavior on width {
                             NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
                         }
@@ -168,8 +189,8 @@ Rectangle {
                     text: root.cpuTemp + "°"
                     font.pixelSize: 13
                     font.bold: true
-                    color: root.cpuTemp > 85 ? "#f38ba8" :
-                           (root.cpuTemp > 70 ? "#f9e2af" : bar.text)
+                    color: root.cpuTemp > 85 ? bar.tempHot :
+                           (root.cpuTemp > 70 ? bar.tempWarm : bar.text)
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -187,6 +208,7 @@ Rectangle {
         Item {
             width: 162
             height: 26
+
             MouseArea {
                 id: gpuClick
                 anchors.fill: parent
@@ -200,7 +222,7 @@ Rectangle {
                 }
                 ToolTip.text: "Right-click to launch nvtop"
                 ToolTip.visible: gpuClick.containsMouse
-                ToolTip.delay: 1750
+                ToolTip.delay: bar.tooltipDelay
             }
 
             Row {
@@ -211,7 +233,7 @@ Rectangle {
                     text: "GPU"
                     font.pixelSize: 13
                     font.bold: true
-                    font.family: "JetBrains Mono Nerd Font, monospace"
+                    font.family: bar.fontFamily
                     color: gpuClick.containsMouse ? bar.accent : bar.subtext
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -221,19 +243,22 @@ Rectangle {
                     width: bar.statGaugeWidth
                     height: bar.statGaugeHeight
                     anchors.verticalCenter: parent.verticalCenter
+
                     Rectangle {
                         anchors.fill: parent
                         radius: bar.statGaugeRadius
                         color: bar.statTrack
                     }
+
                     Rectangle {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.gpuUtil / 100)))
                         height: bar.statGaugeHeight
                         radius: bar.statGaugeRadius
-                        color: root.gpuUtil > 85 ? "#f38ba8" :
-                               (root.gpuUtil > 65 ? "#f9e2af" : bar.accent)
+                        color: root.gpuUtil > 85 ? bar.tempHot :
+                               (root.gpuUtil > 65 ? bar.tempWarm : bar.accent)
+
                         Behavior on width {
                             NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
                         }
@@ -245,8 +270,8 @@ Rectangle {
                     text: root.gpuTemp + "°"
                     font.pixelSize: 13
                     font.bold: true
-                    color: root.gpuTemp > 85 ? "#f38ba8" :
-                           (root.gpuTemp > 70 ? "#f9e2af" : bar.text)
+                    color: root.gpuTemp > 85 ? bar.tempHot :
+                           (root.gpuTemp > 70 ? bar.tempWarm : bar.text)
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
