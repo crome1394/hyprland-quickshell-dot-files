@@ -324,7 +324,7 @@ ShellRoot {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
-                    color: Qt.rgba(1, 1, 1, 0.12)
+                    color: bar.divider
                 }
 
                 WorkspacesPill {
@@ -343,7 +343,7 @@ ShellRoot {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
-                    color: Qt.rgba(1, 1, 1, 0.12)
+                    color: bar.divider
                 }
 
                 // ===== SYSTEM TRAY (right side, left of volume widget, pill style, comfortable spacing, efficient reactive) =====
@@ -357,7 +357,7 @@ ShellRoot {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
-                    color: Qt.rgba(1, 1, 1, 0.12)
+                    color: bar.divider
                 }
 
                 AudioPill {
@@ -370,7 +370,7 @@ ShellRoot {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
-                    color: Qt.rgba(1, 1, 1, 0.12)
+                    color: bar.divider
                 }
 
                 // ===== CLOCK + CALENDAR (coupled pair) =====
@@ -384,7 +384,7 @@ ShellRoot {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
-                    color: Qt.rgba(1, 1, 1, 0.12)
+                    color: bar.divider
                 }
 
                 // ===== NOTIFICATION BELL (right of clock, swaync backed) =====
@@ -399,7 +399,7 @@ ShellRoot {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
-                    color: Qt.rgba(1, 1, 1, 0.12)
+                    color: bar.divider
                 }
 
                 // ===== POWER / SESSION MENU (right of notification bell) =====

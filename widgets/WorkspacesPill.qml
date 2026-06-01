@@ -156,7 +156,7 @@ Rectangle {
                 color: isActive ? bar.wsActiveBg :
                        (isHovered ? bar.wsHoverYellow : "transparent")
                 border.width: isActive ? bar.controlBorderWidth : 0
-                border.color: isActive ? bar.wsActiveBorder : "#45475a"
+                border.color: isActive ? bar.wsActiveBorder : bar.dividerStrong
 
                 Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
