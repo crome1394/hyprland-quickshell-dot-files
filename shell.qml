@@ -461,7 +461,7 @@ ShellRoot {
     // Centered floating panel with colored key pills, env vars, and rich System Info
     // (fastfetch + clickable copy-to-clipboard + logo).
     // Toggled via IPC:  qs ipc call help toggle   (wire to a key in hyprland.lua)
-    HelpMenu { id: helpMenu }
+    HelpMenu { id: helpMenu; bar: bar }
 
     Io.IpcHandler {
         target: "help"
