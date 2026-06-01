@@ -17,7 +17,8 @@ import Quickshell
 //   - bar.popupRadiusLarge, bar.glassPopupBg, bar.glassPopupBorder,
 //     bar.glassPopupHighlight, bar.popupHeaderHighlightHeight,
 //     bar.popupSpacing, bar.popupTitleSize, bar.popupHintSize,
-//     bar.controlBorderWidth, bar.buttonRadius
+//     bar.controlBorderWidth, bar.buttonRadius,
+//     bar.popupSectionSpacing
 //   - bar.popupPowerWidth, bar.popupPowerHeight
 //   - bar.text, bar.subtext, bar.overlay
 //
@@ -164,7 +165,7 @@ Rectangle {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: bar.popupSpacing
-                spacing: 8
+                spacing: bar.popupSectionSpacing
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -208,8 +209,8 @@ Rectangle {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.topMargin: 6
-                    spacing: 10
+                    Layout.topMargin: bar.popupSectionSpacing
+                    spacing: 10   // deliberate visual gap between large action cards
 
                     Repeater {
                         model: [

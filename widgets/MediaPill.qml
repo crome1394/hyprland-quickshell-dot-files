@@ -25,6 +25,7 @@ import "../components"
 //     bar.popupSpacing, bar.popupTitleSize, bar.popupSectionSize,
 //     bar.popupHintSize, bar.popupButtonHoverBg, bar.dividerStrong,
 //     bar.buttonRadius
+//   - bar.popupMediaWidth, bar.popupMediaHeight
 //
 // Dependencies:
 //   - required property var bar
@@ -381,8 +382,8 @@ Rectangle {
     PopupWindow {
         id: mediaPopup
         anchor.window: bar
-        implicitWidth: 520
-        implicitHeight: 470
+        implicitWidth: bar.popupMediaWidth
+        implicitHeight: bar.popupMediaHeight
         visible: false
         color: "transparent"
 
