@@ -8,9 +8,29 @@ import Quickshell.Widgets
 // SystemTrayPill.qml — System tray with styled menus
 // =============================================================================
 //
-// Repeater of tray icons using IconImage.
-// Right-click opens a custom glassmorphic menu that supports submenus,
-// check items, radio items, and separators via QsMenuOpener.
+// Purpose:
+//   System tray pill showing icons. Right-click opens a custom glassmorphic
+//   menu supporting submenus, check items, radio items, and separators.
+//
+// Theme Properties Consumed:
+//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.iconSizeTray, bar.controlBorderWidth
+//   - bar.popupRadius, bar.glassPopupBg, bar.glassPopupBorder,
+//     bar.glassPopupHighlight, bar.popupHeaderHighlightHeight,
+//     bar.popupSpacing, bar.popupHintSize, bar.buttonRadius
+//   - bar.menuBtnNone, bar.menuBtnCheck, bar.menuBtnRadio
+//   - bar.text, bar.subtext, bar.overlay, bar.accent, bar.glassHover
+//   - bar.dividerStrong
+//
+// Dependencies:
+//   - required property var bar (from shell.qml)
+//   - required property Item barBg (for popup positioning)
+//   - Quickshell.Services.SystemTray
+//   - Quickshell.Widgets (IconImage)
+//
+// Notes:
+//   - All menu logic (menuStack, QsMenuOpener, submenus, check/radio/separator handling) is preserved exactly.
+//   - Menu delegate styling has been aligned to theme tokens where safe.
 // =============================================================================
 
 Rectangle {
@@ -24,7 +44,7 @@ Rectangle {
     Layout.preferredHeight: 36
     radius: bar.pillRadius
     color: trayHover.containsMouse ? bar.glassHover : bar.pillBg
-    border.width: 1
+    border.width: bar.controlBorderWidth
     border.color: trayHover.containsMouse ? bar.accent : bar.pillBorder
 
     MouseArea {
@@ -157,14 +177,14 @@ Rectangle {
             anchors.fill: parent
             radius: bar.popupRadius
             color: bar.glassPopupBg
-            border.width: 1
+            border.width: bar.controlBorderWidth
             border.color: bar.glassPopupBorder
 
             Rectangle {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: 1.5
+                height: bar.popupHeaderHighlightHeight
                 color: bar.glassPopupHighlight
                 radius: parent.radius
             }
@@ -172,7 +192,7 @@ Rectangle {
             ColumnLayout {
                 id: menuContent
                 anchors.fill: parent
-                anchors.margins: 6
+                anchors.margins: bar.popupSpacing
                 spacing: 2
 
                 // Header
@@ -187,14 +207,14 @@ Rectangle {
                         Layout.fillWidth: true
                         text: trayMenuPopup.itemTitle
                         color: bar.text
-                        font.pixelSize: 12
+                        font.pixelSize: bar.popupHintSize
                         font.bold: true
                         elide: Text.ElideRight
                     }
 
                     Rectangle {
                         visible: trayMenuPopup.menuStack.length > 0
-                        width: 22; height: 22; radius: 4
+                        width: 22; height: 22; radius: bar.buttonRadius
                         color: backMa.containsMouse ? bar.surface : "transparent"
                         Text {
                             anchors.centerIn: parent
@@ -212,7 +232,7 @@ Rectangle {
                     }
 
                     Rectangle {
-                        width: 22; height: 22; radius: 4
+                        width: 22; height: 22; radius: bar.buttonRadius
                         color: closeMa.containsMouse ? bar.surface : "transparent"
                         Text {
                             anchors.centerIn: parent
@@ -234,7 +254,7 @@ Rectangle {
                     Layout.leftMargin: 6
                     Layout.rightMargin: 6
                     height: 1
-                    color: "#45475a"
+                    color: bar.dividerStrong
                 }
 
                 ColumnLayout {
@@ -250,7 +270,7 @@ Rectangle {
                             required property var modelData
                             Layout.fillWidth: true
                             implicitHeight: modelData && modelData.isSeparator ? 6 : 28
-                            radius: 4
+                            radius: bar.buttonRadius
                             color: entryMouse.containsMouse && !modelData.isSeparator ? bar.glassHover : "transparent"
                             visible: modelData && modelData.enabled !== false
 
@@ -270,7 +290,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 width: parent.width - 16
                                 height: 1
-                                color: "#45475a"
+                                color: bar.dividerStrong
                             }
 
                             RowLayout {
@@ -295,7 +315,7 @@ Rectangle {
                                             return "";
                                         }
                                         color: bar.accent
-                                        font.pixelSize: 11
+                                        font.pixelSize: bar.popupHintSize
                                         font.bold: true
                                     }
                                 }
@@ -313,7 +333,7 @@ Rectangle {
                                     Layout.alignment: Qt.AlignVCenter
                                     text: modelData ? (modelData.text || "") : ""
                                     color: entryMouse.containsMouse ? bar.text : bar.subtext
-                                    font.pixelSize: 12
+                                    font.pixelSize: bar.popupHintSize
                                     elide: Text.ElideRight
                                 }
 
@@ -322,7 +342,7 @@ Rectangle {
                                     Layout.alignment: Qt.AlignVCenter
                                     text: "▸"
                                     color: bar.accent
-                                    font.pixelSize: 12
+                                    font.pixelSize: bar.popupHintSize
                                 }
                             }
                         }
@@ -333,7 +353,7 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         text: "(no menu)"
                         color: bar.overlay
-                        font.pixelSize: 11
+                        font.pixelSize: bar.popupHintSize
                         font.italic: true
                     }
                 }
