@@ -257,7 +257,7 @@ ShellRoot {
             anchors.bottomMargin: bar.barContentVMargin
             radius: bar.barRadius
             color: bar.glassBg
-            border.width: 1
+            border.width: bar.controlBorderWidth
             border.color: bar.glassBorder
 
             // Stronger top light edge for classic glassmorphism
@@ -265,7 +265,7 @@ ShellRoot {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: 1.5
+                height: bar.popupHeaderHighlightHeight
                 color: bar.glassHighlight
                 radius: parent.radius
             }
@@ -293,7 +293,7 @@ ShellRoot {
                     Layout.preferredHeight: 36
                     radius: bar.pillRadius
                     color: launcherMouse.containsMouse ? bar.glassHover : bar.pillBg
-                    border.width: 1
+                    border.width: bar.controlBorderWidth
                     border.color: launcherMouse.containsMouse ? bar.accent : bar.pillBorder
 
                     Text {
