@@ -33,7 +33,7 @@ Rectangle {
     required property QtObject notif   // shared notification state from shell.qml
 
     // === Layout (for RowLayout participation in the bar) ===
-    Layout.preferredWidth: bellRow.implicitWidth + 18
+    Layout.preferredWidth: bellRow.implicitWidth + bar.pillHPadding
     Layout.preferredHeight: 36
     Layout.alignment: Qt.AlignVCenter
 
@@ -47,7 +47,7 @@ Rectangle {
     Row {
         id: bellRow
         anchors.centerIn: parent
-        spacing: 6
+        spacing: bar.iconTextGap
 
         Text {
             id: bellIcon
