@@ -11,13 +11,32 @@ import "../components"
 // MediaPill.qml — Centered media player pill + rich popup
 // =============================================================================
 //
-// Shows currently playing media (via MPRIS) with a Cava visualizer background.
-// - Left click: toggle play/pause
-// - Scroll wheel: cycle between active players
-// - Right click: opens the rich media popup (art, controls, seek, player selector, PipeWire sources)
+// Purpose:
+//   Centered media player pill with live Cava visualizer background + rich
+//   popup (art, controls, seek, player selector, PipeWire sources).
 //
-// This component owns all its own state (the `media` QtObject) so it is fully
-// self-contained after extraction from the old monolithic shell.qml.
+// Theme Properties Consumed:
+//   - bar.glassPillBg, bar.glassHover, bar.glassBorder, bar.glassHighlight
+//   - bar.pillRadius, bar.controlBorderWidth, bar.accent, bar.subtext, bar.text,
+//     bar.overlay, bar.surface
+//   - bar.iconSizePill, bar.fontFamily
+//   - bar.popupRadius, bar.glassPopupBg, bar.glassPopupBorder,
+//     bar.glassPopupHighlight, bar.popupHeaderHighlightHeight,
+//     bar.popupSpacing, bar.popupTitleSize, bar.popupSectionSize,
+//     bar.popupHintSize, bar.popupButtonHoverBg, bar.dividerStrong,
+//     bar.buttonRadius
+//
+// Dependencies:
+//   - required property var bar
+//   - required property Item barBg (for positioning)
+//   - Quickshell.Services.Mpris
+//   - Quickshell.Services.Pipewire
+//   - Quickshell.Widgets (ClippingRectangle, IconImage)
+//
+// Notes:
+//   - All MPRIS logic, player management, seek behavior, browser audio node
+//     detection, and popup functionality are preserved exactly.
+//   - CavaVisualizer integration remains clean (we just templated the component).
 // =============================================================================
 
 Rectangle {
@@ -36,10 +55,10 @@ Rectangle {
     implicitHeight: 36
     radius: bar.pillRadius
     color: mediaHover.containsMouse ? bar.glassHover : bar.glassPillBg
-    border.width: 1
+    border.width: bar.controlBorderWidth
     border.color: mediaHover.containsMouse ? bar.accent : bar.glassBorder
 
-    // ===== MEDIA STATE (moved from main file) =====
+    // ===== MEDIA STATE (logic preserved exactly) =====
     QtObject {
         id: media
 
@@ -249,7 +268,7 @@ Rectangle {
         media.refreshBrowserAudioNodes();
     }
 
-    // ===== THE PILL UI =====
+    // === Appearance via Theme ===
     // Subtle top highlight
     Rectangle {
         anchors.top: parent.top
@@ -289,7 +308,7 @@ Rectangle {
             color: bar.text
             font.pixelSize: 15
             font.bold: true
-            font.family: "JetBrains Mono Nerd Font, monospace"
+            font.family: bar.fontFamily
             elide: Text.ElideRight
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -322,7 +341,7 @@ Rectangle {
         }
     }
 
-    // ===== MEDIA POPUP HELPERS =====
+    // ===== MEDIA POPUP HELPERS (logic preserved exactly) =====
     function showMediaPopup() {
         if (mediaPopup.visible) {
             mediaPopup.visible = false;
@@ -371,21 +390,21 @@ Rectangle {
             anchors.fill: parent
             radius: bar.popupRadius
             color: bar.glassPopupBg
-            border.width: 1
+            border.width: bar.controlBorderWidth
             border.color: bar.glassPopupBorder
 
             Rectangle {
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                height: 1.5
+                height: bar.popupHeaderHighlightHeight
                 color: bar.glassPopupHighlight
                 radius: parent.radius
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 16
+                anchors.margins: bar.popupSpacing
                 spacing: 12
 
                 RowLayout {
@@ -393,7 +412,7 @@ Rectangle {
                     Text {
                         text: media.appName
                         color: bar.accent
-                        font.pixelSize: 13
+                        font.pixelSize: bar.popupSectionSize
                         font.bold: true
                     }
                     Item { Layout.fillWidth: true }
@@ -401,9 +420,9 @@ Rectangle {
                     Rectangle {
                         Layout.preferredWidth: 68
                         Layout.preferredHeight: 20
-                        radius: 4
+                        radius: bar.buttonRadius
                         color: rescanMa.containsMouse ? bar.glassHover : bar.surface
-                        border.width: 1
+                        border.width: bar.controlBorderWidth
                         border.color: bar.glassBorder
 
                         Row {
@@ -417,7 +436,7 @@ Rectangle {
                             }
                             Text {
                                 text: "Rescan"
-                                font.pixelSize: 10
+                                font.pixelSize: bar.popupHintSize
                                 color: bar.text
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -434,7 +453,7 @@ Rectangle {
                     Text {
                         text: "click outside to close"
                         color: bar.overlay
-                        font.pixelSize: 11
+                        font.pixelSize: bar.popupHintSize
                         Layout.leftMargin: 8
                     }
                 }
@@ -449,8 +468,8 @@ Rectangle {
                         Layout.preferredHeight: 110
                         radius: 8
                         color: bar.surface
-                        border.width: 1
-                        border.color: "#45475a"
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
 
                         ClippingRectangle {
                             anchors.fill: parent
@@ -519,7 +538,7 @@ Rectangle {
                     Rectangle {
                         width: 42; height: 42; radius: 21
                         color: prevMa.containsMouse ? bar.glassHover : "transparent"
-                        border.width: 1
+                        border.width: bar.controlBorderWidth
                         border.color: media.canPrev ? bar.glassBorder : "#333"
                         opacity: media.canPrev ? 1.0 : 0.4
 
@@ -541,7 +560,7 @@ Rectangle {
                     Rectangle {
                         width: 58; height: 58; radius: 29
                         color: playMa.containsMouse ? bar.accent : bar.glassHover
-                        border.width: 1
+                        border.width: bar.controlBorderWidth
                         border.color: bar.accent
 
                         Text {
@@ -561,7 +580,7 @@ Rectangle {
                     Rectangle {
                         width: 42; height: 42; radius: 21
                         color: nextMa.containsMouse ? bar.glassHover : "transparent"
-                        border.width: 1
+                        border.width: bar.controlBorderWidth
                         border.color: media.canNext ? bar.glassBorder : "#333"
                         opacity: media.canNext ? 1.0 : 0.4
 
@@ -640,7 +659,7 @@ Rectangle {
                     Text {
                         text: "Active streams"
                         color: bar.accent
-                        font.pixelSize: 12
+                        font.pixelSize: bar.popupHintSize
                         font.bold: true
                     }
 
@@ -721,7 +740,7 @@ Rectangle {
                     Text {
                         text: "Audio sources from PipeWire"
                         color: bar.accent
-                        font.pixelSize: 12
+                        font.pixelSize: bar.popupHintSize
                         font.bold: true
                     }
 
