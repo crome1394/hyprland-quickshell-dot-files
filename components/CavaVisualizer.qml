@@ -1,47 +1,61 @@
 import QtQuick
 
-// CavaVisualizer.qml
-// Pure-QML animated "cava-like" waveform bars used as background in the
-// centered media pill. No external binary required.
+// =============================================================================
+// CavaVisualizer.qml — Pure-QML animated waveform (MediaPill background)
+// =============================================================================
 //
-// Extracted from the original monolithic shell.qml during the split.
+// Purpose:
+//   Animated “cava-like” waveform bars used as a live visual background
+//   inside the centered MediaPill. No external binary required.
 //
-// Properties:
-//   active          : bool — when true, taller + brighter bars + faster animation
-//   barColor        : base (inactive) color
-//   barColorActive  : color when active / playing
+// Theme Properties Consumed (with fallbacks):
+//   - bar.cavaInactive / fallback
+//   - bar.cavaActive / fallback
+//   - bar.cavaBarCount / fallback
+//   - bar.cavaBarGap / fallback
+//   - bar.cavaAnimFast / fallback
+//   - bar.cavaAnimSlow / fallback
 //
-// The component computes its own bar widths dynamically from its width so it
-// always spans the parent pill nicely.
+// Dependencies:
+//   - Optional: property var bar (for theme-driven values)
+//   - Falls back to reasonable defaults if bar is not provided
+//
+// Notes:
+//   - The wave mathematics, phase logic, amplitude scaling, and Repeater
+//     structure are artistic/effect choices and are intentionally left untouched.
+//   - Only the color and timing values that already have Theme tokens have been
+//     cleaned up for consistency.
+// =============================================================================
 
 Item {
     id: root
 
-    property var bar   // for future theme-driven colors if desired - supplied via Loader onLoaded
-
+    // === Properties ===
+    property var bar
     property bool active: false
-    // Pull from central theme when bar is provided; otherwise keep previous defaults
+
+    // === THEME-DRIVEN VALUES (hybrid access) ===
     property color barColor: (bar && bar.cavaInactive) ? bar.cavaInactive : Qt.rgba(1, 1, 1, 0.18)
     property color barColorActive: (bar && bar.cavaActive) ? bar.cavaActive : Qt.rgba(0.55, 0.71, 0.98, 0.35)
 
     readonly property int barCount: (bar && bar.cavaBarCount) ? bar.cavaBarCount : 40
     readonly property int barGap: (bar && bar.cavaBarGap !== undefined) ? bar.cavaBarGap : 1
 
-    // Bar width computed dynamically so the waveform always spans the full available width.
+    // Dynamic bar width so the waveform always fills the available space
     readonly property int barWidth: {
         const avail = root.width > 20 ? root.width : 580;
         const gaps = (barCount - 1) * barGap;
         return Math.max(1, Math.floor((avail - gaps) / barCount));
     }
 
-    // Efficiency trick: slow the animation way down when nothing is playing.
+    // Smart animation speed: fast when media is playing, slow when idle
     readonly property int animationInterval: root.active
         ? ((bar && bar.cavaAnimFast) ? bar.cavaAnimFast : 95)
         : ((bar && bar.cavaAnimSlow) ? bar.cavaAnimSlow : 420)
 
     implicitHeight: 22
 
-    // Animation driver
+    // === Animation Driver ===
     property real phase: 0
     Timer {
         running: root.visible && root.barCount > 0
@@ -50,6 +64,7 @@ Item {
         onTriggered: root.phase = (root.phase + 0.28) % (Math.PI * 2)
     }
 
+    // === Visual Waveform ===
     Row {
         anchors.left: parent.left
         anchors.right: parent.right
