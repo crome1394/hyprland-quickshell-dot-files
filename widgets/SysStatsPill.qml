@@ -189,6 +189,7 @@ Rectangle {
                     text: root.cpuTemp + "°"
                     font.pixelSize: 13
                     font.bold: true
+                    font.family: bar.fontFamily
                     color: root.cpuTemp > 85 ? bar.tempHot :
                            (root.cpuTemp > 70 ? bar.tempWarm : bar.text)
                     anchors.verticalCenter: parent.verticalCenter
@@ -270,6 +271,7 @@ Rectangle {
                     text: root.gpuTemp + "°"
                     font.pixelSize: 13
                     font.bold: true
+                    font.family: bar.fontFamily
                     color: root.gpuTemp > 85 ? bar.tempHot :
                            (root.gpuTemp > 70 ? bar.tempWarm : bar.text)
                     anchors.verticalCenter: parent.verticalCenter

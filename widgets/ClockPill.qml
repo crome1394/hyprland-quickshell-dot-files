@@ -152,6 +152,7 @@ Rectangle {
                         color: bar.text
                         font.pixelSize: bar.popupTitleSize
                         font.bold: true
+                        font.family: bar.fontFamily
                         horizontalAlignment: Text.AlignLeft
                     }
 
@@ -175,6 +176,7 @@ Rectangle {
                                 color: bar.accent
                                 font.pixelSize: 15
                                 font.bold: true
+                                font.family: bar.fontFamily
                             }
 
                             MouseArea {
@@ -200,6 +202,7 @@ Rectangle {
                             color: todayBtnMa.containsMouse ? bar.bg : bar.text
                             font.pixelSize: bar.popupHintSize
                             font.bold: true
+                            font.family: bar.fontFamily
                         }
 
                         MouseArea {
@@ -225,6 +228,7 @@ Rectangle {
                             color: bar.weekday
                             font.pixelSize: bar.popupHintSize
                             font.bold: true
+                            font.family: bar.fontFamily
                         }
                     }
                 }
@@ -301,12 +305,14 @@ Rectangle {
                         text: "Current day is highlighted"
                         color: bar.overlay
                         font.pixelSize: bar.fontTiny
+                        font.family: bar.fontFamily
                     }
 
                     Text {
                         text: "click clock to close"
                         color: bar.overlay
                         font.pixelSize: bar.fontTiny
+                        font.family: bar.fontFamily
                     }
                 }
             }
