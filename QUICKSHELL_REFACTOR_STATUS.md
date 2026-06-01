@@ -9,10 +9,11 @@
 **Current Phase:** Phase 3 – Per-Widget Refactoring (In Progress)  
 **Overall Project Status:** 
 - Stage 2 (Theme Enhancement) marked DONE and verified.
-- Applying the approved Standardized Widget Template one widget at a time.
-- Currently working on: QuickLaunchPill.qml (audit complete — proposal ready for review).
+- All main widgets + all components + all large widgets now Verified.
+- HelpMenu.qml verified (stability restore: most theme centralization reverted due to repeated issues; now based on last known good version + minimal fixes).
+- All large widgets complete. Ready to begin final global consistency pass + shell.qml cleanup.
 
-**Last Updated:** 2026-05-31 (user verified NotificationBell — audit for QuickLaunchPill.qml presented)
+**Last Updated:** 2026-05-31 (HelpMenu.qml verified by user — large widgets complete)
 
 ---
 
@@ -119,18 +120,18 @@ This order can be adjusted by user request at any time.
 | Item                    | Type       | Status     | Date Completed | Notes / PR Link |
 |-------------------------|------------|------------|----------------|-----------------|
 | NotificationBell.qml    | Widget     | Verified   | 2026-05-31     | First widget — template applied + user verified |
-| QuickLaunchPill.qml     | Widget     | In Progress| -              | Next: Small, straightforward |
-| ClockPill.qml           | Widget     | Pending    | -              | Has popup |
-| WorkspacesPill.qml      | Widget     | Pending    | -              | - |
-| PowerMenu.qml           | Widget     | Pending    | -              | - |
-| SysStatsPill.qml        | Widget     | Pending    | -              | - |
-| SystemTrayPill.qml      | Widget     | Pending    | -              | - |
-| VolumeBar.qml           | Component  | Pending    | -              | Direct Theme import |
-| MiniVolumeBar.qml       | Component  | Pending    | -              | Direct Theme import |
-| CavaVisualizer.qml      | Component  | Pending    | -              | - |
-| AudioPill.qml           | Widget     | Pending    | -              | Large & complex |
-| MediaPill.qml           | Widget     | Pending    | -              | Large, uses Cava |
-| HelpMenu.qml            | Widget     | Pending    | -              | Very large |
+| QuickLaunchPill.qml     | Widget     | Verified   | 2026-05-31     | Template applied + user verified |
+| ClockPill.qml           | Widget     | Verified   | 2026-05-31     | Revised template applied + user verified |
+| WorkspacesPill.qml      | Widget     | Verified   | 2026-05-31     | Template applied + user verified |
+| PowerMenu.qml           | Widget     | Verified   | 2026-05-31     | Template applied + user verified |
+| SysStatsPill.qml        | Widget     | Verified   | 2026-05-31     | Template applied + user verified |
+| SystemTrayPill.qml      | Widget     | Verified   | 2026-05-31     | Template applied + user verified |
+| VolumeBar.qml           | Component  | Verified   | 2026-05-31     | Template applied + user verified |
+| MiniVolumeBar.qml       | Component  | Verified   | 2026-05-31     | Template applied + user verified |
+| CavaVisualizer.qml      | Component  | Verified   | 2026-05-31     | Template applied + user verified |
+| AudioPill.qml           | Widget     | Verified   | 2026-05-31     | Template applied + user verified |
+| MediaPill.qml           | Widget     | Verified   | 2026-05-31     | Template applied + user verified |
+| HelpMenu.qml            | Widget     | Verified   | 2026-05-31     | Last known good version + minimal fixes (stability restore after templating issues) |
 | shell.qml               | Core       | Pending    | -              | Final pass |
 | Global Consistency Pass | Meta       | Pending    | -              | STAGE Final |
 | README Update           | Docs       | Pending    | -              | If needed |
@@ -146,16 +147,16 @@ This order can be adjusted by user request at any time.
 ## Next Steps
 
 **Current Status (2026-05-31):**
-- Stage 2 – Theme Enhancement & Design Token Polish marked as DONE.
-- Theme fully verified.
-- NotificationBell.qml: Successfully refactored + user verified.
+- Stage 2 – Theme Enhancement marked DONE.
+- All main widgets + all components + all large widgets: Applied + verified by user.
+- HelpMenu.qml verified (note: due to stability issues during templating, most of the theme centralization changes were reverted. The widget is now in a working state based on the last known good version + minimal fixes).
+- All large widgets complete. Ready to begin the final global consistency pass + shell.qml cleanup.
 
 **Immediate Next Actions:**
-1. Perform focused audit of QuickLaunchPill.qml.
-2. Present proposed refactored version using the approved Standardized Widget Template.
-3. Wait for explicit user approval ("yes, apply" or equivalent).
-4. Only then: git backup commit → apply changes → commit.
-5. Repeat the gated cycle for each subsequent widget.
+1. Begin final global consistency pass across the entire codebase (review all widgets/components for any remaining duplicated styling, inconsistent comments, or missed theme tokens).
+2. Perform the shell.qml final pass (cleanup, any remaining inline styling, alias hygiene).
+3. Mark the main refactoring phase complete.
+4. Update README if needed.
 
 **Do not edit this file manually.** All updates will be made by the refactoring agent after explicit user confirmation at each phase.
 
