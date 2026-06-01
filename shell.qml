@@ -290,7 +290,7 @@ ShellRoot {
                 Rectangle {
                     id: launcherPill
                     Layout.preferredWidth: 42
-                    Layout.preferredHeight: 36
+                    Layout.preferredHeight: bar.pillHeight
                     radius: bar.pillRadius
                     color: launcherMouse.containsMouse ? bar.glassHover : bar.pillBg
                     border.width: bar.controlBorderWidth
@@ -321,7 +321,7 @@ ShellRoot {
 
                 // Subtle modern vertical divider
                 Rectangle {
-                    Layout.preferredWidth: 1
+                    Layout.preferredWidth: bar.dividerThickness
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
                     color: bar.divider
@@ -340,7 +340,7 @@ ShellRoot {
 
                 // Subtle modern vertical divider
                 Rectangle {
-                    Layout.preferredWidth: 1
+                    Layout.preferredWidth: bar.dividerThickness
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
                     color: bar.divider
@@ -354,7 +354,7 @@ ShellRoot {
 
                 // Subtle modern vertical divider
                 Rectangle {
-                    Layout.preferredWidth: 1
+                    Layout.preferredWidth: bar.dividerThickness
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
                     color: bar.divider
@@ -367,7 +367,7 @@ ShellRoot {
 
                 // Subtle modern vertical divider
                 Rectangle {
-                    Layout.preferredWidth: 1
+                    Layout.preferredWidth: bar.dividerThickness
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
                     color: bar.divider
@@ -381,7 +381,7 @@ ShellRoot {
 
                 // Subtle modern vertical divider
                 Rectangle {
-                    Layout.preferredWidth: 1
+                    Layout.preferredWidth: bar.dividerThickness
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
                     color: bar.divider
@@ -396,7 +396,7 @@ ShellRoot {
 
                 // Subtle modern vertical divider (between notifications and power menu)
                 Rectangle {
-                    Layout.preferredWidth: 1
+                    Layout.preferredWidth: bar.dividerThickness
                     Layout.preferredHeight: 18
                     Layout.alignment: Qt.AlignVCenter
                     color: bar.divider
