@@ -37,21 +37,28 @@ import "../Theme.qml" as ThemeModule
 Item {
     id: root
 
-    // === Themed values (sourced from central Theme.qml) ===
-    readonly property QtObject th: ThemeModule.Theme
+    // Optional bar reference for best integration with the main bar's theme aliases.
+    // If not provided, we fall back to the Theme singleton.
+    property var bar
 
-    readonly property color glassPopupBg: th.glassPopupBg
-    readonly property color glassPopupBorder: th.glassPopupBorder
-    readonly property color glassPopupHighlight: th.glassPopupHighlight
-    readonly property color text: th.text
-    readonly property color subtext: th.subtext
-    readonly property color overlay: th.overlay
-    readonly property color accent: th.accent
-    readonly property color surface: th.surface
+    // === Themed values (sourced from central Theme.qml using the proven component pattern) ===
+    readonly property QtObject t: ThemeModule.Theme
 
-    readonly property int popupRadiusLarge: th.popupRadiusLarge || 16
-    readonly property int popupHelpWidth: th.popupHelpWidth || 1060
-    readonly property int popupHelpHeight: th.popupHelpHeight || 720
+    // Use bar when available (for consistency with the rest of the UI),
+    // otherwise fall back to ThemeModule.Theme, then to safe defaults.
+    property color glassPopupBg:       (bar && bar.glassPopupBg)       ? bar.glassPopupBg       : (t ? t.glassPopupBg       : Qt.rgba(0.07, 0.07, 0.09, 0.90))
+    property color glassPopupBorder:   (bar && bar.glassPopupBorder)   ? bar.glassPopupBorder   : (t ? t.glassPopupBorder   : Qt.rgba(1, 1, 1, 0.13))
+    property color glassPopupHighlight:(bar && bar.glassPopupHighlight)? bar.glassPopupHighlight: (t ? t.glassPopupHighlight: Qt.rgba(1, 1, 1, 0.18))
+
+    property color text:      (bar && bar.text)      ? bar.text      : (t ? t.text      : "#cdd6f4")
+    property color subtext:   (bar && bar.subtext)   ? bar.subtext   : (t ? t.subtext   : "#a6adc8")
+    property color overlay:   (bar && bar.overlay)   ? bar.overlay   : (t ? t.overlay   : "#6c7086")
+    property color accent:    (bar && bar.accent)    ? bar.accent    : (t ? t.accent    : '#00d3f8')
+    property color surface:   (bar && bar.surface)   ? bar.surface   : (t ? t.surface   : "#313244")
+
+    readonly property int popupRadiusLarge: (bar && bar.popupRadiusLarge) ? bar.popupRadiusLarge : (t ? t.popupRadiusLarge : 16)
+    readonly property int popupHelpWidth:   (bar && bar.popupHelpWidth)   ? bar.popupHelpWidth   : (t ? t.popupHelpWidth   : 1060)
+    readonly property int popupHelpHeight:  (bar && bar.popupHelpHeight)  ? bar.popupHelpHeight  : (t ? t.popupHelpHeight  : 720)
 
     // === Public API ===
     property bool open: helpWindow.visible
