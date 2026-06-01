@@ -63,6 +63,21 @@ Item {
         else show()
     }
 
+    function show() {
+        const sw = helpWindow.screen ? helpWindow.screen.width : 1920
+        const sh = helpWindow.screen ? helpWindow.screen.height : 1080
+        if (typeof helpWindow.x === "number") {
+            helpWindow.x = Math.max(40, (sw - helpWindow.width) / 2)
+            helpWindow.y = Math.max(40, (sh - helpWindow.height) / 2)
+        }
+        helpWindow.visible = true
+        if (currentTab === 2 && systemDirty) refreshSystemInfo()
+    }
+
+    function hide() {
+        helpWindow.visible = false
+    }
+
     // === Internal State ===
     property int currentTab: 0
     property string bindFilter: ""
