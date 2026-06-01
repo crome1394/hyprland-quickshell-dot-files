@@ -16,6 +16,7 @@ import "../components"
 // Theme Properties Consumed:
 //   - bar.audioViewContentWidth, bar.audioViewSidePadding
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.pillHPadding
 //   - bar.iconSpeaker*, bar.iconMic*, bar.iconSizePill, bar.iconSizePopup
 //   - bar.fontFamily, bar.fontPillLabel, bar.fontPopupTitle, bar.fontSection,
 //     bar.fontBody, bar.fontSmall
@@ -47,7 +48,7 @@ Rectangle {
     required property Item barBg
 
     // === Layout ===
-    Layout.preferredWidth: bar.audioViewContentWidth + 18
+    Layout.preferredWidth: bar.audioViewContentWidth + bar.pillHPadding
     Layout.preferredHeight: 36
     Layout.alignment: Qt.AlignVCenter
 
