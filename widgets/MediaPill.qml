@@ -19,7 +19,7 @@ import "../components"
 //   - bar.glassPillBg, bar.glassHover, bar.glassBorder, bar.glassHighlight
 //   - bar.pillRadius, bar.controlBorderWidth, bar.accent, bar.subtext, bar.text,
 //     bar.overlay, bar.surface
-//   - bar.iconSizePill, bar.fontFamily
+//   - bar.iconSizePill, bar.fontFamily, bar.fontMono
 //   - bar.popupRadius, bar.glassPopupBg, bar.glassPopupBorder,
 //     bar.glassPopupHighlight, bar.popupHeaderHighlightHeight,
 //     bar.popupSpacing, bar.popupTitleSize, bar.popupSectionSize,
@@ -639,14 +639,14 @@ Rectangle {
                             text: Qt.formatTime(new Date(media.position), "mm:ss")
                             color: bar.overlay
                             font.pixelSize: 11
-                            font.family: "monospace"
+                            font.family: bar.fontMono
                         }
                         Item { Layout.fillWidth: true }
                         Text {
                             text: Qt.formatTime(new Date(media.length), "mm:ss")
                             color: bar.overlay
                             font.pixelSize: 11
-                            font.family: "monospace"
+                            font.family: bar.fontMono
                         }
                     }
                 }

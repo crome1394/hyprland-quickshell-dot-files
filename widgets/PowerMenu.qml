@@ -175,6 +175,7 @@ Rectangle {
                         color: bar.text
                         font.pixelSize: bar.popupTitleSize
                         font.bold: true
+                        font.family: bar.fontFamily
                     }
 
                     Item { Layout.fillWidth: true }
@@ -183,6 +184,7 @@ Rectangle {
                         text: "ESC to close"
                         color: bar.overlay
                         font.pixelSize: bar.popupHintSize
+                        font.family: bar.fontFamily
                     }
 
                     Rectangle {
