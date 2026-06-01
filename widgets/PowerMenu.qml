@@ -43,7 +43,7 @@ Rectangle {
 
     // === Layout (for RowLayout participation in the bar) ===
     Layout.preferredWidth: 42
-    Layout.preferredHeight: 36
+    Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 
     // === Appearance via Theme ===

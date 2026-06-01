@@ -53,7 +53,7 @@ Rectangle {
     z: 5
     visible: hasMedia
     width: 600
-    implicitHeight: 36
+    implicitHeight: bar.pillHeight
     radius: bar.pillRadius
     color: mediaHover.containsMouse ? bar.glassHover : bar.glassPillBg
     border.width: bar.controlBorderWidth

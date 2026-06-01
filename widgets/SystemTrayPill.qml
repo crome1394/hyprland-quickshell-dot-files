@@ -41,7 +41,7 @@ Rectangle {
 
     visible: SystemTray.items.values.length > 0
     Layout.preferredWidth: visible ? (trayContent.implicitWidth + 14) : 0
-    Layout.preferredHeight: 36
+    Layout.preferredHeight: bar.pillHeight
     radius: bar.pillRadius
     color: trayHover.containsMouse ? bar.glassHover : bar.pillBg
     border.width: bar.controlBorderWidth

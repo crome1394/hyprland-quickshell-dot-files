@@ -49,7 +49,7 @@ Rectangle {
 
     // === Layout ===
     Layout.preferredWidth: bar.audioViewContentWidth + bar.pillHPadding
-    Layout.preferredHeight: 36
+    Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 
     // === Appearance via Theme ===
