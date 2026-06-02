@@ -43,6 +43,17 @@ This configuration was refactored incrementally, one widget at a time. Old devel
 
 For questions about a specific component, look inside the corresponding file under `widgets/`.
 
+## Refactoring Complete (2026-06-01)
+
+The full project is now wrapped up:
+
+- Per-widget refactoring (all 10 widgets + 3 components) completed and verified following the recommended order (with special stability handling for HelpMenu.qml).
+- Conservative Global Consistency Pass (STAGE Final) completed: outer borders (`controlBorderWidth`), dividers (`divider*` tokens), colors (raw `Qt.rgba`/hex centralized), fonts (`bar.fontFamily`/`bar.fontMono` on headers/labels), sizes (`bar.pillHeight`), and spacing in outer/simple elements only.
+- `shell.qml` outer bar structure cleaned (launcher area, vertical dividers, shadows/highlights where tokens applied).
+- All work followed the strict gated process (audit → user approval → backup commit → apply → clean-load verification). Scope remained conservative (outer pill/card + simple text/labels; no dense inners touched).
+
+See `QUICKSHELL_REFACTOR_STATUS.md` (especially the "Global Consistency Pass – Wrap-up" section) for the complete history, progress table, and details. Quickshell loads cleanly with no regressions.
+
 ## License
 
 Personal configuration. Feel free to take inspiration.
