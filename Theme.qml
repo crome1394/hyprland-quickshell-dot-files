@@ -325,7 +325,7 @@ QtObject {
     readonly property int animSlow:   220   // Slower, more noticeable motion
 
     // Interaction delays
-    readonly property int tooltipDelay: 1750   // ms before showing tooltips (used by ToolTip components)
+    readonly property int tooltipDelay: 1550   // ms before showing tooltips (used by ToolTip components)
 
     // =========================================================================
     // Z-LAYERS (only the global ones that matter across components)
