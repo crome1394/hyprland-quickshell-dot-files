@@ -86,11 +86,26 @@ Rectangle {
 
         function setVolume(node, v) {
             if (node && node.audio) node.audio.volume = Math.max(0.0, Math.min(1.0, v));
+            // Workaround for Quickshell#807: on many Bluetooth (bluez) sinks, the device route
+            // lacks a "volumeStep" param, so direct PwNodeAudio.volume writes only update local
+            // QML state and do not reach the PipeWire backend. wpctl uses the reliable control
+            // path (works for BT + all other devices, and is what pavucontrol/wpctl users rely on).
+            if (node && node.id !== undefined) {
+                var pct = Math.round(v * 100);
+                Quickshell.execDetached(["wpctl", "set-volume", String(node.id), pct + "%"]);
+            }
         }
         function stepVolume(node, delta) {
             if (!node || !node.audio) return;
             var nv = Math.max(0.0, Math.min(1.0, node.audio.volume + delta));
             node.audio.volume = nv;
+            if (node.id !== undefined) {
+                // Use absolute target for the wpctl call. This way:
+                // - Good devices: local .volume= already applied the delta; wpctl sets the *same* target (harmless)
+                // - Bluetooth (buggy in Quickshell): local is ignored by backend, wpctl applies the correct target
+                var pct = Math.round(nv * 100);
+                Quickshell.execDetached(["wpctl", "set-volume", String(node.id), pct + "%"]);
+            }
         }
         function toggleMute(node) {
             if (node && node.audio) node.audio.muted = !node.audio.muted;
