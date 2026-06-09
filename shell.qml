@@ -344,7 +344,7 @@ ShellRoot {
 
                         Text {
                             anchors.centerIn: parent
-                            text: bar.icMediaPillonLauncher
+                            text: bar.iconLauncher
                             font.pixelSize: bar.iconSizePillLarge
                             font.family: bar.fontFamily
                             color: launcherMouse.containsMouse ? bar.accent : bar.subtext
