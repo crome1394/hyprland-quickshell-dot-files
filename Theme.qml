@@ -249,10 +249,41 @@ QtObject {
     // Compact dual-view bars (inside AudioPill when both speaker+mic shown)
     readonly property int  sliderMiniHeight: 5
 
-    // Volume bar fill colors (AudioPill, VolumeBar, MiniVolumeBar — independent of accent)
-    readonly property color sliderFill:       '#00d3f8' // Normal volume level fill
+    // Volume bar fallback fill (AudioPill overrides per-level via audioSpeaker/MicUtilColor)
+    readonly property color sliderFill:       '#00d3f8' // Default when no threshold binding is set
     readonly property color sliderFillMuted:  muted     // Fill when device is muted
     readonly property color sliderTrack:      surface  // Background track (slightly lighter than glass)
+
+    // AudioPill volume color ramps (25% tiers — speaker and mic tuned independently)
+    readonly property int audioUtilThreshold1: 25
+    readonly property int audioUtilThreshold2: 50
+    readonly property int audioUtilThreshold3: 75
+
+    readonly property color audioSpeakerTier1: "#10B981"   // 0–audioUtilThreshold1%
+    readonly property color audioSpeakerTier2: "#F59E0B"   // audioUtilThreshold1+1–audioUtilThreshold2%
+    readonly property color audioSpeakerTier3: "#F97316"   // audioUtilThreshold2+1–audioUtilThreshold3%
+    readonly property color audioSpeakerTier4: "#EF4444"   // audioUtilThreshold3+1–100%
+
+    readonly property color audioMicTier1: "#10B981"
+    readonly property color audioMicTier2: "#F59E0B"
+    readonly property color audioMicTier3: "#F97316"
+    readonly property color audioMicTier4: "#EF4444"
+
+    function audioSpeakerUtilColor(percent) {
+        var p = Math.max(0, Math.min(100, percent))
+        if (p <= audioUtilThreshold1) return audioSpeakerTier1
+        if (p <= audioUtilThreshold2) return audioSpeakerTier2
+        if (p <= audioUtilThreshold3) return audioSpeakerTier3
+        return audioSpeakerTier4
+    }
+
+    function audioMicUtilColor(percent) {
+        var p = Math.max(0, Math.min(100, percent))
+        if (p <= audioUtilThreshold1) return audioMicTier1
+        if (p <= audioUtilThreshold2) return audioMicTier2
+        if (p <= audioUtilThreshold3) return audioMicTier3
+        return audioMicTier4
+    }
 
     // (sliderRadius is defined in the Radii section above for consistency)
 

@@ -15,8 +15,9 @@ import "../components"
 //
 // Theme Properties Consumed:
 //   - bar.audioViewContentWidth, bar.audioViewSidePadding
-//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent, bar.audioIcon
-//   - bar.sliderFill, bar.sliderFillMuted
+//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.audioSpeakerTier1–4, bar.audioMicTier1–4, bar.audioUtilThreshold1–3
+//   - bar.audioSpeakerUtilColor(), bar.audioMicUtilColor(), bar.sliderFillMuted
 //   - bar.pillHPadding
 //   - bar.iconSpeaker*, bar.iconMic*, bar.iconSizeTray, bar.iconSizePopup
 //   - bar.fontFamily, bar.fontPillLabel, bar.fontPopupTitle, bar.fontSection,
@@ -188,7 +189,7 @@ Rectangle {
                     text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                     font.pixelSize: bar.iconSizeTray
                     font.family: bar.fontFamily
-                    color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
+                    color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                 }
             }
 
@@ -205,7 +206,7 @@ Rectangle {
                 Binding {
                     target: spkBar
                     property: "fill"
-                    value: audio.speakerMuted ? bar.sliderFillMuted : bar.sliderFill
+                    value: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                 }
                 Binding {
                     target: spkBar
@@ -226,7 +227,7 @@ Rectangle {
                 text: audio.speakerPercent + "%"
                 font.pixelSize: bar.fontPillLabel
                 font.bold: true
-                color: audio.speakerMuted ? bar.muted : bar.text
+                color: audio.speakerMuted ? bar.muted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -247,7 +248,7 @@ Rectangle {
                     text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                     font.pixelSize: bar.iconSizeTray
                     font.family: bar.fontFamily
-                    color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
+                    color: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
                 }
             }
 
@@ -264,7 +265,7 @@ Rectangle {
                 Binding {
                     target: micBar
                     property: "fill"
-                    value: audio.micMuted ? bar.sliderFillMuted : bar.sliderFill
+                    value: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
                 }
                 Binding {
                     target: micBar
@@ -285,7 +286,7 @@ Rectangle {
                 text: audio.micPercent + "%"
                 font.pixelSize: bar.fontPillLabel
                 font.bold: true
-                color: audio.micMuted ? bar.muted : bar.text
+                color: audio.micMuted ? bar.muted : bar.audioMicUtilColor(audio.micPercent)
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -311,7 +312,7 @@ Rectangle {
                         text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                         font.pixelSize: bar.iconSizeTray
                         font.family: bar.fontFamily
-                        color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
+                        color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                     }
                 }
                 Item {
@@ -326,7 +327,7 @@ Rectangle {
                     Binding {
                         target: spkMiniBar
                         property: "fill"
-                        value: audio.speakerMuted ? bar.sliderFillMuted : bar.sliderFill
+                        value: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                     }
                     Binding {
                         target: spkMiniBar
@@ -356,7 +357,7 @@ Rectangle {
                         text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                         font.pixelSize: bar.iconSizeTray
                         font.family: bar.fontFamily
-                        color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
+                        color: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
                     }
                 }
                 Item {
@@ -371,7 +372,7 @@ Rectangle {
                     Binding {
                         target: micMiniBar
                         property: "fill"
-                        value: audio.micMuted ? bar.sliderFillMuted : bar.sliderFill
+                        value: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
                     }
                     Binding {
                         target: micMiniBar
@@ -492,7 +493,7 @@ Rectangle {
                             text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                             font.pixelSize: bar.iconSizePopup
                             font.family: bar.fontFamily
-                            color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
+                            color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                         }
 
                         Item {
@@ -509,7 +510,7 @@ Rectangle {
                             Binding {
                                 target: popupSpkBar
                                 property: "fill"
-                                value: audio.speakerMuted ? bar.sliderFillMuted : bar.sliderFill
+                                value: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                             }
                             Binding {
                                 target: popupSpkBar
@@ -524,7 +525,7 @@ Rectangle {
 
                         Text {
                             text: audio.speakerPercent + "%"
-                            color: audio.speakerMuted ? bar.muted : bar.text
+                            color: audio.speakerMuted ? bar.muted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                             font.pixelSize: 13
                             font.bold: true
                             Layout.preferredWidth: 42
@@ -610,7 +611,7 @@ Rectangle {
                             text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                             font.pixelSize: bar.iconSizePopup
                             font.family: bar.fontFamily
-                            color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
+                            color: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
                         }
 
                         Item {
@@ -627,7 +628,7 @@ Rectangle {
                             Binding {
                                 target: popupMicBar
                                 property: "fill"
-                                value: audio.micMuted ? bar.sliderFillMuted : bar.sliderFill
+                                value: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
                             }
                             Binding {
                                 target: popupMicBar
@@ -642,7 +643,7 @@ Rectangle {
 
                         Text {
                             text: audio.micPercent + "%"
-                            color: audio.micMuted ? bar.muted : bar.text
+                            color: audio.micMuted ? bar.muted : bar.audioMicUtilColor(audio.micPercent)
                             font.pixelSize: 13
                             font.bold: true
                             Layout.preferredWidth: 42

@@ -216,6 +216,19 @@ ShellRoot {
         readonly property alias sliderFill: theme.sliderFill
         readonly property alias sliderFillMuted: theme.sliderFillMuted
         readonly property alias sliderTrack: theme.sliderTrack
+        readonly property alias audioUtilThreshold1: theme.audioUtilThreshold1
+        readonly property alias audioUtilThreshold2: theme.audioUtilThreshold2
+        readonly property alias audioUtilThreshold3: theme.audioUtilThreshold3
+        readonly property alias audioSpeakerTier1: theme.audioSpeakerTier1
+        readonly property alias audioSpeakerTier2: theme.audioSpeakerTier2
+        readonly property alias audioSpeakerTier3: theme.audioSpeakerTier3
+        readonly property alias audioSpeakerTier4: theme.audioSpeakerTier4
+        readonly property alias audioMicTier1: theme.audioMicTier1
+        readonly property alias audioMicTier2: theme.audioMicTier2
+        readonly property alias audioMicTier3: theme.audioMicTier3
+        readonly property alias audioMicTier4: theme.audioMicTier4
+        function audioSpeakerUtilColor(percent) { return theme.audioSpeakerUtilColor(percent) }
+        function audioMicUtilColor(percent) { return theme.audioMicUtilColor(percent) }
 
         // --- Workspaces
         readonly property alias wsHoverYellow: theme.wsHoverYellow
