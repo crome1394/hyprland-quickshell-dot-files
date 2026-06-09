@@ -15,7 +15,8 @@ import "../components"
 //
 // Theme Properties Consumed:
 //   - bar.audioViewContentWidth, bar.audioViewSidePadding
-//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent, bar.audioIcon
+//   - bar.sliderFill, bar.sliderFillMuted
 //   - bar.pillHPadding
 //   - bar.iconSpeaker*, bar.iconMic*, bar.iconSizePill, bar.iconSizePopup
 //   - bar.fontFamily, bar.fontPillLabel, bar.fontPopupTitle, bar.fontSection,
@@ -181,7 +182,7 @@ Rectangle {
                 text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                 font.pixelSize: bar.iconSizePill
                 font.family: bar.fontFamily
-                color: audio.speakerMuted ? bar.muted : bar.accent
+                color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
                 anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -198,7 +199,7 @@ Rectangle {
                 Binding {
                     target: spkBar
                     property: "fill"
-                    value: audio.speakerMuted ? bar.muted : bar.accent
+                    value: audio.speakerMuted ? bar.sliderFillMuted : bar.sliderFill
                 }
                 Binding {
                     target: spkBar
@@ -234,7 +235,7 @@ Rectangle {
                 text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                 font.pixelSize: bar.iconSizePill
                 font.family: bar.fontFamily
-                color: audio.micMuted ? bar.muted : bar.accent
+                color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
                 anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -251,7 +252,7 @@ Rectangle {
                 Binding {
                     target: micBar
                     property: "fill"
-                    value: audio.micMuted ? bar.muted : bar.accent
+                    value: audio.micMuted ? bar.sliderFillMuted : bar.sliderFill
                 }
                 Binding {
                     target: micBar
@@ -292,7 +293,7 @@ Rectangle {
                     text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                     font.pixelSize: bar.iconSizePill
                     font.family: bar.fontFamily
-                    color: audio.speakerMuted ? bar.muted : bar.accent
+                    color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Item {
@@ -307,7 +308,7 @@ Rectangle {
                     Binding {
                         target: spkMiniBar
                         property: "fill"
-                        value: audio.speakerMuted ? bar.muted : bar.accent
+                        value: audio.speakerMuted ? bar.sliderFillMuted : bar.sliderFill
                     }
                     Binding {
                         target: spkMiniBar
@@ -331,7 +332,7 @@ Rectangle {
                     text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                     font.pixelSize: bar.iconSizePill
                     font.family: bar.fontFamily
-                    color: audio.micMuted ? bar.muted : bar.accent
+                    color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Item {
@@ -346,7 +347,7 @@ Rectangle {
                     Binding {
                         target: micMiniBar
                         property: "fill"
-                        value: audio.micMuted ? bar.muted : bar.accent
+                        value: audio.micMuted ? bar.sliderFillMuted : bar.sliderFill
                     }
                     Binding {
                         target: micMiniBar
@@ -467,7 +468,7 @@ Rectangle {
                             text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                             font.pixelSize: bar.iconSizePopup
                             font.family: bar.fontFamily
-                            color: audio.speakerMuted ? bar.muted : bar.accent
+                            color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
                         }
 
                         Item {
@@ -484,7 +485,7 @@ Rectangle {
                             Binding {
                                 target: popupSpkBar
                                 property: "fill"
-                                value: audio.speakerMuted ? bar.muted : bar.accent
+                                value: audio.speakerMuted ? bar.sliderFillMuted : bar.sliderFill
                             }
                             Binding {
                                 target: popupSpkBar
@@ -585,7 +586,7 @@ Rectangle {
                             text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                             font.pixelSize: bar.iconSizePopup
                             font.family: bar.fontFamily
-                            color: audio.micMuted ? bar.muted : bar.accent
+                            color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
                         }
 
                         Item {
@@ -602,7 +603,7 @@ Rectangle {
                             Binding {
                                 target: popupMicBar
                                 property: "fill"
-                                value: audio.micMuted ? bar.muted : bar.accent
+                                value: audio.micMuted ? bar.sliderFillMuted : bar.sliderFill
                             }
                             Binding {
                                 target: popupMicBar
@@ -781,7 +782,7 @@ Rectangle {
         var p = root.mapToItem(barBg, 0, root.height)
         var baseX = bar.sideMargin + p.x
         audioDeviceListPopup.anchor.rect.x = Math.min(baseX, screenW - popupW - 12)
-        audioDeviceListPopup.anchor.rect.y = bar.implicitHeight + 46
+        audioDeviceListPopup.anchor.rect.y = bar.popupAnchorY(audioDeviceListPopup.implicitHeight, 46)
         audioDeviceListPopup.visible = true
     }
 
@@ -801,7 +802,7 @@ Rectangle {
         var minX = 12
         var maxX = screenW - popupW - 12
         audioPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
-        audioPopup.anchor.rect.y = bar.implicitHeight + 4
+        audioPopup.anchor.rect.y = bar.popupAnchorY(audioPopup.implicitHeight)
 
         audioPopup.visible = true
     }

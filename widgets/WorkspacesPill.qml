@@ -32,10 +32,12 @@ Rectangle {
 
     required property var bar
 
-    // === Layout (for RowLayout participation in the bar) ===
+    // === Layout (works in any bar zone — left, center, or right) ===
     Layout.preferredWidth: wsRow.implicitWidth + 16
-    Layout.preferredHeight: 40
+    Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
+    implicitWidth: wsRow.implicitWidth + 16
+    implicitHeight: bar.pillHeight
 
     // === Appearance via Theme ===
     color: bar.glassPillBg
@@ -176,7 +178,7 @@ Rectangle {
 
                     Text {
                         text: root.getWsIcon(modelData ? modelData.id : 0)
-                        font.pixelSize: bar.wsIconSize || 17
+                        font.pixelSize: bar.wsIconSize
                         color: isActive ? bar.wsActiveText :
                                (isHovered ? "#111111" : bar.clock)
                         font.family: bar.fontFamily

@@ -13,7 +13,7 @@ import Quickshell
 //
 // Theme Properties Consumed:
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
-//   - bar.iconSizePill, bar.fontFamily, bar.fontMono, bar.fontSmall
+//   - bar.iconSizePillLarge, bar.fontFamily, bar.fontMono, bar.fontTiny
 //   - bar.muted, bar.controlBorderWidth, bar.tooltipDelay
 //
 // Dependencies:
@@ -32,9 +32,9 @@ Rectangle {
     required property var bar
     required property QtObject notif   // shared notification state from shell.qml
 
-    // === Layout (for RowLayout participation in the bar) ===
-    Layout.preferredWidth: bellRow.implicitWidth + bar.pillHPadding
-    Layout.preferredHeight: 36
+    // === Layout — square pill, same size as PowerMenu for a consistent click target ===
+    Layout.preferredWidth: 42
+    Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 
     // === Appearance via Theme ===
@@ -44,38 +44,35 @@ Rectangle {
     border.color: bellMouse.containsMouse ? bar.accent : bar.pillBorder
 
     // === Content ===
-    Row {
-        id: bellRow
+    Text {
+        id: bellIcon
         anchors.centerIn: parent
-        spacing: bar.iconTextGap
+        text: notif.icon
+        font.pixelSize: bar.iconSizePillLarge
+        font.family: bar.fontFamily
+        color: notif.dnd ? bar.muted : (notif.count > 0 ? bar.accent : bar.subtext)
+    }
+
+    // Counter badge — overlaid so the pill stays the same width
+    Rectangle {
+        visible: notif.count > 0
+        width: Math.max(16, countLabel.implicitWidth + 6)
+        height: 16
+        radius: 8
+        color: notif.dnd ? Qt.rgba(0.6, 0.2, 0.2, 0.9) : bar.accent
+        anchors.top: bellIcon.top
+        anchors.right: bellIcon.right
+        anchors.topMargin: -5
+        anchors.rightMargin: -8
 
         Text {
-            id: bellIcon
-            text: notif.icon
-            font.pixelSize: bar.iconSizePill
-            font.family: bar.fontFamily
-            color: notif.dnd ? bar.muted : (notif.count > 0 ? bar.accent : bar.subtext)
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
-        // Counter badge (only shown when count > 0)
-        Rectangle {
-            visible: notif.count > 0
-            width: Math.max(18, countLabel.implicitWidth + 8)
-            height: 18
-            radius: 9
-            color: notif.dnd ? Qt.rgba(0.6, 0.2, 0.2, 0.9) : bar.accent
-            anchors.verticalCenter: parent.verticalCenter
-
-            Text {
-                id: countLabel
-                anchors.centerIn: parent
-                text: notif.count > 99 ? "99+" : notif.count
-                color: "#111111"   // Contrast text on accent badge (consider future textOnAccent token)
-                font.pixelSize: bar.fontSmall
-                font.bold: true
-                font.family: bar.fontMono
-            }
+            id: countLabel
+            anchors.centerIn: parent
+            text: notif.count > 99 ? "99+" : notif.count
+            color: "#111111"
+            font.pixelSize: bar.fontTiny
+            font.bold: true
+            font.family: bar.fontMono
         }
     }
 

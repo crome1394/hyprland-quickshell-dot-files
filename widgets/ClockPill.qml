@@ -52,7 +52,7 @@ Rectangle {
     Text {
         id: clockLabel
         anchors.centerIn: parent
-        text: Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")
+        text: Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")  //HH:mm:ss
         color: bar.clock
         font.pixelSize: bar.fontClock
         font.family: bar.fontMono
@@ -76,11 +76,11 @@ Rectangle {
 
     // Live updating clock
     Timer {
-        interval: 1000
+        interval: 1000              //1000 = 1 Second
         running: true
         repeat: true
         onTriggered: {
-            clockLabel.text = Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")
+            clockLabel.text = Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss") //HH:mm:ss
         }
     }
 
@@ -331,7 +331,7 @@ Rectangle {
         var maxX = screenW - popupWidth - 12
 
         calendarPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
-        calendarPopup.anchor.rect.y = bar.implicitHeight + 2
+        calendarPopup.anchor.rect.y = bar.popupAnchorY(calendarPopup.implicitHeight, 2)
 
         calendarPopup.visible = true
     }

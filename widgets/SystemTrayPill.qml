@@ -9,8 +9,8 @@ import Quickshell.Widgets
 // =============================================================================
 //
 // Purpose:
-//   System tray pill showing icons. Right-click opens a custom glassmorphic
-//   menu supporting submenus, check items, radio items, and separators.
+//   System tray pill showing icons. Click opens a custom glassmorphic menu
+//   (avoids native GTK/Qt menus that clash with the bar theme on Blueman etc.).
 //
 // Theme Properties Consumed:
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
@@ -84,16 +84,13 @@ Rectangle {
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: (mouse) => {
-                            if (!modelData) return;
-                            if (mouse.button === Qt.LeftButton) {
-                                modelData.activate();
-                            } else if (mouse.button === Qt.RightButton) {
-                                if (modelData.hasMenu) {
-                                    showTrayMenu(modelData, trayIconItem);
-                                } else {
-                                    modelData.activate();
-                                }
+                        onClicked: {
+                            if (!modelData) return
+                            // Always use our styled menu when available (native Blueman menus look wrong on Hyprland)
+                            if (modelData.hasMenu) {
+                                showTrayMenu(modelData, trayIconItem)
+                            } else {
+                                modelData.activate()
                             }
                         }
                     }
@@ -111,16 +108,11 @@ Rectangle {
         trayMenuPopup.itemTitle = trayItem.title || trayItem.id || "Menu";
 
         var p = sourceItem.mapToItem(barBg, sourceItem.width / 2, sourceItem.height);
-        var popupW = trayMenuPopup.implicitWidth || 220;
-        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920;
-
-        var targetX = bar.sideMargin + p.x - (popupW / 2);
-        var minX = 12;
-        var maxX = screenW - popupW - 12;
-        trayMenuPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX));
-        trayMenuPopup.anchor.rect.y = bar.implicitHeight + 4;
-
+        trayMenuPopup.anchorSourceX = bar.sideMargin + p.x;
         trayMenuPopup.visible = true;
+        trayMenuPopup.reposition();
+        // Menu height is unknown until items load — reposition again after layout
+        Qt.callLater(function() { trayMenuPopup.reposition(); });
     }
 
     function closeTrayMenu() {
@@ -143,6 +135,22 @@ Rectangle {
         property var menuHandle: null
         property var menuStack: []
         property string itemTitle: ""
+        property real anchorSourceX: 0
+
+        function reposition() {
+            var popupW = implicitWidth > 0 ? implicitWidth : 220
+            var popupH = implicitHeight > 0 ? implicitHeight : 80
+            var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
+            var targetX = anchorSourceX - (popupW / 2)
+            var minX = 12
+            var maxX = screenW - popupW - 12
+            anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
+            anchor.rect.y = bar.popupAnchorY(popupH)
+        }
+
+        onImplicitHeightChanged: if (visible) reposition()
+        onImplicitWidthChanged: if (visible) reposition()
+        onMenuHandleChanged: if (visible) Qt.callLater(reposition)
 
         QsMenuOpener {
             id: trayMenuOpener
@@ -271,7 +279,12 @@ Rectangle {
                             Layout.fillWidth: true
                             implicitHeight: modelData && modelData.isSeparator ? 6 : 28
                             radius: bar.buttonRadius
-                            color: entryMouse.containsMouse && !modelData.isSeparator ? bar.glassHover : "transparent"
+                            color: {
+                                if (!modelData || modelData.isSeparator) return "transparent"
+                                if (entryMouse.containsMouse) return bar.glassHover
+                                if (modelData.checkState === Qt.Checked) return bar.menuCheckedRow
+                                return "transparent"
+                            }
                             visible: modelData && modelData.enabled !== false
 
                             MouseArea {
@@ -304,36 +317,61 @@ Rectangle {
                                     Layout.preferredWidth: 16
                                     Layout.preferredHeight: 16
                                     Layout.alignment: Qt.AlignVCenter
-                                    visible: modelData && modelData.buttonType !== bar.menuBtnNone || (modelData && modelData.checkState !== undefined && modelData.checkState !== 0)
+                                    visible: modelData && (
+                                        modelData.buttonType === bar.menuBtnCheck
+                                        || modelData.buttonType === bar.menuBtnRadio
+                                        || modelData.checkState === Qt.Checked
+                                        || modelData.checkState === Qt.PartiallyChecked
+                                    )
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: {
-                                            if (!modelData) return "";
-                                            if (modelData.buttonType === bar.menuBtnRadio) return modelData.checkState === Qt.Checked ? "●" : "○";
-                                            if (modelData.buttonType === bar.menuBtnCheck) return modelData.checkState === Qt.Checked ? "✓" : (modelData.checkState === Qt.PartiallyChecked ? "◐" : "");
-                                            return "";
+                                            if (!modelData) return ""
+                                            if (modelData.buttonType === bar.menuBtnRadio) {
+                                                return modelData.checkState === Qt.Checked ? "●" : "○"
+                                            }
+                                            if (modelData.buttonType === bar.menuBtnCheck) {
+                                                if (modelData.checkState === Qt.Checked) return "✓"
+                                                if (modelData.checkState === Qt.PartiallyChecked) return "◐"
+                                                return ""
+                                            }
+                                            return modelData.checkState === Qt.Checked ? "✓" : ""
                                         }
-                                        color: bar.accent
+                                        color: {
+                                            if (!modelData) return bar.menuUncheckedMark
+                                            if (modelData.checkState === Qt.Checked) return bar.menuCheckMark
+                                            if (modelData.checkState === Qt.PartiallyChecked) return bar.subtext
+                                            return bar.menuUncheckedMark
+                                        }
                                         font.pixelSize: bar.popupHintSize
                                         font.bold: true
+                                        font.family: bar.fontFamily
                                     }
                                 }
 
-                                IconImage {
+                                Image {
                                     Layout.preferredWidth: 16
                                     Layout.preferredHeight: 16
                                     Layout.alignment: Qt.AlignVCenter
                                     visible: modelData && modelData.icon && modelData.icon.length > 0
-                                    source: (modelData && modelData.icon) ? modelData.icon : ""
+                                    source: modelData ? modelData.icon : ""
+                                    sourceSize: Qt.size(16, 16)
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
                                 }
 
                                 Text {
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignVCenter
                                     text: modelData ? (modelData.text || "") : ""
-                                    color: entryMouse.containsMouse ? bar.text : bar.subtext
+                                    color: {
+                                        if (entryMouse.containsMouse) return bar.text
+                                        if (modelData && modelData.checkState === Qt.Checked) return bar.text
+                                        return bar.subtext
+                                    }
                                     font.pixelSize: bar.popupHintSize
+                                    font.family: bar.fontFamily
                                     elide: Text.ElideRight
                                 }
 

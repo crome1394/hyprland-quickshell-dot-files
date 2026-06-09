@@ -29,7 +29,7 @@ import "../components"
 //
 // Dependencies:
 //   - required property var bar
-//   - required property Item barBg (for positioning)
+//   - required property Item barBg (for popup positioning)
 //   - Quickshell.Services.Mpris
 //   - Quickshell.Services.Pipewire
 //   - Quickshell.Widgets (ClippingRectangle, IconImage)
@@ -49,10 +49,11 @@ Rectangle {
     // Whether any media is currently playing (drives visibility + coupling with SysStatsPill)
     readonly property bool hasMedia: media.title !== ""
 
-    anchors.centerIn: barBg
-    z: 5
+    Layout.preferredWidth: 600
+    Layout.preferredHeight: bar.pillHeight
+    Layout.alignment: Qt.AlignVCenter
     visible: hasMedia
-    width: 600
+    implicitWidth: 600
     implicitHeight: bar.pillHeight
     radius: bar.pillRadius
     color: mediaHover.containsMouse ? bar.glassHover : bar.glassPillBg
@@ -367,7 +368,7 @@ Rectangle {
         var minX = 12;
         var maxX = screenW - popupW - 12;
         mediaPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX));
-        mediaPopup.anchor.rect.y = bar.implicitHeight + 4;
+        mediaPopup.anchor.rect.y = bar.popupAnchorY(mediaPopup.implicitHeight);
 
         media.refreshBrowserAudioNodes();
 

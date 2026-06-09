@@ -10,7 +10,7 @@ import Quickshell.Io as Io
 //
 // Purpose:
 //   Overlay gauges showing CPU + GPU utilization and temperatures.
-//   Right-click launches btop (CPU) or nvtop (GPU).
+//   Left-click CPU launches btop; left-click GPU launches nvtop.
 //   Automatically hides when media is playing.
 //
 // Theme Properties Consumed:
@@ -22,7 +22,6 @@ import Quickshell.Io as Io
 //
 // Dependencies:
 //   - required property var bar (from shell.qml)
-//   - required property Item barBg (for positioning)
 //   - property bool mediaActive (from parent)
 //
 // Notes:
@@ -34,14 +33,14 @@ Rectangle {
     id: root
 
     required property var bar
-    required property Item barBg
     property bool mediaActive: false
 
-    anchors.centerIn: barBg
-    z: 5
+    Layout.preferredWidth: 385
+    Layout.preferredHeight: bar.pillHeight
+    Layout.alignment: Qt.AlignVCenter
     visible: !mediaActive && sysStatsReady
-    width: 385
-    implicitHeight: 40
+    implicitWidth: 385
+    implicitHeight: bar.pillHeight
     radius: bar.pillRadius
     color: sysHover.containsMouse ? bar.glassHover : bar.glassPillBg
     border.width: bar.controlBorderWidth
@@ -131,15 +130,10 @@ Rectangle {
             MouseArea {
                 id: cpuClick
                 anchors.fill: parent
-                acceptedButtons: Qt.RightButton
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: (mouse) => {
-                    if (mouse.button === Qt.RightButton) {
-                        Quickshell.execDetached(["kitty", "-e", "btop"])
-                    }
-                }
-                ToolTip.text: "Right-click to launch btop"
+                onClicked: Quickshell.execDetached(["kitty", "-e", "btop"])
+                ToolTip.text: "Click to launch btop"
                 ToolTip.visible: cpuClick.containsMouse
                 ToolTip.delay: bar.tooltipDelay
             }
@@ -213,15 +207,10 @@ Rectangle {
             MouseArea {
                 id: gpuClick
                 anchors.fill: parent
-                acceptedButtons: Qt.RightButton
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: (mouse) => {
-                    if (mouse.button === Qt.RightButton) {
-                        Quickshell.execDetached(["kitty", "-e", "nvtop"])
-                    }
-                }
-                ToolTip.text: "Right-click to launch nvtop"
+                onClicked: Quickshell.execDetached(["kitty", "-e", "nvtop"])
+                ToolTip.text: "Click to launch nvtop"
                 ToolTip.visible: gpuClick.containsMouse
                 ToolTip.delay: bar.tooltipDelay
             }

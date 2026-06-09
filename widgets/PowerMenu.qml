@@ -96,7 +96,7 @@ Rectangle {
         var minX = 12;
         var maxX = screenW - popupW - 12;
         powerPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX));
-        powerPopup.anchor.rect.y = bar.implicitHeight + 4;
+        powerPopup.anchor.rect.y = bar.popupAnchorY(powerPopup.implicitHeight);
 
         powerPopup.visible = true;
     }
