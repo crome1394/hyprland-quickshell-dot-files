@@ -78,11 +78,6 @@ QtObject {
     readonly property color weekday:   "#ff5c5c"   // Calendar weekday headers (M T W ...)
     readonly property color clock:     "#ffffff"   // Clock text (stronger than normal text for readability)
 
-    // Temperature / utilization warning ramp (used in SysStatsPill)
-    readonly property color tempOk:    "#cdd6f4"   // Normal temp text
-    readonly property color tempWarm:  "#f9e2af"   // 65-85°C / 65-85% util
-    readonly property color tempHot:   "#f38ba8"   // >85°C / >85% util (also used for high load bars)
-
     // =========================================================================
     // GLASSMORPHIC TOKENS (frosted acrylic / mica style)
     // =========================================================================
@@ -281,18 +276,49 @@ QtObject {
     readonly property int  wsSpacing:        4     // Between workspace buttons
 
     // =========================================================================
-    // SYSTEM STATS GAUGES (CPU / GPU utilization bars)
+    // SYSTEM STATS GAUGES (CPU / GPU utilization bars + temp labels)
     // =========================================================================
     readonly property int  statGaugeWidth:   73     // Visual bar width inside SysStatsPill
     readonly property int  statGaugeHeight:   8
     readonly property int  statGaugeRadius:   4
     readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.09)  // Very subtle track
 
-    // Threshold colors live in SysStatsPill logic but reference these:
-    // (kept here so you can globally retune the ramp)
-    readonly property color statOk:   accent
-    readonly property color statWarm: tempWarm
-    readonly property color statHot:  tempHot
+    // Utilization bar color ramp (25% tiers — edit colors and thresholds together)
+    readonly property color statUtilTier1: "#10B981"   // 0–statUtilThreshold1%
+    readonly property color statUtilTier2: "#F59E0B"   // statUtilThreshold1+1–statUtilThreshold2%
+    readonly property color statUtilTier3: "#F97316"   // statUtilThreshold2+1–statUtilThreshold3%
+    readonly property color statUtilTier4: "#EF4444"   // statUtilThreshold3+1–100%
+
+    readonly property int statUtilThreshold1: 25
+    readonly property int statUtilThreshold2: 50
+    readonly property int statUtilThreshold3: 75
+
+    // Temperature text colors (independent from utilization ramp)
+    readonly property color statTempCool: "#cdd6f4"   // Below statTempWarmAt
+    readonly property color statTempWarm: "#f9e2af"   // statTempWarmAt–statTempHotAt
+    readonly property color statTempHot:  "#f38ba8"   // Above statTempHotAt
+
+    // Temperature label thresholds (°C)
+    readonly property int statTempWarmAt: 70
+    readonly property int statTempHotAt:  85
+
+    // "|" between utilization % and temperature in SysStatsPill
+    readonly property color statValueSeparator: overlay
+
+    function statUtilColor(util) {
+        var u = Math.max(0, Math.min(100, util))
+        if (u <= statUtilThreshold1) return statUtilTier1
+        if (u <= statUtilThreshold2) return statUtilTier2
+        if (u <= statUtilThreshold3) return statUtilTier3
+        return statUtilTier4
+    }
+
+    function statTempColor(temp) {
+        var t = Math.round(temp)
+        if (t > statTempHotAt)  return statTempHot
+        if (t > statTempWarmAt) return statTempWarm
+        return statTempCool
+    }
 
     // =========================================================================
     // CAVA VISUALIZER (MediaPill background waveform)

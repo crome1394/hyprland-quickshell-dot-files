@@ -96,9 +96,10 @@ ShellRoot {
         property alias todayBg: theme.todayBg
         property alias weekday: theme.weekday
         property alias clock: theme.clock
-        property alias tempOk: theme.tempOk
-        property alias tempWarm: theme.tempWarm
-        property alias tempHot: theme.tempHot
+        readonly property alias statTempCool: theme.statTempCool
+        readonly property alias statTempWarm: theme.statTempWarm
+        readonly property alias statTempHot: theme.statTempHot
+        readonly property alias statValueSeparator: theme.statValueSeparator
 
         // --- Glassmorphic tokens
         readonly property alias glassBg: theme.glassBg
@@ -234,9 +235,17 @@ ShellRoot {
         readonly property alias statGaugeHeight: theme.statGaugeHeight
         readonly property alias statGaugeRadius: theme.statGaugeRadius
         readonly property alias statTrack: theme.statTrack
-        readonly property alias statOk: theme.statOk
-        readonly property alias statWarm: theme.statWarm
-        readonly property alias statHot: theme.statHot
+        readonly property alias statUtilTier1: theme.statUtilTier1
+        readonly property alias statUtilTier2: theme.statUtilTier2
+        readonly property alias statUtilTier3: theme.statUtilTier3
+        readonly property alias statUtilTier4: theme.statUtilTier4
+        readonly property alias statUtilThreshold1: theme.statUtilThreshold1
+        readonly property alias statUtilThreshold2: theme.statUtilThreshold2
+        readonly property alias statUtilThreshold3: theme.statUtilThreshold3
+        readonly property alias statTempWarmAt: theme.statTempWarmAt
+        readonly property alias statTempHotAt: theme.statTempHotAt
+        function statUtilColor(util) { return theme.statUtilColor(util) }
+        function statTempColor(temp) { return theme.statTempColor(temp) }
 
         // --- Cava visualizer
         readonly property alias cavaBarCount: theme.cavaBarCount

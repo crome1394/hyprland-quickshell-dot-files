@@ -17,8 +17,10 @@ import Quickshell.Io as Io
 //   - bar.glassPillBg, bar.glassHover, bar.glassBorder, bar.glassHighlight
 //   - bar.pillRadius, bar.controlBorderWidth, bar.accent, bar.subtext, bar.text
 //   - bar.statGaugeWidth, bar.statGaugeHeight, bar.statGaugeRadius, bar.statTrack
+//   - bar.statUtilTier1–4, bar.statUtilThreshold1–3, bar.statUtilColor()
+//   - bar.statTempCool, bar.statTempWarm, bar.statTempHot, bar.statTempWarmAt,
+//     bar.statTempHotAt, bar.statTempColor(), bar.statValueSeparator
 //   - bar.divider, bar.fontFamily, bar.tooltipDelay
-//   - bar.tempHot, bar.tempWarm (via threshold logic)
 //
 // Dependencies:
 //   - required property var bar (from shell.qml)
@@ -35,11 +37,11 @@ Rectangle {
     required property var bar
     property bool mediaActive: false
 
-    Layout.preferredWidth: 385
+    Layout.preferredWidth: 430
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
     visible: !mediaActive && sysStatsReady
-    implicitWidth: 385
+    implicitWidth: 430
     implicitHeight: bar.pillHeight
     radius: bar.pillRadius
     color: sysHover.containsMouse ? bar.glassHover : bar.glassPillBg
@@ -124,7 +126,7 @@ Rectangle {
 
         // ----- CPU HALF -----
         Item {
-            width: 162
+            width: 195
             height: 26
 
             MouseArea {
@@ -169,8 +171,7 @@ Rectangle {
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.cpuUtil / 100)))
                         height: bar.statGaugeHeight
                         radius: bar.statGaugeRadius
-                        color: root.cpuUtil > 85 ? bar.tempHot :
-                               (root.cpuUtil > 65 ? bar.tempWarm : bar.accent)
+                        color: bar.statUtilColor(root.cpuUtil)
 
                         Behavior on width {
                             NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
@@ -178,15 +179,31 @@ Rectangle {
                     }
                 }
 
-                // Temp (always shown, color coded)
-                Text {
-                    text: root.cpuTemp + "°"
-                    font.pixelSize: 13
-                    font.bold: true
-                    font.family: bar.fontFamily
-                    color: root.cpuTemp > 85 ? bar.tempHot :
-                           (root.cpuTemp > 70 ? bar.tempWarm : bar.text)
+                // Util % | temp (each segment color-coded independently)
+                Row {
+                    spacing: 4
                     anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        text: Math.round(root.cpuUtil) + "%"
+                        font.pixelSize: 13
+                        font.bold: true
+                        font.family: bar.fontFamily
+                        color: bar.statUtilColor(root.cpuUtil)
+                    }
+                    Text {
+                        text: "|"
+                        font.pixelSize: 13
+                        font.family: bar.fontFamily
+                        color: bar.statValueSeparator
+                    }
+                    Text {
+                        text: root.cpuTemp + "°"
+                        font.pixelSize: 13
+                        font.bold: true
+                        font.family: bar.fontFamily
+                        color: bar.statTempColor(root.cpuTemp)
+                    }
                 }
             }
         }
@@ -201,7 +218,7 @@ Rectangle {
 
         // ----- GPU HALF -----
         Item {
-            width: 162
+            width: 195
             height: 26
 
             MouseArea {
@@ -246,8 +263,7 @@ Rectangle {
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.gpuUtil / 100)))
                         height: bar.statGaugeHeight
                         radius: bar.statGaugeRadius
-                        color: root.gpuUtil > 85 ? bar.tempHot :
-                               (root.gpuUtil > 65 ? bar.tempWarm : bar.accent)
+                        color: bar.statUtilColor(root.gpuUtil)
 
                         Behavior on width {
                             NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
@@ -255,15 +271,31 @@ Rectangle {
                     }
                 }
 
-                // Temp (always shown, color coded)
-                Text {
-                    text: root.gpuTemp + "°"
-                    font.pixelSize: 13
-                    font.bold: true
-                    font.family: bar.fontFamily
-                    color: root.gpuTemp > 85 ? bar.tempHot :
-                           (root.gpuTemp > 70 ? bar.tempWarm : bar.text)
+                // Util % | temp (each segment color-coded independently)
+                Row {
+                    spacing: 4
                     anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        text: Math.round(root.gpuUtil) + "%"
+                        font.pixelSize: 13
+                        font.bold: true
+                        font.family: bar.fontFamily
+                        color: bar.statUtilColor(root.gpuUtil)
+                    }
+                    Text {
+                        text: "|"
+                        font.pixelSize: 13
+                        font.family: bar.fontFamily
+                        color: bar.statValueSeparator
+                    }
+                    Text {
+                        text: root.gpuTemp + "°"
+                        font.pixelSize: 13
+                        font.bold: true
+                        font.family: bar.fontFamily
+                        color: bar.statTempColor(root.gpuTemp)
+                    }
                 }
             }
         }
