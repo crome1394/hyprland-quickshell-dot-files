@@ -10,8 +10,15 @@
 //
 // IPC:
 //   - qs ipc call help toggle
-//   - qs ipc call shell set showMediaWidget true
-//   - qs ipc call shell set showStatsWidget false
+//   - qs ipc call shell setShowMediaWidget true
+//   - qs ipc call shell setShowStatsWidget false
+//   - qs ipc call shell toggleShowMediaWidget
+//   - qs ipc call shell toggleShowStatsWidget
+//   (Run `qs ipc show` to list all registered commands.)
+//
+// Bar position (Theme.qml):
+//   - barPosition: "top" or "bottom"
+//   - barEdgeMargin: gap from the screen edge
 //
 // =============================================================================
 // BAR LAYOUT — how to move widgets (left / center / right)
@@ -58,18 +65,22 @@ import "components"
 import "widgets"
 
 ShellRoot {
+    id: root
+
     // --- Widget visibility (also toggled via IPC; see header) ---
     property bool showMediaWidget: false
     property bool showStatsWidget: true
 
     PanelWindow {
         id: bar
-        anchors.top: true
+        color: "transparent"
+        implicitHeight: bar.barHeight
         anchors.left: true
         anchors.right: true
-        implicitHeight: bar.barHeight
-        color: "transparent"
-        margins.top: bar.barTopMargin
+        anchors.top: bar.barPosition === "top"
+        anchors.bottom: bar.barPosition === "bottom"
+        margins.top: bar.barPosition === "top" ? bar.barEdgeMargin : 0
+        margins.bottom: bar.barPosition === "bottom" ? bar.barEdgeMargin : 0
 
         // --- Theme (single source of truth — see Theme.qml) ---
         Theme { id: theme }
@@ -137,9 +148,18 @@ ShellRoot {
         readonly property alias iconTextGap: theme.iconTextGap
         readonly property alias dualAudioSidePadding: theme.dualAudioSidePadding
 
-        // --- Sizing
+        // --- Sizing & bar position
+        readonly property alias barPosition: theme.barPosition
+        readonly property alias barEdgeMargin: theme.barEdgeMargin
+        readonly property alias popupBarGap: theme.popupBarGap
         readonly property alias barHeight: theme.barHeight
         readonly property alias barTopMargin: theme.barTopMargin
+
+        // Popup Y anchor — opens below the bar (top) or above it (bottom)
+        function popupAnchorY(popupHeight, gap) {
+            var spacing = (gap !== undefined) ? gap : popupBarGap
+            return barPosition === "bottom" ? -popupHeight - spacing : implicitHeight + spacing
+        }
         readonly property alias pillHeight: theme.pillHeight
         readonly property alias audioViewContentWidth: theme.audioViewContentWidth
         readonly property alias audioViewSidePadding: theme.audioViewSidePadding
@@ -186,6 +206,7 @@ ShellRoot {
         readonly property alias iconShutdown: theme.iconShutdown
         readonly property alias iconBios: theme.iconBios
         readonly property alias iconLauncher: theme.iconLauncher
+        readonly property alias audioIcon: theme.audioIcon
 
         // --- Sliders
         readonly property alias sliderBarHeight: theme.sliderBarHeight
@@ -237,7 +258,10 @@ ShellRoot {
         readonly property alias animSlow: theme.animSlow
         readonly property alias tooltipDelay: theme.tooltipDelay
 
-        // --- Menu button types
+        // --- Tray menu
+        readonly property alias menuCheckMark: theme.menuCheckMark
+        readonly property alias menuUncheckedMark: theme.menuUncheckedMark
+        readonly property alias menuCheckedRow: theme.menuCheckedRow
         readonly property alias menuBtnNone: theme.menuBtnNone
         readonly property alias menuBtnCheck: theme.menuBtnCheck
         readonly property alias menuBtnRadio: theme.menuBtnRadio
@@ -311,7 +335,7 @@ ShellRoot {
 
                         Text {
                             anchors.centerIn: parent
-                            text: bar.iconLauncher
+                            text: bar.icMediaPillonLauncher
                             font.pixelSize: bar.iconSizePillLarge
                             font.family: bar.fontFamily
                             color: launcherMouse.containsMouse ? bar.accent : bar.subtext
@@ -486,17 +510,22 @@ ShellRoot {
             }
         }
 
-        Io.IpcHandler {
-            target: "shell"
-            function set(propertyName: string, value: var) {
-                if (propertyName === "showMediaWidget") {
-                    showMediaWidget = !!value
-                } else if (propertyName === "showStatsWidget") {
-                    showStatsWidget = !!value
-                } else {
-                    console.warn("Unknown shell property:", propertyName)
-                }
-            }
+    }
+
+    // IPC handlers must use explicit types (bool, string, etc.) — `var` is not supported
+    Io.IpcHandler {
+        target: "shell"
+        function setShowMediaWidget(enabled: bool): void {
+            root.showMediaWidget = enabled
+        }
+        function setShowStatsWidget(enabled: bool): void {
+            root.showStatsWidget = enabled
+        }
+        function toggleShowMediaWidget(): void {
+            root.showMediaWidget = !root.showMediaWidget
+        }
+        function toggleShowStatsWidget(): void {
+            root.showStatsWidget = !root.showStatsWidget
         }
     }
 }
