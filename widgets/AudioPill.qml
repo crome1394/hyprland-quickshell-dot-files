@@ -18,7 +18,7 @@ import "../components"
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent, bar.audioIcon
 //   - bar.sliderFill, bar.sliderFillMuted
 //   - bar.pillHPadding
-//   - bar.iconSpeaker*, bar.iconMic*, bar.iconSizePill, bar.iconSizePopup
+//   - bar.iconSpeaker*, bar.iconMic*, bar.iconSizeTray, bar.iconSizePopup
 //   - bar.fontFamily, bar.fontPillLabel, bar.fontPopupTitle, bar.fontSection,
 //     bar.fontBody, bar.fontSmall
 //   - bar.muted, bar.text, bar.subtext, bar.overlay, bar.bg, bar.surface
@@ -178,12 +178,18 @@ Rectangle {
             anchors.centerIn: parent
             spacing: 6
 
-            Text {
-                text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
-                font.pixelSize: bar.iconSizePill
-                font.family: bar.fontFamily
-                color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
+            Item {
+                width: bar.iconSizeTray
+                height: bar.iconSizeTray
                 anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
+                    font.pixelSize: bar.iconSizeTray
+                    font.family: bar.fontFamily
+                    color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
+                }
             }
 
             Item {
@@ -231,12 +237,18 @@ Rectangle {
             anchors.centerIn: parent
             spacing: 6
 
-            Text {
-                text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
-                font.pixelSize: bar.iconSizePill
-                font.family: bar.fontFamily
-                color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
+            Item {
+                width: bar.iconSizeTray
+                height: bar.iconSizeTray
                 anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
+                    font.pixelSize: bar.iconSizeTray
+                    font.family: bar.fontFamily
+                    color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
+                }
             }
 
             Item {
@@ -289,12 +301,18 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 3
 
-                Text {
-                    text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
-                    font.pixelSize: bar.iconSizePill
-                    font.family: bar.fontFamily
-                    color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
+                Item {
+                    width: bar.iconSizeTray
+                    height: bar.iconSizeTray
                     anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
+                        font.pixelSize: bar.iconSizeTray
+                        font.family: bar.fontFamily
+                        color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioIcon
+                    }
                 }
                 Item {
                     width: 58; height: 16
@@ -328,12 +346,18 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 3
 
-                Text {
-                    text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
-                    font.pixelSize: bar.iconSizePill
-                    font.family: bar.fontFamily
-                    color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
+                Item {
+                    width: bar.iconSizeTray
+                    height: bar.iconSizeTray
                     anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
+                        font.pixelSize: bar.iconSizeTray
+                        font.family: bar.fontFamily
+                        color: audio.micMuted ? bar.sliderFillMuted : bar.audioIcon
+                    }
                 }
                 Item {
                     width: 58; height: 16

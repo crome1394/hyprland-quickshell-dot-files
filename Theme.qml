@@ -221,9 +221,9 @@ QtObject {
     // =========================================================================
     // ICON GLYPHS (single place to change the entire icon language)
     // =========================================================================
-    // Speaker / volume
-    readonly property string iconSpeaker:       ""
-    readonly property string iconSpeakerMuted:  ""
+    // Speaker / volume (MDI — matches mic/tray visual weight; FA glyphs render smaller at same px)
+    readonly property string iconSpeaker:       "󰕾"
+    readonly property string iconSpeakerMuted:  "󰖁"
     // Microphone
     readonly property string iconMic:           "󰍬"
     readonly property string iconMicMuted:      "󰍭"
