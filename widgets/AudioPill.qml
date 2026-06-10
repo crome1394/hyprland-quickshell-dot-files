@@ -17,7 +17,8 @@ import "../components"
 //   - bar.audioViewContentWidth, bar.audioViewSidePadding
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
 //   - bar.audioSpeakerTier1–4, bar.audioMicTier1–4, bar.audioUtilThreshold1–3
-//   - bar.audioSpeakerUtilColor(), bar.audioMicUtilColor(), bar.sliderFillMuted
+//   - bar.audioSpeakerUtilColor(), bar.audioMicUtilColor()
+//   - bar.audioSpeakerIcon, bar.audioMicIcon, bar.audioSpeakerIconMuted, bar.audioMicIconMuted
 //   - bar.pillHPadding
 //   - bar.iconSpeaker*, bar.iconMic*, bar.iconSizeTray, bar.iconSizePopup
 //   - bar.fontFamily, bar.fontPillLabel, bar.fontPopupTitle, bar.fontSection,
@@ -189,7 +190,7 @@ Rectangle {
                     text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                     font.pixelSize: bar.iconSizeTray
                     font.family: bar.fontFamily
-                    color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
+                    color: audio.speakerMuted ? bar.audioSpeakerIconMuted : bar.audioSpeakerIcon
                 }
             }
 
@@ -248,7 +249,7 @@ Rectangle {
                     text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                     font.pixelSize: bar.iconSizeTray
                     font.family: bar.fontFamily
-                    color: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
+                    color: audio.micMuted ? bar.audioMicIconMuted : bar.audioMicIcon
                 }
             }
 
@@ -312,7 +313,7 @@ Rectangle {
                         text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                         font.pixelSize: bar.iconSizeTray
                         font.family: bar.fontFamily
-                        color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
+                        color: audio.speakerMuted ? bar.audioSpeakerIconMuted : bar.audioSpeakerIcon
                     }
                 }
                 Item {
@@ -357,7 +358,7 @@ Rectangle {
                         text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                         font.pixelSize: bar.iconSizeTray
                         font.family: bar.fontFamily
-                        color: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
+                        color: audio.micMuted ? bar.audioMicIconMuted : bar.audioMicIcon
                     }
                 }
                 Item {
@@ -493,7 +494,7 @@ Rectangle {
                             text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                             font.pixelSize: bar.iconSizePopup
                             font.family: bar.fontFamily
-                            color: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
+                            color: audio.speakerMuted ? bar.audioSpeakerIconMuted : bar.audioSpeakerIcon
                         }
 
                         Item {
@@ -611,7 +612,7 @@ Rectangle {
                             text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
                             font.pixelSize: bar.iconSizePopup
                             font.family: bar.fontFamily
-                            color: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
+                            color: audio.micMuted ? bar.audioMicIconMuted : bar.audioMicIcon
                         }
 
                         Item {

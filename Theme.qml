@@ -70,7 +70,6 @@ QtObject {
     readonly property color overlay:   "#6c7086"   // Muted / placeholder / disabled text, help hints
 
     readonly property color accent:    '#00d3f8'   // Interactive highlights (hover borders, section titles, checkmarks)
-    readonly property color audioIcon: subtext     // Speaker/mic glyphs in AudioPill (separate from accent & slider fill)
     readonly property color muted:     "#f38ba8"   // Muted / warning / error state (volume mute, high temp, DND badge)
 
     // Semantic / status colors
@@ -268,6 +267,12 @@ QtObject {
     readonly property color audioMicTier2: "#F59E0B"
     readonly property color audioMicTier3: "#F97316"
     readonly property color audioMicTier4: "#EF4444"
+
+    // AudioPill speaker/mic glyphs (independent from volume bar + % threshold colors)
+    readonly property color audioSpeakerIcon: "#ffffff"   // Unmuted speaker icon (pill + popup)
+    readonly property color audioMicIcon:     "#ffffff"   // Unmuted mic icon (pill + popup)
+    readonly property color audioSpeakerIconMuted: sliderFillMuted
+    readonly property color audioMicIconMuted:     sliderFillMuted
 
     function audioSpeakerUtilColor(percent) {
         var p = Math.max(0, Math.min(100, percent))

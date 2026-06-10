@@ -207,7 +207,10 @@ ShellRoot {
         readonly property alias iconShutdown: theme.iconShutdown
         readonly property alias iconBios: theme.iconBios
         readonly property alias iconLauncher: theme.iconLauncher
-        readonly property alias audioIcon: theme.audioIcon
+        readonly property alias audioSpeakerIcon: theme.audioSpeakerIcon
+        readonly property alias audioMicIcon: theme.audioMicIcon
+        readonly property alias audioSpeakerIconMuted: theme.audioSpeakerIconMuted
+        readonly property alias audioMicIconMuted: theme.audioMicIconMuted
 
         // --- Sliders
         readonly property alias sliderBarHeight: theme.sliderBarHeight
