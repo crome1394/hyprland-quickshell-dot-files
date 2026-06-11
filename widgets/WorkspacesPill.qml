@@ -54,8 +54,8 @@ Rectangle {
             case 2: return "🦁";    // Brave Browser
             case 3: return "";     // chats
             case 4: return "";     // Google Chrome
-            case 5: return "";     // Misc
-            case 6: return "🕹";    // game
+            case 5: return "🕹";    // game
+            case 6: return "";     // Misc
             case 7: return "󰈹";     // Firefox
             case 8: return "";     // term
             case 9: return "󰨞";     // vscode
