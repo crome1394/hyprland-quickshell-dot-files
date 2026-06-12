@@ -8,8 +8,9 @@ import Quickshell.Hyprland
 // =============================================================================
 //
 // Purpose:
-//   Shows only occupied + active Hyprland workspaces as a row of pills.
-//   Supports click activation and scroll wheel switching.
+//   Always shows workspaces 1–5 as pills (empty or occupied), plus any
+//   additional workspaces that are occupied or active. Supports click
+//   activation and scroll wheel switching.
 //
 // Theme Properties Consumed:
 //   - bar.pillRadius, bar.glassPillBg, bar.glassBorder, bar.controlBorderWidth
@@ -46,40 +47,73 @@ Rectangle {
     border.color: bar.glassBorder
 
     // ===== Workspace logic (tightly coupled to this widget) =====
+    property int minimumWorkspaces: 5
     property var shownWorkspaces: []
+
+    function workspaceHasWindows(w) {
+        if (!w || !w.toplevels) return false;
+        if (typeof w.toplevels.count === "number") return w.toplevels.count > 0;
+        if (w.toplevels.values && typeof w.toplevels.values.length === "number") return w.toplevels.values.length > 0;
+        return false;
+    }
+
+    function shouldShowExtraWorkspace(w) {
+        if (!w || w.id <= 0) return false;
+        return workspaceHasWindows(w) || w.active || w.focused;
+    }
+
+    function makePlaceholderWorkspace(id, focusedId) {
+        return {
+            id: id,
+            active: false,
+            focused: focusedId === id,
+            activate: function() { Hyprland.dispatch("workspace " + id); }
+        };
+    }
 
     function getWsIcon(id) {
         switch (id) {
-            case 1: return "";     // code
-            case 2: return "🦁";    // Brave Browser
-            case 3: return "";     // chats
-            case 4: return "";     // Google Chrome
-            case 5: return "🕹";    // game
-            case 6: return "";     // Misc
-            case 7: return "󰈹";     // Firefox
-            case 8: return "";     // term
-            case 9: return "󰨞";     // vscode
+            case 1: return "";     //   code
+            case 2: return "";     // "🦁 Brave Browser
+            case 3: return "";     //  chats
+            case 4: return "";     // 
+            case 5: return "🕹";    // 🕹 game
+            case 6: return "";     //  Misc
+            case 7: return "";     // 󰈹 Firefox
+            case 8: return "";     //  term
+            case 9: return "";     // 󰨞 vscode
             case 10: return "";    // Misc
             default: return "󰈸";
         }
     }
 
     function updateShownWorkspaces() {
-        if (!Hyprland.workspaces || !Hyprland.workspaces.values) {
-            root.shownWorkspaces = [];
-            return;
+        const wsById = {};
+        const idsToShow = {};
+
+        if (Hyprland.workspaces && Hyprland.workspaces.values) {
+            Hyprland.workspaces.values.forEach(function(w) {
+                if (!w || w.id <= 0) return;
+                wsById[w.id] = w;
+                if (shouldShowExtraWorkspace(w)) idsToShow[w.id] = true;
+            });
         }
-        const filtered = Hyprland.workspaces.values.filter(function(w) {
-            if (!w || w.id <= 0) return false;
-            let hasWindows = false;
-            if (w.toplevels) {
-                if (typeof w.toplevels.count === "number") hasWindows = w.toplevels.count > 0;
-                else if (w.toplevels.values && typeof w.toplevels.values.length === "number") hasWindows = w.toplevels.values.length > 0;
-            }
-            return hasWindows || w.active || w.focused;
-        });
-        filtered.sort(function(a, b) { return a.id - b.id; });
-        root.shownWorkspaces = filtered;
+
+        for (let i = 1; i <= root.minimumWorkspaces; i++) {
+            idsToShow[i] = true;
+        }
+
+        const focusedId = (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id)
+            ? Hyprland.focusedWorkspace.id
+            : 1;
+
+        const sortedIds = Object.keys(idsToShow).map(Number).sort(function(a, b) { return a - b; });
+        const result = [];
+        for (let i = 0; i < sortedIds.length; i++) {
+            const id = sortedIds[i];
+            result.push(wsById[id] || root.makePlaceholderWorkspace(id, focusedId));
+        }
+        root.shownWorkspaces = result;
     }
 
     function switchToRelative(delta) {
