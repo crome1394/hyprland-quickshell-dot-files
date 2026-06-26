@@ -11,7 +11,7 @@ import Quickshell.Io as Io
 // Floating overlay for browsing and editing split Hyprland configuration.
 //
 // Features:
-//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU (sysmon)
+//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU/GPU (sysmon)
 //   - Config Files tab (dropdown + bat) for ~/.config/hypr/config/*.lua and hypr*.conf
 //   - System info (fastfetch + clickable copy-to-clipboard values + logo)
 //   - Edit (kitty nano) and Reload per config file tab
@@ -75,6 +75,7 @@ Item {
         { label: "Runtime Options", id: "runtime-options", file: "", view: "runtime" },
         { label: "Config Files", id: "config-files", file: "", view: "configfiles" },
         { label: "CPU", id: "cpu", file: "", view: "cpu" },
+        { label: "GPU", id: "gpu", file: "", view: "gpu" },
         { label: "System Info", id: "system", file: "", view: "system" }
     ]
 
@@ -185,7 +186,7 @@ Item {
         const entries = []
         for (let i = 0; i < tabs.length; i++) {
             const tab = tabs[i]
-            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu") continue
+            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu" || tab.view === "gpu") continue
             if (tab.file) entries.push(tab)
         }
         for (let j = 0; j < configFileEntries.length; j++) {
@@ -348,7 +349,7 @@ Item {
         if (tab && tab.view === "runtime") {
             runtimeViewer.refresh()
         }
-        if (tab && tab.view === "cpu") {
+        if (tab && (tab.view === "cpu" || tab.view === "gpu")) {
             sysMonService.refresh()
         }
     }
@@ -364,7 +365,7 @@ Item {
             runtimeViewer.refresh()
             return
         }
-        if (tab.view === "cpu") {
+        if (tab.view === "cpu" || tab.view === "gpu") {
             sysMonService.refresh()
             return
         }
@@ -422,6 +423,13 @@ Item {
             const cores = sysMonService.data.cpu_info && sysMonService.data.cpu_info.cores ? sysMonService.data.cpu_info.cores : "?"
             return util + "% CPU  ·  " + cores + " cores  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
         }
+        if (tab.view === "gpu") {
+            const util = sysMonService.data.gpu ? (sysMonService.data.gpu.util || 0).toFixed(0) : "0"
+            const vramUsed = sysMonService.data.gpu ? Math.round((sysMonService.data.gpu.vram_used || 0) / 1024) : 0
+            const vramTotal = sysMonService.data.gpu ? Math.round((sysMonService.data.gpu.vram_total || 0) / 1024) : 0
+            const name = sysMonService.data.gpu_info && sysMonService.data.gpu_info.name ? sysMonService.data.gpu_info.name : "GPU"
+            return util + "% GPU  ·  " + vramUsed + "/" + vramTotal + " GB VRAM  ·  " + name + filterNote
+        }
         if (tab.view === "runtime") {
             const cat = runtimeViewer.currentCategory()
             const name = cat ? cat.label : "category"
@@ -457,6 +465,7 @@ Item {
         else if (tab.view === "env") envFlickable.contentY = 0
         else if (tab.view === "system") systemFlickable.contentY = 0
         else if (tab.view === "cpu") cpuViewer.resetScroll()
+        else if (tab.view === "gpu") gpuViewer.resetScroll()
         else if (tab.view === "runtime") runtimeViewer.resetScroll()
         else if (tab.view === "configfiles") configFilesViewer.resetScroll()
         else if (tab.view === "raw") batViewer.resetScroll()
@@ -473,7 +482,7 @@ Item {
             refreshSystemInfo()
         } else if (tab.view === "runtime") {
             runtimeViewer.ensureLoaded()
-        } else if (tab.view === "cpu") {
+        } else if (tab.view === "cpu" || tab.view === "gpu") {
             sysMonService.refresh()
         } else if (tab.view === "configfiles") {
             const entry = configFilesViewer.currentEntry()
@@ -505,7 +514,7 @@ Item {
         if (!wmDistroLabel) refreshHeaderInfo()
         if (tab.view === "system" && systemDirty) refreshSystemInfo()
         else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
-        else if (tab.view === "cpu") sysMonService.refresh()
+        else if (tab.view === "cpu" || tab.view === "gpu") sysMonService.refresh()
         else if (tab.view === "configfiles") {
             const entry = configFilesViewer.currentEntry()
             if (entry && !fileContents[entry.id]) refreshConfigFileEntry(entry)
@@ -872,6 +881,7 @@ Item {
         else if (tab.view === "configfiles") configFilesViewer.pageScroll(direction)
         else if (tab.view === "runtime") runtimeViewer.pageScroll(direction)
         else if (tab.view === "cpu") cpuViewer.pageScroll(direction)
+        else if (tab.view === "gpu") gpuViewer.pageScroll(direction)
         else if (tab.view === "system") scrollFlickablePage(systemFlickable, direction)
     }
 
@@ -884,6 +894,7 @@ Item {
         else if (tab.view === "configfiles") configFilesViewer.lineScroll(direction)
         else if (tab.view === "runtime") runtimeViewer.lineScroll(direction)
         else if (tab.view === "cpu") cpuViewer.lineScroll(direction)
+        else if (tab.view === "gpu") gpuViewer.lineScroll(direction)
         else if (tab.view === "system") scrollFlickableLine(systemFlickable, direction)
     }
 
@@ -1496,6 +1507,22 @@ Item {
                         overlayColor: root.overlay
                     }
 
+                    GpuMonitorView {
+                        id: gpuViewer
+                        visible: root.currentTabInfo.view === "gpu"
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        service: sysMonService
+                        textColor: root.text
+                        subtextColor: root.subtext
+                        accentColor: root.accent
+                        surfaceColor: root.surface
+                        overlayColor: root.overlay
+                        gaugeLowColor: th.gaugeLow
+                        gaugeMidColor: th.gaugeMid
+                        gaugeHighColor: th.gaugeHigh
+                    }
+
                     // System Info
                     Item {
                         visible: root.currentTabInfo.view === "system"
@@ -1627,6 +1654,7 @@ Item {
                         property int _runtimeTick: runtimeViewer.optionsVersion
                         property string _configFileTick: configFilesViewer.selectedFileId
                         property int _cpuTick: sysMonService.cpuHistory.length
+                        property int _gpuTick: sysMonService.gpuHistory.length
                         property var _cpuData: sysMonService.data
                     }
 
@@ -1651,7 +1679,7 @@ Item {
                     }
 
                     Rectangle {
-                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu"
+                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu"
                         width: 68
                         height: 22
                         radius: 5
@@ -1666,7 +1694,7 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (root.currentTabInfo.view === "runtime") runtimeViewer.refreshCategory()
-                                else if (root.currentTabInfo.view === "cpu") sysMonService.refresh()
+                                else if (root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu") sysMonService.refresh()
                                 else root.refreshSystemInfo()
                             }
                         }

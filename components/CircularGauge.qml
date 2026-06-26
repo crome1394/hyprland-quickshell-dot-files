@@ -1,0 +1,142 @@
+import QtQuick
+
+// Theme import must be top-level (QML rule). Provides fallback for colors.
+import "../Theme.qml" as ThemeModule
+
+// =============================================================================
+// CircularGauge.qml — Reusable circular progress gauge for system metrics
+// =============================================================================
+//
+// Purpose:
+//   Dashboard-style circular gauge (270° bottom-open arc) with threshold-based
+//   3-stop color ramp. Used for CPU, GPU, disk usage in SysmonPanel (and
+//   potentially other places).
+//
+// Theme Properties Consumed (via fallback):
+//   - Theme.gaugeLow / Theme.gaugeMid / Theme.gaugeHigh  (color ramp)
+//   - (size, stroke, label etc remain component props for flexibility)
+//
+// Dependencies:
+//   - import "../Theme.qml" as ThemeModule  (for direct standalone use)
+//   - Optional overrides: lowColor, midColor, highColor props
+//
+// Notes:
+//   - Follows unidirectional read from theme (no writes).
+//   - Canvas repaints on value/color changes.
+//   - Adapted from standalone sysmon backup with centralized theming + full
+//     header/section/inline comment standard applied.
+//   - Kept API identical for easy reuse (value 0-100, size, subValue, etc).
+// =============================================================================
+
+Item {
+    id: root
+
+    // === Public API (kept stable for reuse) ===
+    property real value: 0
+    property string label: ""
+    property string subValue: ""
+    property int size: 92
+    property int strokeWidth: 9
+
+    // === Theme fallback (VolumeBar/MiniVolumeBar pattern) ===
+    // Placed early so the readonly t can be used in default expressions below.
+    readonly property QtObject t: ThemeModule.Theme
+
+    // Color ramp (override to customize per gauge, e.g. GPU uses same ramp).
+    // Defaults pulled from Theme so a single edit in Theme.qml retunes all gauges.
+    property color bgColor: Qt.rgba(1, 1, 1, 0.07)
+    property color lowColor:  (t && t.gaugeLow)  ? t.gaugeLow  : "#a6e3a1"
+    property color midColor:  (t && t.gaugeMid)  ? t.gaugeMid  : "#f9e2af"
+    property color highColor: (t && t.gaugeHigh) ? t.gaugeHigh : "#f38ba8"
+
+    // === Derived state (clamped + color selection) ===
+    readonly property real clamped: Math.max(0, Math.min(100, value))
+    readonly property color gaugeColor: clamped > 85 ? highColor : (clamped > 65 ? midColor : lowColor)
+
+    implicitWidth: size
+    implicitHeight: size
+
+    // === Section: Canvas rendering (270° arc gauge) ===
+    Canvas {
+        id: canvas
+        anchors.fill: parent
+
+        onPaint: {
+            const ctx = getContext("2d")
+            ctx.reset()
+
+            const w = width
+            const h = height
+            const cx = w / 2
+            const cy = h / 2
+            const radius = (Math.min(w, h) / 2) - (root.strokeWidth / 2) - 1
+
+            const startAngle = -Math.PI * 0.75
+            const endAngle = Math.PI * 0.75
+            const fullSweep = endAngle - startAngle
+            const progress = root.clamped / 100
+            const currentAngle = startAngle + fullSweep * progress
+
+            // Background track (subtle)
+            ctx.beginPath()
+            ctx.arc(cx, cy, radius, startAngle, endAngle, false)
+            ctx.lineWidth = root.strokeWidth
+            ctx.strokeStyle = root.bgColor
+            ctx.lineCap = "round"
+            ctx.stroke()
+
+            // Progress arc (only if meaningful)
+            if (progress > 0.005) {
+                ctx.beginPath()
+                ctx.arc(cx, cy, radius, startAngle, currentAngle, false)
+                ctx.lineWidth = root.strokeWidth
+                ctx.strokeStyle = root.gaugeColor
+                ctx.lineCap = "round"
+                ctx.stroke()
+            }
+
+            // Subtle inner highlight ring for depth
+            ctx.beginPath()
+            ctx.arc(cx, cy, radius - root.strokeWidth * 0.55, startAngle, endAngle, false)
+            ctx.lineWidth = 1.5
+            ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.05)
+            ctx.stroke()
+        }
+    }
+
+    // === Section: Center text block (percentage + optional label + subValue) ===
+    Column {
+        anchors.centerIn: parent
+        spacing: -1
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.clamped.toFixed(0) + "%"
+            font.pixelSize: root.size * 0.30
+            font.bold: true
+            color: root.gaugeColor
+            font.family: "JetBrains Mono Nerd Font, monospace"  // consistent with bar
+        }
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.label
+            font.pixelSize: root.size * 0.14
+            color: "#cdd6f4"
+            opacity: 0.9
+        }
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: root.subValue !== ""
+            text: root.subValue
+            font.pixelSize: root.size * 0.12
+            color: "#a6adc8"
+        }
+    }
+
+    // === Reactive repaints (explicit, no hidden two-way) ===
+    onValueChanged: canvas.requestPaint()
+    onGaugeColorChanged: canvas.requestPaint()
+    Component.onCompleted: canvas.requestPaint()
+}
