@@ -19,8 +19,8 @@ Item {
 
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10
-    readonly property int processRowHeight: 14
-    readonly property int processHeaderHeight: 16
+    readonly property int processRowHeight: 15
+    readonly property int processHeaderHeight: 17
 
     readonly property var gpuProcessRows: {
         const tick = service && service.data ? service.data.timestamp : 0
@@ -103,7 +103,7 @@ Item {
                     Text {
                         text: "GPU SUMMARY"
                         color: root.accentColor
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         font.bold: true
                         font.family: "monospace"
                     }
@@ -117,7 +117,7 @@ Item {
                             Text {
                                 text: "Model: " + (service.data.gpu_info && service.data.gpu_info.name ? service.data.gpu_info.name : "--")
                                 color: root.subtextColor
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.family: "monospace"
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
@@ -127,13 +127,13 @@ Item {
                                     ? ((service.data.gpu.vram_total || 0) / 1024).toFixed(0) + " GB"
                                     : "--")
                                 color: root.subtextColor
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.family: "monospace"
                             }
                             Text {
                                 text: "Driver: " + (service.data.gpu_info && service.data.gpu_info.driver ? service.data.gpu_info.driver : "--")
                                 color: root.subtextColor
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.family: "monospace"
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
@@ -145,7 +145,7 @@ Item {
                         Text {
                             text: (service.data.gpu ? (service.data.gpu.util || 0).toFixed(0) : "0") + "%"
                             color: root.textColor
-                            font.pixelSize: 24
+                            font.pixelSize: 25
                             font.bold: true
                             font.family: "monospace"
                         }
@@ -175,7 +175,7 @@ Item {
                         Text {
                             text: "GPU USAGE"
                             color: root.accentColor
-                            font.pixelSize: 10
+                            font.pixelSize: 11
                             font.bold: true
                             font.family: "monospace"
                         }
@@ -216,7 +216,7 @@ Item {
                         Text {
                             text: "Top GPU Processes"
                             color: root.accentColor
-                            font.pixelSize: 10
+                            font.pixelSize: 11
                             font.bold: true
                             font.family: "monospace"
                         }
@@ -242,7 +242,7 @@ Item {
                                         height: parent.height
                                         text: "PID"
                                         color: root.textColor
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         font.bold: true
                                         font.family: "monospace"
                                         verticalAlignment: Text.AlignVCenter
@@ -253,7 +253,7 @@ Item {
                                         height: parent.height
                                         text: "App"
                                         color: root.textColor
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         font.bold: true
                                         font.family: "monospace"
                                         verticalAlignment: Text.AlignVCenter
@@ -264,7 +264,7 @@ Item {
                                         height: parent.height
                                         text: "VRAM"
                                         color: root.textColor
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         font.bold: true
                                         font.family: "monospace"
                                         verticalAlignment: Text.AlignVCenter
@@ -278,7 +278,7 @@ Item {
                                 visible: root.gpuProcessRows.length === 0
                                 text: "No GPU compute processes reported"
                                 color: root.overlayColor
-                                font.pixelSize: 9
+                                font.pixelSize: 10
                                 font.family: "monospace"
                                 topPadding: 4
                             }
@@ -306,7 +306,7 @@ Item {
                                             height: parent.height
                                             text: String(modelData.pid)
                                             color: root.textColor
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.family: "monospace"
                                             verticalAlignment: Text.AlignVCenter
                                             horizontalAlignment: Text.AlignRight
@@ -316,7 +316,7 @@ Item {
                                             height: parent.height
                                             text: modelData.name
                                             color: root.subtextColor
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.family: "monospace"
                                             verticalAlignment: Text.AlignVCenter
                                             elide: Text.ElideRight
@@ -326,7 +326,7 @@ Item {
                                             height: parent.height
                                             text: (modelData.vram || 0) + " MiB"
                                             color: root.accentColor
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.family: "monospace"
                                             verticalAlignment: Text.AlignVCenter
                                             horizontalAlignment: Text.AlignRight
@@ -358,7 +358,7 @@ Item {
                     Text {
                         text: "GPU Usage History"
                         color: root.accentColor
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.bold: true
                         font.family: "monospace"
                     }

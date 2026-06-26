@@ -638,7 +638,7 @@ Item {
                     anchors.centerIn: parent
                     text: "◀"
                     color: root.accentColor
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
 
                 MouseArea {
@@ -667,7 +667,7 @@ Item {
                     leftPadding: 8
                     rightPadding: categoryCombo.indicator.width + categoryCombo.spacing
                     text: categoryCombo.displayText
-                    font.pixelSize: 12
+                    font.pixelSize: 13
                     color: root.textColor
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
@@ -742,7 +742,7 @@ Item {
                                 placeholderText: "Filter categories..."
                                 placeholderTextColor: root.overlayColor
                                 color: root.textColor
-                                font.pixelSize: 12
+                                font.pixelSize: 13
                                 selectionColor: Qt.rgba(0.55, 0.70, 0.96, 0.35)
                                 selectedTextColor: root.textColor
                                 onTextChanged: root.categorySearch = text
@@ -781,7 +781,7 @@ Item {
                                 contentItem: Text {
                                     text: modelData.label
                                     color: parent.isSelected ? root.accentColor : root.textColor
-                                    font.pixelSize: 12
+                                    font.pixelSize: 13
                                     font.bold: parent.isSelected
                                     leftPadding: 10
                                     verticalAlignment: Text.AlignVCenter
@@ -816,7 +816,7 @@ Item {
                     anchors.centerIn: parent
                     text: "▶"
                     color: root.accentColor
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
 
                 MouseArea {
@@ -840,7 +840,7 @@ Item {
                     anchors.centerIn: parent
                     text: root.loading ? "Loading…" : "Refresh"
                     color: root.accentColor
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
                 MouseArea {
                     id: refreshCatMa
@@ -862,7 +862,7 @@ Item {
                     anchors.centerIn: parent
                     text: "Edit"
                     color: root.accentColor
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
                 MouseArea {
                     id: editCatMa
@@ -876,7 +876,7 @@ Item {
             Text {
                 text: "Wiki"
                 color: root.accentColor
-                font.pixelSize: 11
+                font.pixelSize: 12
                 font.underline: wikiMa.containsMouse
                 MouseArea {
                     id: wikiMa
@@ -910,7 +910,7 @@ Item {
                     Layout.maximumWidth: root.optionColumnWidth(parent.width)
                     text: "Option"
                     color: root.accentColor
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                     font.bold: true
                     font.family: "monospace"
                 }
@@ -922,7 +922,7 @@ Item {
                     Layout.maximumWidth: root.valueColumnWidth(parent.width)
                     text: "Value"
                     color: root.accentColor
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                     font.bold: true
                     font.family: "monospace"
                     horizontalAlignment: Text.AlignRight
@@ -939,7 +939,7 @@ Item {
                         anchors.fill: parent
                         text: "Type"
                         color: root.accentColor
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         font.bold: true
                         font.family: "monospace"
                         verticalAlignment: Text.AlignVCenter
@@ -1030,7 +1030,7 @@ Item {
                                         Layout.fillWidth: true
                                         text: modelData.key
                                         color: modelData.set ? root.accentColor : root.textColor
-                                        font.pixelSize: 12
+                                        font.pixelSize: 13
                                         font.family: "monospace"
                                         font.bold: modelData.set
                                         elide: Text.ElideRight
@@ -1056,7 +1056,7 @@ Item {
                                             anchors.centerIn: parent
                                             text: "set"
                                             color: root.accentColor
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.bold: true
                                         }
                                     }
@@ -1067,7 +1067,7 @@ Item {
                                     visible: modelData.description && modelData.description.length > 0
                                     text: modelData.description
                                     color: root.overlayColor
-                                    font.pixelSize: 10
+                                    font.pixelSize: 11
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
                                 }
@@ -1109,7 +1109,7 @@ Item {
                                         width: Math.min(implicitWidth, valueCell.textMaxWidth)
                                         text: root.displayValue(modelData)
                                         color: root.valueTextColor(modelData)
-                                        font.pixelSize: 12
+                                        font.pixelSize: 13
                                         font.family: "monospace"
                                         horizontalAlignment: Text.AlignRight
                                         elide: Text.ElideLeft
@@ -1138,7 +1138,7 @@ Item {
                                     visible: modelData.type
                                     text: modelData.type
                                     color: root.subtextColor
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
                                     font.family: "monospace"
                                     verticalAlignment: Text.AlignVCenter
                                     horizontalAlignment: Text.AlignHCenter

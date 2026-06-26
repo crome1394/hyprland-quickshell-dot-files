@@ -184,7 +184,7 @@ Item {
                     anchors.centerIn: parent
                     text: "◀"
                     color: root.accentColor
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
 
                 MouseArea {
@@ -212,7 +212,7 @@ Item {
                 leftPadding: 8
                 rightPadding: fileCombo.indicator.width + fileCombo.spacing
                 text: fileCombo.displayText
-                font.pixelSize: 12
+                font.pixelSize: 13
                 color: root.textColor
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
@@ -287,7 +287,7 @@ Item {
                             placeholderText: "Filter files..."
                             placeholderTextColor: root.overlayColor
                             color: root.textColor
-                            font.pixelSize: 12
+                            font.pixelSize: 13
                             selectionColor: Qt.rgba(0.55, 0.70, 0.96, 0.35)
                             selectedTextColor: root.textColor
                             onTextChanged: root.fileSearch = text
@@ -329,7 +329,7 @@ Item {
                                 Text {
                                     text: modelData.label
                                     color: parent.parent.isSelected ? root.accentColor : root.textColor
-                                    font.pixelSize: 12
+                                    font.pixelSize: 13
                                     font.bold: parent.parent.isSelected
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -337,7 +337,7 @@ Item {
                                 Text {
                                     text: modelData.file
                                     color: root.overlayColor
-                                    font.pixelSize: 10
+                                    font.pixelSize: 11
                                     font.family: "monospace"
                                     elide: Text.ElideRight
                                 }
@@ -371,7 +371,7 @@ Item {
                     anchors.centerIn: parent
                     text: "▶"
                     color: root.accentColor
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
 
                 MouseArea {

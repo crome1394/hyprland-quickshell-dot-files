@@ -9,7 +9,7 @@ Item {
     property string filePath: ""
     property string language: ""
     property string filterText: ""
-    property int fontSize: 11
+    property int fontSize: 12
     property string fontFamily: "monospace"
     property color defaultColor: "#cdd6f4"
     property color accentColor: defaultColor

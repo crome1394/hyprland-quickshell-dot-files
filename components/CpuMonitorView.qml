@@ -16,8 +16,8 @@ Item {
 
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10
-    readonly property int processRowHeight: 14
-    readonly property int processHeaderHeight: 16
+    readonly property int processRowHeight: 15
+    readonly property int processHeaderHeight: 17
 
     function topCpuProcesses() {
         if (!service || !service.data || !service.data.top_processes) return []
@@ -99,7 +99,7 @@ Item {
                     Text {
                         text: "CPU SUMMARY"
                         color: root.accentColor
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         font.bold: true
                         font.family: "monospace"
                     }
@@ -113,13 +113,13 @@ Item {
                             Text {
                                 text: "Vendor: " + (service.data.cpu_info && service.data.cpu_info.vendor ? service.data.cpu_info.vendor : "--")
                                 color: root.subtextColor
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.family: "monospace"
                             }
                             Text {
                                 text: "Model: " + (service.data.cpu_info && service.data.cpu_info.model ? service.data.cpu_info.model : "--")
                                 color: root.subtextColor
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.family: "monospace"
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
@@ -128,7 +128,7 @@ Item {
                                 text: "Arch: " + (service.data.cpu_info && service.data.cpu_info.arch ? service.data.cpu_info.arch : "--")
                                     + "  ·  Cores: " + (service.data.cpu_info && service.data.cpu_info.cores ? service.data.cpu_info.cores : "--")
                                 color: root.subtextColor
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 font.family: "monospace"
                             }
                         }
@@ -138,7 +138,7 @@ Item {
                         Text {
                             text: (service.data.cpu ? (service.data.cpu.util || 0).toFixed(0) : "0") + "%"
                             color: root.textColor
-                            font.pixelSize: 24
+                            font.pixelSize: 25
                             font.bold: true
                             font.family: "monospace"
                         }
@@ -168,7 +168,7 @@ Item {
                         Text {
                             text: "CPU USAGE"
                             color: root.accentColor
-                            font.pixelSize: 10
+                            font.pixelSize: 11
                             font.bold: true
                             font.family: "monospace"
                         }
@@ -206,7 +206,7 @@ Item {
                         Text {
                             text: "Top CPU Processes"
                             color: root.accentColor
-                            font.pixelSize: 10
+                            font.pixelSize: 11
                             font.bold: true
                             font.family: "monospace"
                         }
@@ -233,7 +233,7 @@ Item {
                                         height: parent.height
                                         text: "PID"
                                         color: root.textColor
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         font.bold: true
                                         font.family: "monospace"
                                         verticalAlignment: Text.AlignVCenter
@@ -244,7 +244,7 @@ Item {
                                         height: parent.height
                                         text: "App"
                                         color: root.textColor
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         font.bold: true
                                         font.family: "monospace"
                                         verticalAlignment: Text.AlignVCenter
@@ -255,7 +255,7 @@ Item {
                                         height: parent.height
                                         text: "CPU%"
                                         color: root.textColor
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         font.bold: true
                                         font.family: "monospace"
                                         verticalAlignment: Text.AlignVCenter
@@ -266,7 +266,7 @@ Item {
                                         height: parent.height
                                         text: "RAM%"
                                         color: root.textColor
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         font.bold: true
                                         font.family: "monospace"
                                         verticalAlignment: Text.AlignVCenter
@@ -298,7 +298,7 @@ Item {
                                             height: parent.height
                                             text: modelData.pid
                                             color: root.textColor
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.family: "monospace"
                                             verticalAlignment: Text.AlignVCenter
                                             horizontalAlignment: Text.AlignRight
@@ -308,7 +308,7 @@ Item {
                                             height: parent.height
                                             text: modelData.name
                                             color: root.subtextColor
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.family: "monospace"
                                             verticalAlignment: Text.AlignVCenter
                                             elide: Text.ElideRight
@@ -318,7 +318,7 @@ Item {
                                             height: parent.height
                                             text: (modelData.cpu || 0).toFixed(1) + "%"
                                             color: root.accentColor
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.family: "monospace"
                                             verticalAlignment: Text.AlignVCenter
                                             horizontalAlignment: Text.AlignRight
@@ -328,7 +328,7 @@ Item {
                                             height: parent.height
                                             text: (modelData.mem || 0).toFixed(1) + "%"
                                             color: root.textColor
-                                            font.pixelSize: 9
+                                            font.pixelSize: 10
                                             font.family: "monospace"
                                             verticalAlignment: Text.AlignVCenter
                                             horizontalAlignment: Text.AlignRight
@@ -360,7 +360,7 @@ Item {
                     Text {
                         text: "CPU Usage History"
                         color: root.accentColor
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.bold: true
                         font.family: "monospace"
                     }

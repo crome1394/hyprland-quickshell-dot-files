@@ -1028,7 +1028,7 @@ Item {
                                 color: refreshAllMa.containsMouse ? root.surface : "transparent"
                                 border.width: 1
                                 border.color: Qt.rgba(1, 1, 1, 0.1)
-                                Text { anchors.centerIn: parent; text: "Refresh All"; color: root.accent; font.pixelSize: 11 }
+                                Text { anchors.centerIn: parent; text: "Refresh All"; color: root.accent; font.pixelSize: 12 }
                                 MouseArea {
                                     id: refreshAllMa
                                     anchors.fill: parent
@@ -1061,7 +1061,7 @@ Item {
                             Text {
                                 text: root.wmDistroLabel || "Hyprland"
                                 color: root.accent
-                                font.pixelSize: 12
+                                font.pixelSize: 13
                                 font.bold: true
                             }
 
@@ -1070,7 +1070,7 @@ Item {
                             Text {
                                 text: "SUPER + ?  ·  Tab / Shift+Tab  ·  PgUp / PgDown / ↑ / ↓"
                                 color: root.overlay
-                                font.pixelSize: 12
+                                font.pixelSize: 13
                             }
 
                             Item { Layout.fillWidth: true }
@@ -1132,7 +1132,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: modelData.label
                                         color: (root.currentTab === index) ? root.accent : root.text
-                                        font.pixelSize: 12
+                                        font.pixelSize: 13
                                         font.bold: (root.currentTab === index)
                                     }
 
@@ -1166,7 +1166,7 @@ Item {
                             selectByMouse: true
                             verticalAlignment: TextInput.AlignVCenter
                             color: root.text
-                            font.pixelSize: 13
+                            font.pixelSize: 14
                             selectionColor: Qt.rgba(0.55, 0.70, 0.96, 0.35)
                             selectedTextColor: root.text
                             placeholderText: "Search all tabs..."
@@ -1263,7 +1263,7 @@ Item {
                                                         anchors.centerIn: parent
                                                         text: modelData
                                                         color: keyPillTextColor(modelData)
-                                                        font.pixelSize: 10
+                                                        font.pixelSize: 11
                                                         font.family: "monospace"
                                                         font.bold: true
                                                     }
@@ -1275,7 +1275,7 @@ Item {
                                             Layout.fillWidth: true
                                             text: modelData.action
                                             color: root.text
-                                            font.pixelSize: 12
+                                            font.pixelSize: 13
                                             elide: Text.ElideRight
                                         }
                                     }
@@ -1377,7 +1377,7 @@ Item {
                                         Layout.maximumWidth: root.envVariableColumnWidth(parent.width)
                                         text: "Variable"
                                         color: root.accent
-                                        font.pixelSize: 11
+                                        font.pixelSize: 12
                                         font.bold: true
                                         font.family: "monospace"
                                     }
@@ -1387,7 +1387,7 @@ Item {
                                         Layout.maximumWidth: root.envValueColumnWidth(parent.width)
                                         text: "Value"
                                         color: root.accent
-                                        font.pixelSize: 11
+                                        font.pixelSize: 12
                                         font.bold: true
                                         font.family: "monospace"
                                         horizontalAlignment: Text.AlignRight
@@ -1424,7 +1424,7 @@ Item {
                                                     Layout.fillWidth: true
                                                     text: modelData.key
                                                     color: root.envKeyColor(modelData.key)
-                                                    font.pixelSize: 12
+                                                    font.pixelSize: 13
                                                     font.family: "monospace"
                                                     font.bold: root.envKeyIsHighlight(modelData.key)
                                                     elide: Text.ElideRight
@@ -1443,7 +1443,7 @@ Item {
                                                     visible: modelData.comment && modelData.comment.length > 0
                                                     text: modelData.comment
                                                     color: root.overlay
-                                                    font.pixelSize: 10
+                                                    font.pixelSize: 11
                                                     elide: Text.ElideRight
                                                     Layout.fillWidth: true
                                                 }
@@ -1460,7 +1460,7 @@ Item {
                                                     anchors.fill: parent
                                                     text: modelData.value
                                                     color: root.envValueColor(modelData.key, modelData.value)
-                                                    font.pixelSize: 12
+                                                    font.pixelSize: 13
                                                     font.family: "monospace"
                                                     verticalAlignment: Text.AlignVCenter
                                                     horizontalAlignment: Text.AlignRight
@@ -1613,14 +1613,14 @@ Item {
                                                         Layout.preferredWidth: 210
                                                         text: modelData.label + ":"
                                                         color: root.accent
-                                                        font.pixelSize: 12
+                                                        font.pixelSize: 13
                                                         font.family: "monospace"
                                                     }
                                                     Text {
                                                         Layout.fillWidth: true
                                                         text: modelData.value
                                                         color: root.text
-                                                        font.pixelSize: 12
+                                                        font.pixelSize: 13
                                                         font.family: "monospace"
 
                                                         MouseArea {
@@ -1647,7 +1647,7 @@ Item {
                     Text {
                         text: root.statusText()
                         color: root.overlay
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         property int _mtimeTick: root.fileMtimesVersion
                         property string _filterTick: root.globalFilter
                         property int _fileTick: root.fileContentsVersion
@@ -1668,7 +1668,7 @@ Item {
                         color: copyTabMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
                         border.color: Qt.rgba(1,1,1,0.1)
-                        Text { anchors.centerIn: parent; text: "Copy"; color: root.accent; font.pixelSize: 11 }
+                        Text { anchors.centerIn: parent; text: "Copy"; color: root.accent; font.pixelSize: 12 }
                         MouseArea {
                             id: copyTabMa
                             anchors.fill: parent
@@ -1686,7 +1686,7 @@ Item {
                         color: refSysMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
                         border.color: Qt.rgba(1,1,1,0.1)
-                        Text { anchors.centerIn: parent; text: "Refresh"; color: root.accent; font.pixelSize: 11 }
+                        Text { anchors.centerIn: parent; text: "Refresh"; color: root.accent; font.pixelSize: 12 }
                         MouseArea {
                             id: refSysMa
                             anchors.fill: parent
@@ -1708,7 +1708,7 @@ Item {
                         color: editLuaMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
                         border.color: Qt.rgba(1,1,1,0.1)
-                        Text { anchors.centerIn: parent; text: "Edit"; color: root.accent; font.pixelSize: 11 }
+                        Text { anchors.centerIn: parent; text: "Edit"; color: root.accent; font.pixelSize: 12 }
                         MouseArea {
                             id: editLuaMa
                             anchors.fill: parent
@@ -1727,7 +1727,7 @@ Item {
                         color: refLuaMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
                         border.color: Qt.rgba(1,1,1,0.1)
-                        Text { anchors.centerIn: parent; text: "Reload"; color: root.accent; font.pixelSize: 11 }
+                        Text { anchors.centerIn: parent; text: "Reload"; color: root.accent; font.pixelSize: 12 }
                         MouseArea {
                             id: refLuaMa
                             anchors.fill: parent
