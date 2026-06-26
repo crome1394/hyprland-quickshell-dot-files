@@ -57,6 +57,8 @@ Item {
         { id: "input", label: "Input", file: "input.lua" },
         { id: "windows-and-workspaces", label: "Window & Layer Rules", file: "windows-and-workspaces.lua" },
         { id: "hyprland", label: "Main Config", file: "hyprland.lua", dir: hyprDir },
+        { id: "keybindings", label: "Key Bindings", file: "keybindings.lua" },
+        { id: "environment", label: "Environment", file: "environment-variables.lua" },
         { id: "hypridle", label: "Hypridle", file: "hypridle.conf", dir: hyprDir, batLanguage: "INI" },
         { id: "hyprlock", label: "Hyprlock", file: "hyprlock.conf", dir: hyprDir, batLanguage: "Java Properties" },
         { id: "hyprpaper", label: "Hyprpaper", file: "hyprpaper.conf", dir: hyprDir, batLanguage: "INI" }
@@ -426,9 +428,19 @@ Item {
 
     function focusActiveTabContent() {
         const tab = currentTabInfo
-        if (tab.view === "runtime") runtimeViewer.focusNav()
-        else if (tab.view === "configfiles") configFilesViewer.focusNav()
+        if (tab.view === "runtime") runtimeViewer.focusScroll()
+        else if (tab.view === "configfiles") configFilesViewer.focusScroll()
         else contentPanel.forceActiveFocus()
+    }
+
+    function resetTabScroll(tab) {
+        if (!tab) return
+        if (tab.view === "binds") bindsFlickable.contentY = 0
+        else if (tab.view === "env") envFlickable.contentY = 0
+        else if (tab.view === "system") systemFlickable.contentY = 0
+        else if (tab.view === "runtime") runtimeViewer.resetScroll()
+        else if (tab.view === "configfiles") configFilesViewer.resetScroll()
+        else if (tab.view === "raw") batViewer.resetScroll()
     }
 
     function activateTab(index) {
@@ -450,7 +462,10 @@ Item {
             refreshCurrentTab()
         }
         scrollTabIntoView()
-        Qt.callLater(function() { root.focusActiveTabContent() })
+        Qt.callLater(function() {
+            root.focusActiveTabContent()
+            root.resetTabScroll(tab)
+        })
     }
 
     function nextTab() {
@@ -477,6 +492,7 @@ Item {
         Qt.callLater(function() {
             scrollTabIntoView()
             root.focusActiveTabContent()
+            root.resetTabScroll(tab)
         })
     }
 
@@ -639,6 +655,70 @@ Item {
         return keyPillColor(key) === "#6c7086" ? "#ffffff" : "#000000"
     }
 
+    function envKeyIsHighlight(key) {
+        const k = (key || "").toUpperCase()
+        if (!k) return false
+        const prefixes = [
+            "__GL", "__NV", "__VK", "GBM_", "NVD_", "LIBVA_", "AQ_", "GDK_", "QT_",
+            "SDL_", "XDG_", "MOZ_", "ELECTRON_", "CLUTTER_", "HYPRCURSOR", "XCURSOR"
+        ]
+        for (let i = 0; i < prefixes.length; i++) {
+            if (k.indexOf(prefixes[i]) === 0) return true
+        }
+        return k.indexOf("WAYLAND") !== -1
+    }
+
+    function envKeyColor(key) {
+        return envKeyIsHighlight(key) ? "#94e2d5" : accent
+    }
+
+    function envValueColor(key, value) {
+        const v = (value || "").trim()
+        const lower = v.toLowerCase()
+        const k = (key || "").toUpperCase()
+
+        if (lower === "1" || lower === "true" || lower === "enabled") return "#a6e3a1"
+        if (lower === "0" || lower === "false" || lower === "disabled") return "#fab387"
+
+        if (envKeyIsHighlight(key) || lower.indexOf("nvidia") !== -1 || lower.indexOf("wayland") !== -1
+                || lower.indexOf("opengl") !== -1 || lower === "direct" || lower.indexOf("nvidia_only") !== -1) {
+            return "#89dceb"
+        }
+
+        if (v.indexOf("/") === 0 || v.indexOf("~") === 0 || v.indexOf("/dev/") !== -1) {
+            return "#a6adc8"
+        }
+
+        if (k.indexOf("THEME") !== -1 || k.indexOf("PLATFORMTHEME") !== -1
+                || lower.indexOf("bibata") !== -1 || lower === "qt6ct" || lower === "auto"
+                || lower === "arch-") {
+            return "#cba6f7"
+        }
+
+        if (k === "TERMINAL" || lower.indexOf("hyprland") !== -1) return "#89b4fa"
+
+        return text
+    }
+
+    readonly property int envTableSideMargin: 10
+    readonly property int envTableColSpacing: 12
+
+    function envTableContentWidth(totalWidth) {
+        return Math.max(0, totalWidth - envTableSideMargin * 2)
+    }
+
+    function envVariableColumnWidth(totalWidth) {
+        const usable = envTableContentWidth(totalWidth) - envTableColSpacing
+        const target = Math.round(usable * 0.34)
+        return Math.max(200, Math.min(target, 300))
+    }
+
+    function envValueColumnWidth(totalWidth) {
+        const usable = envTableContentWidth(totalWidth) - envTableColSpacing
+        const remaining = usable - envVariableColumnWidth(totalWidth)
+        return Math.max(220, remaining)
+    }
+
     function refreshSystemInfo() {
         systemProcess.running = false
         systemProcess.running = true
@@ -734,11 +814,31 @@ Item {
         })
     }
 
+    function flickableMaxY(flickable) {
+        if (!flickable) return 0
+        return Math.max(0, flickable.contentHeight - flickable.height)
+    }
+
     function scrollFlickablePage(flickable, direction) {
-        if (!flickable || flickable.contentHeight <= flickable.height) return
+        const maxY = flickableMaxY(flickable)
+        if (maxY <= 0) return
         const page = Math.max(80, flickable.height * 0.85)
-        const maxY = Math.max(0, flickable.contentHeight - flickable.height)
         flickable.contentY = Math.max(0, Math.min(maxY, flickable.contentY + direction * page))
+    }
+
+    function scrollFlickableLine(flickable, direction, step) {
+        const maxY = flickableMaxY(flickable)
+        if (maxY <= 0) return
+        const lineStep = step || 28
+        flickable.contentY = Math.max(0, Math.min(maxY, flickable.contentY + direction * lineStep))
+    }
+
+    function flickableWheelScroll(flickable, deltaY, step) {
+        const maxY = flickableMaxY(flickable)
+        if (maxY <= 0) return
+        const lineStep = step || 42
+        const ticks = deltaY / 120
+        flickable.contentY = Math.max(0, Math.min(maxY, flickable.contentY - ticks * lineStep))
     }
 
     function pageContentScroll(direction) {
@@ -750,6 +850,17 @@ Item {
         else if (tab.view === "configfiles") configFilesViewer.pageScroll(direction)
         else if (tab.view === "runtime") runtimeViewer.pageScroll(direction)
         else if (tab.view === "system") scrollFlickablePage(systemFlickable, direction)
+    }
+
+    function lineContentScroll(direction) {
+        const tab = currentTabInfo
+        if (!tab) return
+        if (tab.view === "binds") scrollFlickableLine(bindsFlickable, direction)
+        else if (tab.view === "env") scrollFlickableLine(envFlickable, direction)
+        else if (tab.view === "raw") batViewer.lineScroll(direction)
+        else if (tab.view === "configfiles") configFilesViewer.lineScroll(direction)
+        else if (tab.view === "runtime") runtimeViewer.lineScroll(direction)
+        else if (tab.view === "system") scrollFlickableLine(systemFlickable, direction)
     }
 
     FloatingWindow {
@@ -791,6 +902,18 @@ Item {
             onActivated: root.pageContentScroll(1)
         }
 
+        Shortcut {
+            sequence: "Up"
+            enabled: inspectorWindow.visible && !globalFilterField.activeFocus
+            onActivated: root.lineContentScroll(-1)
+        }
+
+        Shortcut {
+            sequence: "Down"
+            enabled: inspectorWindow.visible && !globalFilterField.activeFocus
+            onActivated: root.lineContentScroll(1)
+        }
+
         Rectangle {
             id: contentPanel
             anchors.fill: parent
@@ -805,11 +928,11 @@ Item {
                 const tab = root.currentTabInfo
                 if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
                     if (tab.view === "runtime" && runtimeViewer.handleNavKey(event)) {
-                        runtimeViewer.focusNav()
+                        runtimeViewer.focusScroll()
                         return
                     }
                     if (tab.view === "configfiles" && configFilesViewer.handleNavKey(event)) {
-                        configFilesViewer.focusNav()
+                        configFilesViewer.focusScroll()
                         return
                     }
                 }
@@ -819,6 +942,16 @@ Item {
                 } else if (event.key === Qt.Key_PageDown) {
                     root.pageContentScroll(1)
                     event.accepted = true
+                } else if (event.key === Qt.Key_Up) {
+                    root.lineContentScroll(-1)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Down) {
+                    root.lineContentScroll(1)
+                    event.accepted = true
+                } else if (tab.view === "runtime" && runtimeViewer.handleNavKey(event)) {
+                    runtimeViewer.focusScroll()
+                } else if (tab.view === "configfiles" && configFilesViewer.handleNavKey(event)) {
+                    configFilesViewer.focusScroll()
                 }
             }
 
@@ -900,7 +1033,7 @@ Item {
                             Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 14; color: Qt.rgba(1, 1, 1, 0.12) }
 
                             Text {
-                                text: "SUPER + ?  ·  Tab / Shift+Tab  ·  PgUp / PgDown"
+                                text: "SUPER + ?  ·  Tab / Shift+Tab  ·  PgUp / PgDown / ↑ / ↓"
                                 color: root.overlay
                                 font.pixelSize: 12
                             }
@@ -1030,13 +1163,26 @@ Item {
                         id: bindsFlickable
                         visible: root.currentTabInfo.view === "binds"
                         anchors.fill: parent
-                        contentHeight: bindsGrid.implicitHeight + 20
+                        property int _bindsTick: root.fileContentsVersion
+                        property string _filterTick: root.globalFilter
+                        contentHeight: Math.max(bindsGrid.implicitHeight + 20, 1)
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
+                        interactive: true
+
+                        WheelHandler {
+                            onWheel: function(event) {
+                                const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
+                                if (delta === 0) return
+                                root.flickableWheelScroll(bindsFlickable, delta)
+                                event.accepted = true
+                            }
+                        }
 
                         ScrollBar.vertical: ScrollBar {
                             id: bindsScrollBar
-                            policy: bindsFlickable.contentHeight > bindsFlickable.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                            policy: bindsFlickable.contentHeight > bindsFlickable.height + 1
+                                ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                             contentItem: Rectangle {
                                 implicitWidth: 6
                                 radius: 3
@@ -1145,13 +1291,27 @@ Item {
                         id: envFlickable
                         visible: root.currentTabInfo.view === "env"
                         anchors.fill: parent
-                        contentHeight: envCol.implicitHeight + 20
+                        anchors.margins: 10
+                        property int _envTick: root.fileContentsVersion
+                        property string _filterTick: root.globalFilter
+                        contentHeight: Math.max(envCol.implicitHeight, 1)
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
+                        interactive: true
+
+                        WheelHandler {
+                            onWheel: function(event) {
+                                const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
+                                if (delta === 0) return
+                                root.flickableWheelScroll(envFlickable, delta)
+                                event.accepted = true
+                            }
+                        }
 
                         ScrollBar.vertical: ScrollBar {
                             id: envScrollBar
-                            policy: envFlickable.contentHeight > envFlickable.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                            policy: envFlickable.contentHeight > envFlickable.height + 1
+                                ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                             contentItem: Rectangle {
                                 implicitWidth: 6
                                 radius: 3
@@ -1162,45 +1322,124 @@ Item {
                         Column {
                             id: envCol
                             width: parent.width
-                            spacing: 2
+                            spacing: 8
 
-                            Repeater {
-                                model: root.filteredEnv()
-                                delegate: Rectangle {
-                                    width: envCol.width
-                                    height: 24
-                                    radius: 4
-                                    color: ema.containsMouse ? Qt.rgba(1,1,1,0.03) : "transparent"
+                            Rectangle {
+                                width: parent.width
+                                height: 28
+                                radius: 4
+                                color: Qt.rgba(1, 1, 1, 0.03)
 
-                                    MouseArea { id: ema; anchors.fill: parent; hoverEnabled: true }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: root.envTableSideMargin
+                                    anchors.rightMargin: root.envTableSideMargin
+                                    spacing: root.envTableColSpacing
 
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 8
-                                        anchors.rightMargin: 8
-                                        spacing: 12
+                                    Text {
+                                        Layout.preferredWidth: root.envVariableColumnWidth(parent.width)
+                                        Layout.minimumWidth: root.envVariableColumnWidth(parent.width)
+                                        Layout.maximumWidth: root.envVariableColumnWidth(parent.width)
+                                        text: "Variable"
+                                        color: root.accent
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        font.family: "monospace"
+                                    }
+                                    Text {
+                                        Layout.preferredWidth: root.envValueColumnWidth(parent.width)
+                                        Layout.minimumWidth: root.envValueColumnWidth(parent.width)
+                                        Layout.maximumWidth: root.envValueColumnWidth(parent.width)
+                                        text: "Value"
+                                        color: root.accent
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        font.family: "monospace"
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+                                }
+                            }
 
-                                        Text {
-                                            Layout.preferredWidth: 290
-                                            text: modelData.key
-                                            color: root.accent
-                                            font.pixelSize: 12
-                                            font.family: "monospace"
-                                        }
-                                        Text {
-                                            Layout.preferredWidth: 380
-                                            text: modelData.value
-                                            color: root.accent
-                                            font.pixelSize: 12
-                                            font.family: "monospace"
-                                        }
-                                        Text {
-                                            Layout.fillWidth: true
-                                            visible: modelData.comment
-                                            text: modelData.comment
-                                            color: root.text
-                                            font.pixelSize: 12
-                                            elide: Text.ElideRight
+                            Column {
+                                width: parent.width
+                                spacing: 2
+
+                                Repeater {
+                                    model: root.filteredEnv()
+                                    delegate: Rectangle {
+                                        width: envCol.width
+                                        height: Math.max(28, envComment.visible ? 40 : 28)
+                                        radius: 4
+                                        color: keyMa.containsMouse || valueMa.containsMouse
+                                            ? Qt.rgba(1, 1, 1, 0.03) : "transparent"
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: root.envTableSideMargin
+                                            anchors.rightMargin: root.envTableSideMargin
+                                            spacing: root.envTableColSpacing
+
+                                            ColumnLayout {
+                                                Layout.preferredWidth: root.envVariableColumnWidth(envCol.width)
+                                                Layout.minimumWidth: root.envVariableColumnWidth(envCol.width)
+                                                Layout.maximumWidth: root.envVariableColumnWidth(envCol.width)
+                                                spacing: 0
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData.key
+                                                    color: root.envKeyColor(modelData.key)
+                                                    font.pixelSize: 12
+                                                    font.family: "monospace"
+                                                    font.bold: root.envKeyIsHighlight(modelData.key)
+                                                    elide: Text.ElideRight
+
+                                                    MouseArea {
+                                                        id: keyMa
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.copyToClipboard(modelData.key)
+                                                    }
+                                                }
+
+                                                Text {
+                                                    id: envComment
+                                                    visible: modelData.comment && modelData.comment.length > 0
+                                                    text: modelData.comment
+                                                    color: root.overlay
+                                                    font.pixelSize: 10
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                            }
+
+                                            Item {
+                                                Layout.preferredWidth: root.envValueColumnWidth(envCol.width)
+                                                Layout.minimumWidth: root.envValueColumnWidth(envCol.width)
+                                                Layout.maximumWidth: root.envValueColumnWidth(envCol.width)
+                                                Layout.preferredHeight: envComment.visible ? 40 : 28
+                                                clip: true
+
+                                                Text {
+                                                    anchors.fill: parent
+                                                    text: modelData.value
+                                                    color: root.envValueColor(modelData.key, modelData.value)
+                                                    font.pixelSize: 12
+                                                    font.family: "monospace"
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    horizontalAlignment: Text.AlignRight
+                                                    elide: Text.ElideLeft
+                                                }
+
+                                                MouseArea {
+                                                    id: valueMa
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.copyToClipboard(modelData.value)
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1260,13 +1499,27 @@ Item {
                                     id: systemFlickable
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
+                                    Layout.minimumHeight: 0
                                     clip: true
-                                    contentHeight: sysList.implicitHeight
+                                    property int _sysTick: root.systemEntries.length
+                                    property string _filterTick: root.globalFilter
+                                    contentHeight: Math.max(sysList.implicitHeight, 1)
                                     boundsBehavior: Flickable.StopAtBounds
+                                    interactive: true
+
+                                    WheelHandler {
+                                        onWheel: function(event) {
+                                            const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
+                                            if (delta === 0) return
+                                            root.flickableWheelScroll(systemFlickable, delta)
+                                            event.accepted = true
+                                        }
+                                    }
 
                                     ScrollBar.vertical: ScrollBar {
                                         id: systemScrollBar
-                                        policy: systemFlickable.contentHeight > systemFlickable.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                        policy: systemFlickable.contentHeight > systemFlickable.height + 1
+                                            ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                                         contentItem: Rectangle {
                                             implicitWidth: 6
                                             radius: 3
