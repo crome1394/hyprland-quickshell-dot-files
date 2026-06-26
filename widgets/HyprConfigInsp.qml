@@ -11,7 +11,7 @@ import Quickshell.Io as Io
 // Floating overlay for browsing and editing split Hyprland configuration.
 //
 // Features:
-//   - Parsed tabs: Key Bindings, Environment
+//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption)
 //   - Bat-syntax tabs for ~/.config/hypr/config/*.lua and hypr*.conf files
 //   - System info (fastfetch + clickable copy-to-clipboard values + logo)
 //   - Edit (kitty nano) and Reload per config file tab
@@ -50,6 +50,7 @@ Item {
     readonly property var tabs: [
         { label: "Key Bindings", id: "keybindings", file: "keybindings.lua", view: "binds" },
         { label: "Environment", id: "environment", file: "environment-variables.lua", view: "env" },
+        { label: "Runtime Options", id: "runtime-options", file: "", view: "runtime" },
         { label: "Monitors", id: "monitors", file: "monitors.lua", view: "raw" },
         { label: "My Programs", id: "my-programs", file: "my-programs.lua", view: "raw" },
         { label: "Autostarts", id: "autostarts", file: "autostarts.lua", view: "raw" },
@@ -288,6 +289,9 @@ Item {
         } else {
             systemDirty = true
         }
+        if (tab && tab.view === "runtime") {
+            runtimeViewer.refresh()
+        }
     }
 
     function refreshCurrentTab() {
@@ -295,6 +299,10 @@ Item {
         if (!tab) return
         if (tab.view === "system") {
             refreshSystemInfo()
+            return
+        }
+        if (tab.view === "runtime") {
+            runtimeViewer.refresh()
             return
         }
         refreshFileMtime(tab)
@@ -326,6 +334,11 @@ Item {
             return lines + " lines (" + chars + " chars)  ·  " + tab.file + "  ·  bat" + modified + filterNote
         }
         if (tab.view === "system") return filteredSystemEntries().length + " entries  ·  system info" + filterNote
+        if (tab.view === "runtime") {
+            const cat = runtimeViewer.currentCategory()
+            const name = cat ? cat.label : "category"
+            return runtimeViewer.filteredOptions().length + " options  ·  " + name + "  ·  live" + filterNote
+        }
         return ""
     }
 
@@ -352,6 +365,8 @@ Item {
         syncRawSource()
         if (tab.view === "system" && systemDirty) {
             refreshSystemInfo()
+        } else if (tab.view === "runtime") {
+            runtimeViewer.ensureLoaded()
         } else if (tab.file && !fileContents[tab.id]) {
             refreshCurrentTab()
         }
@@ -374,6 +389,7 @@ Item {
         batFilePath = (tab.view === "raw" && tab.file) ? tabPath(tab) : ""
         if (!wmDistroLabel) refreshHeaderInfo()
         if (tab.view === "system" && systemDirty) refreshSystemInfo()
+        else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
         Qt.callLater(function() {
             scrollTabIntoView()
             contentPanel.forceActiveFocus()
@@ -623,6 +639,7 @@ Item {
         if (tab.view === "binds") scrollFlickablePage(bindsFlickable, direction)
         else if (tab.view === "env") scrollFlickablePage(envFlickable, direction)
         else if (tab.view === "raw") batViewer.pageScroll(direction)
+        else if (tab.view === "runtime") runtimeViewer.pageScroll(direction)
         else if (tab.view === "system") scrollFlickablePage(systemFlickable, direction)
     }
 
@@ -966,6 +983,18 @@ Item {
                         }
                     }
 
+                    RuntimeOptionsView {
+                        id: runtimeViewer
+                        visible: root.currentTabInfo.view === "runtime"
+                        anchors.fill: parent
+                        globalFilter: root.globalFilter
+                        textColor: root.text
+                        subtextColor: root.subtext
+                        accentColor: root.accent
+                        surfaceColor: root.surface
+                        overlayColor: root.overlay
+                    }
+
                     // Environment
                     Flickable {
                         id: envFlickable
@@ -1160,12 +1189,13 @@ Item {
                         property int _mtimeTick: root.fileMtimesVersion
                         property string _filterTick: root.globalFilter
                         property int _fileTick: root.fileContentsVersion
+                        property int _runtimeTick: runtimeViewer.optionsVersion
                     }
 
                     Item { Layout.fillWidth: true }
 
                     Rectangle {
-                        visible: root.currentTabInfo.view === "system"
+                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime"
                         width: 68
                         height: 22
                         radius: 5
@@ -1178,7 +1208,10 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.refreshSystemInfo()
+                            onClicked: {
+                                if (root.currentTabInfo.view === "runtime") runtimeViewer.refreshCategory()
+                                else root.refreshSystemInfo()
+                            }
                         }
                     }
 
