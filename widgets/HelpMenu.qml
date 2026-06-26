@@ -13,8 +13,8 @@ import Quickshell.Io as Io
 // (`qs ipc call help toggle`) from hyprland.lua without launching a second qs process.
 //
 // Features:
-//   - Tab 0: Key Bindings (parsed live from hyprland.lua with colored key pills)
-//   - Tab 1: Environment variables (from hl.env() lines)
+//   - Tab 0: Key Bindings (parsed live from config/keybindings.lua with colored key pills)
+//   - Tab 1: Environment variables (from config/environment-variables.lua hl.env() lines)
 //   - Tab 2: System info (fastfetch + clickable copy-to-clipboard values + logo)
 //
 // The component creates its own PanelWindow so it can float centered on screen
@@ -62,8 +62,12 @@ Item {
     property int currentTab: 0
     property string bindFilter: ""
 
-    // Raw + parsed data from hyprland.lua
-    property string _rawLuaText: ""
+    readonly property string keybindingsPath: "/home/crome/.config/hypr/config/keybindings.lua"
+    readonly property string envVarsPath: "/home/crome/.config/hypr/config/environment-variables.lua"
+
+    // Raw + parsed data from split Hyprland config files
+    property string _rawKeybindingsText: ""
+    property string _rawEnvText: ""
     property var _parsedBinds: []
     property var _parsedEnv: []
 
@@ -89,19 +93,37 @@ Item {
     }
 
     function refreshLua() {
-        hyprCat.running = false
-        hyprCat.command = ["cat", "/home/crome/.config/hypr/hyprland.lua"]
-        hyprCat.running = true
+        keybindingsCat.running = false
+        envVarsCat.running = false
+        keybindingsCat.running = true
+        envVarsCat.running = true
+    }
+
+    function editCurrentConfigFile() {
+        const path = currentTab === 1 ? envVarsPath : keybindingsPath
+        Quickshell.execDetached(["kitty", "-e", "nano", path])
     }
 
     Io.Process {
-        id: hyprCat
+        id: keybindingsCat
         running: false
         stdout: Io.StdioCollector {
             onTextChanged: {
-                if (text && text.length > 50) {
-                    _rawLuaText = text
+                if (text && text.length > 0) {
+                    _rawKeybindingsText = text
                     _parsedBinds = parseKeybinds(text)
+                }
+            }
+        }
+    }
+
+    Io.Process {
+        id: envVarsCat
+        running: false
+        stdout: Io.StdioCollector {
+            onTextChanged: {
+                if (text && text.length > 0) {
+                    _rawEnvText = text
                     _parsedEnv = parseEnvVars(text)
                 }
             }
@@ -109,16 +131,14 @@ Item {
     }
 
     Component.onCompleted: {
+        keybindingsCat.command = ["cat", root.keybindingsPath]
+        envVarsCat.command = ["cat", root.envVarsPath]
         refreshLua()
     }
 
     // -------------------------------------------------------------------------
-    // Parsing Functions for hyprland.lua
-    // -------------------------------------------------------------------------
-
-    // -------------------------------------------------------------------------
     // Data Parsing
-    // These functions turn the user's hyprland.lua into nice structured data
+    // These functions turn the split Hyprland config files into structured data
     // for the three tabs in the HelpMenu overlay.
     // -------------------------------------------------------------------------
 
@@ -166,7 +186,7 @@ Item {
         return out
     }
 
-    // Parses hl.env() lines (both new --# style and older -- style comments).
+    // Parses hl.env() lines (quoted values, variable references, and comments).
     function parseEnvVars(text) {
         if (!text) return []
         const lines = text.split("\n")
@@ -176,8 +196,11 @@ Item {
             let line = originalLine.trim()
             if (!line.includes("hl.env(")) continue
             if (line.startsWith("--hl.env") || line.startsWith("----hl.env")) continue
-            const m = line.match(/^hl\.env\(\s*["']([^"']+)["']\s*,\s*["']([^"']*)["']\s*\)/)
+            const m = line.match(/^hl\.env\(\s*["']([^"']+)["']\s*,\s*(.+?)\s*\)/)
             if (!m) continue
+            let value = m[2].trim()
+            const quoted = value.match(/^["']([^"']*)["']$/)
+            if (quoted) value = quoted[1]
             let comment = ""
             const hashMatch = originalLine.match(/--#\s*(.+)$/)
             if (hashMatch) comment = hashMatch[1].trim()
@@ -185,7 +208,7 @@ Item {
                 const oldMatch = originalLine.match(/--\s*(.+)$/)
                 if (oldMatch) comment = oldMatch[1].trim()
             }
-            out.push({ key: m[1], value: m[2], comment: comment })
+            out.push({ key: m[1], value: value, comment: comment })
         }
         return out
     }
@@ -320,7 +343,7 @@ Item {
                     Layout.fillWidth: true
                     Text { text: "Hyprland Help"; color: root.text; font.pixelSize: 18; font.bold: true }
                     Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 18; color: Qt.rgba(1,1,1,0.12) }
-                    Text { text: "SUPER + ?  ·  live from hyprland.lua"; color: root.overlay; font.pixelSize: 12 }
+                    Text { text: "SUPER + ?  ·  live from ~/.config/hypr/config"; color: root.overlay; font.pixelSize: 12 }
                     Item { Layout.fillWidth: true }
                     Rectangle {
                         width: 28; height: 28; radius: 6
@@ -578,8 +601,8 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
-                        text: root.currentTab === 0 ? (root.filteredBinds().length + " bindings  ·  open menu or click Reload file")
-                            : root.currentTab === 1 ? (root._parsedEnv.length + " environment variables")
+                        text: root.currentTab === 0 ? (root.filteredBinds().length + " bindings  ·  from keybindings.lua")
+                            : root.currentTab === 1 ? (root._parsedEnv.length + " environment variables  ·  from environment-variables.lua")
                             : "system info"
                         color: root.overlay; font.pixelSize: 11
                     }
@@ -593,7 +616,19 @@ Item {
                         MouseArea { id: refMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.refreshSystemInfo() }
                     }
                     Rectangle {
-                        visible: root.currentTab === 0
+                        visible: root.currentTab === 0 || root.currentTab === 1
+                        width: 40; height: 22; radius: 5
+                        color: editLuaMa.containsMouse ? root.surface : "transparent"
+                        border.width: 1; border.color: Qt.rgba(1,1,1,0.1)
+                        Text { anchors.centerIn: parent; text: "Edit"; color: root.accent; font.pixelSize: 11 }
+                        MouseArea {
+                            id: editLuaMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: root.editCurrentConfigFile()
+                        }
+                    }
+                    Rectangle {
+                        visible: root.currentTab === 0 || root.currentTab === 1
+                        Layout.leftMargin: 6
                         width: 68; height: 22; radius: 5
                         color: refLuaMa.containsMouse ? root.surface : "transparent"
                         border.width: 1; border.color: Qt.rgba(1,1,1,0.1)
