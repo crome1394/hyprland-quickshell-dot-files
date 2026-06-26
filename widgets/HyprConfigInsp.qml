@@ -11,7 +11,7 @@ import Quickshell.Io as Io
 // Floating overlay for browsing and editing split Hyprland configuration.
 //
 // Features:
-//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU/GPU/Memory (sysmon), Logs, Services
+//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU/GPU/Memory/Temperature (sysmon), Logs, Services
 //   - Config Files tab (dropdown + bat) for ~/.config/hypr/config/*.lua and hypr*.conf
 //   - System info (fastfetch + clickable copy-to-clipboard values + logo)
 //   - Edit (kitty nano) and Reload per config file tab
@@ -77,6 +77,7 @@ Item {
         { label: "CPU", id: "cpu", file: "", view: "cpu" },
         { label: "GPU", id: "gpu", file: "", view: "gpu" },
         { label: "Memory", id: "memory", file: "", view: "memory" },
+        { label: "Temperature", id: "temperature", file: "", view: "temperature" },
         { label: "Logs", id: "logs", file: "", view: "logs" },
         { label: "Services", id: "services", file: "", view: "services" },
         { label: "System Info", id: "system", file: "", view: "system" }
@@ -189,7 +190,7 @@ Item {
         const entries = []
         for (let i = 0; i < tabs.length; i++) {
             const tab = tabs[i]
-            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "logs" || tab.view === "services") continue
+            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature" || tab.view === "logs" || tab.view === "services") continue
             if (tab.file) entries.push(tab)
         }
         for (let j = 0; j < configFileEntries.length; j++) {
@@ -352,7 +353,7 @@ Item {
         if (tab && tab.view === "runtime") {
             runtimeViewer.refresh()
         }
-        if (tab && (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory")) {
+        if (tab && (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature")) {
             sysMonService.refresh()
         }
         if (tab && tab.view === "logs") {
@@ -374,7 +375,7 @@ Item {
             runtimeViewer.refresh()
             return
         }
-        if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory") {
+        if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") {
             sysMonService.refresh()
             return
         }
@@ -454,6 +455,11 @@ Item {
             const totalGiB = mem ? (mem.ram_total / 1024).toFixed(1) : "0"
             return pct + "% RAM  ·  " + usedGiB + "/" + totalGiB + " GiB  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
         }
+        if (tab.view === "temperature") {
+            const cpuT = sysMonService.data.cpu ? (sysMonService.data.cpu.temp || 0).toFixed(0) : "0"
+            const gpuT = sysMonService.data.gpu ? (sysMonService.data.gpu.temp || 0).toFixed(0) : "0"
+            return "CPU " + cpuT + "°C  ·  GPU " + gpuT + "°C  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
+        }
         if (tab.view === "logs") {
             const lines = logsViewer.filteredLines().length
             const live = logsViewer.liveTail ? "live 3s" : "manual"
@@ -512,6 +518,7 @@ Item {
         else if (tab.view === "cpu") cpuViewer.resetScroll()
         else if (tab.view === "gpu") gpuViewer.resetScroll()
         else if (tab.view === "memory") memoryViewer.resetScroll()
+        else if (tab.view === "temperature") tempViewer.resetScroll()
         else if (tab.view === "logs") logsViewer.resetScroll()
         else if (tab.view === "services") servicesViewer.resetScroll()
         else if (tab.view === "runtime") runtimeViewer.resetScroll()
@@ -530,7 +537,7 @@ Item {
             refreshSystemInfo()
         } else if (tab.view === "runtime") {
             runtimeViewer.ensureLoaded()
-        } else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory") {
+        } else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") {
             sysMonService.refresh()
         } else if (tab.view === "logs") {
             logsViewer.refresh(false)
@@ -566,7 +573,7 @@ Item {
         if (!wmDistroLabel) refreshHeaderInfo()
         if (tab.view === "system" && systemDirty) refreshSystemInfo()
         else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
-        else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory") sysMonService.refresh()
+        else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") sysMonService.refresh()
         else if (tab.view === "logs") logsViewer.refresh(false)
         else if (tab.view === "services") servicesViewer.refresh()
         else if (tab.view === "configfiles") {
@@ -942,6 +949,7 @@ Item {
         else if (tab.view === "cpu") cpuViewer.pageScroll(direction)
         else if (tab.view === "gpu") gpuViewer.pageScroll(direction)
         else if (tab.view === "memory") memoryViewer.pageScroll(direction)
+        else if (tab.view === "temperature") tempViewer.pageScroll(direction)
         else if (tab.view === "logs") logsViewer.pageScroll(direction)
         else if (tab.view === "services") servicesViewer.pageScroll(direction)
         else if (tab.view === "system") scrollFlickablePage(systemFlickable, direction)
@@ -958,6 +966,7 @@ Item {
         else if (tab.view === "cpu") cpuViewer.lineScroll(direction)
         else if (tab.view === "gpu") gpuViewer.lineScroll(direction)
         else if (tab.view === "memory") memoryViewer.lineScroll(direction)
+        else if (tab.view === "temperature") tempViewer.lineScroll(direction)
         else if (tab.view === "logs") logsViewer.lineScroll(direction)
         else if (tab.view === "services") servicesViewer.lineScroll(direction)
         else if (tab.view === "system") scrollFlickableLine(systemFlickable, direction)
@@ -1610,6 +1619,22 @@ Item {
                         gaugeHighColor: th.gaugeHigh
                     }
 
+                    TemperatureMonitorView {
+                        id: tempViewer
+                        visible: root.currentTabInfo.view === "temperature"
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        service: sysMonService
+                        textColor: root.text
+                        subtextColor: root.subtext
+                        accentColor: root.accent
+                        surfaceColor: root.surface
+                        overlayColor: root.overlay
+                        gaugeLowColor: th.gaugeLow
+                        gaugeMidColor: th.gaugeMid
+                        gaugeHighColor: th.gaugeHigh
+                    }
+
                     LogsView {
                         id: logsViewer
                         visible: root.currentTabInfo.view === "logs"
@@ -1774,6 +1799,8 @@ Item {
                         property int _cpuTick: sysMonService.cpuHistory.length
                         property int _gpuTick: sysMonService.gpuHistory.length
                         property int _ramTick: sysMonService.ramHistory.length
+                        property int _cpuTempTick: sysMonService.cpuTempHistory.length
+                        property int _gpuTempTick: sysMonService.gpuTempHistory.length
                         property var _cpuData: sysMonService.data
                         property int _logsTick: logsViewer.contentVersion
                         property string _logsSource: logsViewer.selectedSourceId
@@ -1803,7 +1830,7 @@ Item {
                     }
 
                     Rectangle {
-                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "logs" || root.currentTabInfo.view === "services"
+                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "temperature" || root.currentTabInfo.view === "logs" || root.currentTabInfo.view === "services"
                         width: 68
                         height: 22
                         radius: 5
@@ -1818,7 +1845,7 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (root.currentTabInfo.view === "runtime") runtimeViewer.refreshCategory()
-                                else if (root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory") sysMonService.refresh()
+                                else if (root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "temperature") sysMonService.refresh()
                                 else if (root.currentTabInfo.view === "logs") logsViewer.refresh(true)
                                 else if (root.currentTabInfo.view === "services") servicesViewer.refresh()
                                 else root.refreshSystemInfo()

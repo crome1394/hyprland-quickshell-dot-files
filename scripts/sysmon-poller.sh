@@ -141,6 +141,25 @@ fan_speeds=$(jq -r '
   | join(",")
 ' <<<"$sensors_json" 2>/dev/null || echo '')
 
+# Other temperature sensors (RAM, WiFi PHY, NIC, etc.) — exclude CPU k10temp and NVMe chips
+extra_temps=$(jq -r '
+  [
+    to_entries[] as $chip
+    | $chip.value
+    | to_entries[]
+    | select(.value | type == "object")
+    | select(.value | has("temp1_input") or has("temp2_input") or has("temp3_input") or has("temp4_input"))
+    | {
+        chip: $chip.key,
+        label: .key,
+        temp_c: (.value.temp1_input // .value.temp2_input // .value.temp3_input // .value.temp4_input // 0)
+      }
+  ]
+  | map(select(.temp_c > 0))
+  | map(select(.chip | test("^k10temp") | not))
+  | map(select(.chip | test("^nvme-pci-") | not))
+' <<<"$sensors_json" 2>/dev/null || echo '[]')
+
 # ---------- Power Consumption (best effort) ----------
 # Try common RAPL / powercap paths (works on many AMD + Intel systems)
 package_power_w=0
@@ -474,6 +493,7 @@ jq -cn \
   --argjson root_total "${root_total:-0}" \
   --argjson root_pct "${root_pct:-0}" \
   --argjson nvme_sensors "$nvme_sensors" \
+  --argjson extra_temps "$extra_temps" \
   --arg fans_str "${fan_speeds:-}" \
   --argjson top_procs "$top_procs" \
   --argjson top_mem "$top_mem" \
@@ -512,7 +532,7 @@ jq -cn \
       read_rate: $disk_read_rate, write_rate: $disk_write_rate,
       root_used: $root_used, root_total: $root_total, root_pct: $root_pct
     },
-    sensors: { nvme: $nvme_sensors, fans: $fans_str },
+    sensors: { nvme: $nvme_sensors, extra: $extra_temps, fans: $fans_str },
     top_processes: $top_procs,
     top_memory: $top_mem,
     top_gpu: $top_gpu,

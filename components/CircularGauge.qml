@@ -35,6 +35,7 @@ Item {
     property real value: 0
     property string label: ""
     property string subValue: ""
+    property string unitLabel: "%"
     property int size: 92
     property int strokeWidth: 9
 
@@ -111,7 +112,7 @@ Item {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: root.clamped.toFixed(0) + "%"
+            text: root.clamped.toFixed(0) + root.unitLabel
             font.pixelSize: root.size * 0.30
             font.bold: true
             color: root.gaugeColor

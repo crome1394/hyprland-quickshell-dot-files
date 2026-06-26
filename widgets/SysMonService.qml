@@ -70,6 +70,8 @@ Item {
     property var diskReadHistory: []
     property var diskWriteHistory: []
     property var ramHistory: []
+    property var cpuTempHistory: []
+    property var gpuTempHistory: []
 
     // === Section: History management (pure function, called from parser) ===
     // Appends current sample and drops oldest when > 48 points.
@@ -116,6 +118,17 @@ Item {
         rh.push(data.memory ? (data.memory.ram_pct || 0) : 0)
         if (rh.length > 48) rh.shift()
         ramHistory = rh
+
+        // CPU / GPU temperature (°C)
+        let cth = cpuTempHistory.slice()
+        cth.push(data.cpu ? (data.cpu.temp || 0) : 0)
+        if (cth.length > 48) cth.shift()
+        cpuTempHistory = cth
+
+        let gth = gpuTempHistory.slice()
+        gth.push(data.gpu ? (data.gpu.temp || 0) : 0)
+        if (gth.length > 48) gth.shift()
+        gpuTempHistory = gth
     }
 
     // === Section: Polling engine (Process + Timer) ===
