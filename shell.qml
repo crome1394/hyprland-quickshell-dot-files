@@ -6,10 +6,10 @@
 //   - widgets/*.qml      (self-contained pills and menus)
 //   - components/*.qml   (reusable pieces like VolumeBar, CavaVisualizer)
 //   - Theme.qml          (colors, spacing, and metrics)
-//   - widgets/HelpMenu.qml (centered help overlay)
+//   - widgets/HyprConfigInsp.qml (Hyprland Config Inspector overlay)
 //
 // IPC:
-//   - qs ipc call help toggle
+//   - qs ipc call hyprConfigInsp toggle
 //   - qs ipc call shell setShowMediaWidget true
 //   - qs ipc call shell setShowStatsWidget false
 //   - qs ipc call shell toggleShowMediaWidget
@@ -526,12 +526,12 @@ ShellRoot {
             onExited: (code) => console.log("swaync subscribe exited with code", code)
         }
 
-        HelpMenu { id: helpMenu; bar: bar }
+        HyprConfigInsp { id: hyprConfigInsp; bar: bar }
 
         Io.IpcHandler {
-            target: "help"
+            target: "hyprConfigInsp"
             function toggle() {
-                if (helpMenu && helpMenu.toggle) helpMenu.toggle()
+                if (hyprConfigInsp && hyprConfigInsp.toggle) hyprConfigInsp.toggle()
             }
         }
 
