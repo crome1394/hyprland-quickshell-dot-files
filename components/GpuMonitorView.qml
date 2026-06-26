@@ -21,6 +21,27 @@ Item {
     readonly property int cardMargin: 10
     readonly property int processRowHeight: 15
     readonly property int processHeaderHeight: 17
+    readonly property int sectionSpacing: 8
+    readonly property int tblSpacing: 4
+    readonly property int colPidW: 34
+    readonly property int colTypeW: 36
+    readonly property int colVramW: 52
+
+    function gpuTableFixedWidth() {
+        return colPidW + colTypeW + colVramW + tblSpacing * 3
+    }
+
+    function gpuAppColWidth(totalWidth) {
+        return Math.max(64, totalWidth - gpuTableFixedWidth())
+    }
+
+    function formatGpuType(type) {
+        if (!type || type.length === 0) return "--"
+        return type
+    }
+
+    readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
+    readonly property int middleHeight: Math.max(124, Math.min(260, Math.round(height * 0.34)))
 
     readonly property var gpuProcessRows: {
         const tick = service && service.data ? service.data.timestamp : 0
@@ -28,68 +49,97 @@ Item {
         return service.data.top_gpu.slice(0, 8)
     }
 
-    function resetScroll() {
-        contentFlickable.contentY = 0
-    }
+    function resetScroll() {}
 
-    function pageScroll(direction) {
-        const maxY = Math.max(0, contentFlickable.contentHeight - contentFlickable.height)
-        if (maxY <= 0) return
-        const page = Math.max(80, contentFlickable.height * 0.85)
-        contentFlickable.contentY = Math.max(0, Math.min(maxY, contentFlickable.contentY + direction * page))
-    }
+    function pageScroll(direction) {}
 
-    function lineScroll(direction) {
-        const maxY = Math.max(0, contentFlickable.contentHeight - contentFlickable.height)
-        if (maxY <= 0) return
-        const step = 28
-        contentFlickable.contentY = Math.max(0, Math.min(maxY, contentFlickable.contentY + direction * step))
-    }
+    function lineScroll(direction) {}
 
-    Flickable {
-        id: contentFlickable
+    ColumnLayout {
         anchors.fill: parent
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        interactive: true
-        contentWidth: width
+        spacing: root.sectionSpacing
+
         property int _gpuTick: service ? service.gpuHistory.length : 0
         property var _dataBind: service ? service.data : ({})
-        contentHeight: gpuColumn.implicitHeight
 
-        WheelHandler {
-            onWheel: function(event) {
-                const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
-                if (delta === 0) return
-                const maxY = Math.max(0, contentFlickable.contentHeight - contentFlickable.height)
-                if (maxY <= 0) return
-                const step = 42
-                const ticks = delta / 120
-                contentFlickable.contentY = Math.max(0, Math.min(maxY, contentFlickable.contentY - ticks * step))
-                event.accepted = true
+        // GPU Summary
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.summaryHeight
+            Layout.minimumHeight: 64
+            radius: root.cardRadius
+            color: root.surfaceColor
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: root.cardMargin
+                spacing: 4
+
+                Text {
+                    text: "GPU SUMMARY"
+                    color: root.accentColor
+                    font.pixelSize: 12
+                    font.bold: true
+                    font.family: "monospace"
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    ColumnLayout {
+                        spacing: 1
+                        Text {
+                            text: "Model: " + (service.data.gpu_info && service.data.gpu_info.name ? service.data.gpu_info.name : "--")
+                            color: root.subtextColor
+                            font.pixelSize: 11
+                            font.family: "monospace"
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                        Text {
+                            text: "VRAM: " + (service.data.gpu && service.data.gpu.vram_total
+                                ? ((service.data.gpu.vram_total || 0) / 1024).toFixed(0) + " GB"
+                                : "--")
+                            color: root.subtextColor
+                            font.pixelSize: 11
+                            font.family: "monospace"
+                        }
+                        Text {
+                            text: "Driver: " + (service.data.gpu_info && service.data.gpu_info.driver ? service.data.gpu_info.driver : "--")
+                            color: root.subtextColor
+                            font.pixelSize: 11
+                            font.family: "monospace"
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Text {
+                        text: (service.data.gpu ? (service.data.gpu.util || 0).toFixed(0) : "0") + "%"
+                        color: root.textColor
+                        font.pixelSize: 25
+                        font.bold: true
+                        font.family: "monospace"
+                    }
+                }
             }
         }
 
-        ScrollBar.vertical: ScrollBar {
-            id: gpuScrollBar
-            policy: contentFlickable.contentHeight > contentFlickable.height + 1
-                ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-            contentItem: Rectangle {
-                implicitWidth: 6
-                radius: 3
-                color: gpuScrollBar.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
-            }
-        }
+        // Gauge + Top GPU Processes
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.middleHeight
+            Layout.minimumHeight: 116
+            spacing: root.sectionSpacing
 
-        ColumnLayout {
-            id: gpuColumn
-            width: parent.width
-            spacing: 8
-
-            // GPU Summary
             Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 78
+                Layout.preferredWidth: Math.max(150, Math.min(200, root.width * 0.22))
+                Layout.fillHeight: true
                 radius: root.cardRadius
                 color: root.surfaceColor
                 border.width: 1
@@ -98,131 +148,68 @@ Item {
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: root.cardMargin
-                    spacing: 4
+                    spacing: 2
 
                     Text {
-                        text: "GPU SUMMARY"
+                        text: "GPU USAGE"
                         color: root.accentColor
-                        font.pixelSize: 12
+                        font.pixelSize: 11
                         font.bold: true
                         font.family: "monospace"
                     }
 
-                    RowLayout {
+                    Item {
                         Layout.fillWidth: true
-                        spacing: 10
+                        Layout.fillHeight: true
+                        property int gaugeSz: Math.max(56, Math.min(140, Math.min(width, height) * 0.88))
 
-                        ColumnLayout {
-                            spacing: 1
-                            Text {
-                                text: "Model: " + (service.data.gpu_info && service.data.gpu_info.name ? service.data.gpu_info.name : "--")
-                                color: root.subtextColor
-                                font.pixelSize: 11
-                                font.family: "monospace"
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            Text {
-                                text: "VRAM: " + (service.data.gpu && service.data.gpu.vram_total
-                                    ? ((service.data.gpu.vram_total || 0) / 1024).toFixed(0) + " GB"
-                                    : "--")
-                                color: root.subtextColor
-                                font.pixelSize: 11
-                                font.family: "monospace"
-                            }
-                            Text {
-                                text: "Driver: " + (service.data.gpu_info && service.data.gpu_info.driver ? service.data.gpu_info.driver : "--")
-                                color: root.subtextColor
-                                font.pixelSize: 11
-                                font.family: "monospace"
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Text {
-                            text: (service.data.gpu ? (service.data.gpu.util || 0).toFixed(0) : "0") + "%"
-                            color: root.textColor
-                            font.pixelSize: 25
-                            font.bold: true
-                            font.family: "monospace"
+                        CircularGauge {
+                            anchors.centerIn: parent
+                            size: parent.gaugeSz
+                            strokeWidth: Math.max(6, parent.gaugeSz / 10)
+                            value: service.data.gpu ? service.data.gpu.util : 0
+                            subValue: service.data.gpu ? (service.data.gpu.temp || 0).toFixed(0) + "°C" : ""
+                            lowColor: root.gaugeLowColor
+                            midColor: root.gaugeMidColor
+                            highColor: root.gaugeHighColor
                         }
                     }
                 }
             }
 
-            // Gauge + Top GPU Processes
-            RowLayout {
+            Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 168
-                spacing: 8
+                Layout.fillHeight: true
+                radius: root.cardRadius
+                color: root.surfaceColor
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.08)
+                clip: true
 
-                Rectangle {
-                    Layout.preferredWidth: 170
-                    Layout.fillHeight: true
-                    radius: root.cardRadius
-                    color: root.surfaceColor
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: root.cardMargin
+                    spacing: 4
 
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: root.cardMargin
-                        spacing: 2
-
-                        Text {
-                            text: "GPU USAGE"
-                            color: root.accentColor
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: "monospace"
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            property int gaugeSz: Math.max(72, Math.min(112, height * 0.88))
-
-                            CircularGauge {
-                                anchors.centerIn: parent
-                                size: parent.gaugeSz
-                                strokeWidth: Math.max(6, parent.gaugeSz / 10)
-                                value: service.data.gpu ? service.data.gpu.util : 0
-                                subValue: service.data.gpu ? (service.data.gpu.temp || 0).toFixed(0) + "°C" : ""
-                                lowColor: root.gaugeLowColor
-                                midColor: root.gaugeMidColor
-                                highColor: root.gaugeHighColor
-                            }
-                        }
+                    Text {
+                        text: "Top GPU Processes"
+                        color: root.accentColor
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.family: "monospace"
                     }
-                }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    radius: root.cardRadius
-                    color: root.surfaceColor
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
-                    clip: true
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: root.cardMargin
-                        spacing: 4
-
-                        Text {
-                            text: "Top GPU Processes"
-                            color: root.accentColor
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: "monospace"
-                        }
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        contentWidth: width
+                        contentHeight: gpuProcessTable.implicitHeight
 
                         Column {
-                            Layout.fillWidth: true
+                            id: gpuProcessTable
+                            width: parent.width
                             spacing: 0
 
                             Rectangle {
@@ -235,41 +222,12 @@ Item {
                                     anchors.fill: parent
                                     anchors.leftMargin: 4
                                     anchors.rightMargin: 4
-                                    spacing: 6
+                                    spacing: root.tblSpacing
 
-                                    Text {
-                                        width: 40
-                                        height: parent.height
-                                        text: "PID"
-                                        color: root.textColor
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        font.family: "monospace"
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: Text.AlignRight
-                                    }
-                                    Text {
-                                        width: parent.width - 40 - 56 - 12
-                                        height: parent.height
-                                        text: "App"
-                                        color: root.textColor
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        font.family: "monospace"
-                                        verticalAlignment: Text.AlignVCenter
-                                        elide: Text.ElideRight
-                                    }
-                                    Text {
-                                        width: 56
-                                        height: parent.height
-                                        text: "VRAM"
-                                        color: root.textColor
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        font.family: "monospace"
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: Text.AlignRight
-                                    }
+                                    Text { width: root.colPidW; height: parent.height; text: "PID"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
+                                    Text { width: root.gpuAppColWidth(parent.width - 8); height: parent.height; text: "App"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                                    Text { width: root.colTypeW; height: parent.height; text: "Type"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
+                                    Text { width: root.colVramW; height: parent.height; text: "VRAM"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                                 }
                             }
 
@@ -299,86 +257,60 @@ Item {
                                         anchors.fill: parent
                                         anchors.leftMargin: 4
                                         anchors.rightMargin: 4
-                                        spacing: 6
+                                        spacing: root.tblSpacing
 
-                                        Text {
-                                            width: 40
-                                            height: parent.height
-                                            text: String(modelData.pid)
-                                            color: root.textColor
-                                            font.pixelSize: 10
-                                            font.family: "monospace"
-                                            verticalAlignment: Text.AlignVCenter
-                                            horizontalAlignment: Text.AlignRight
-                                        }
-                                        Text {
-                                            width: parent.width - 40 - 56
-                                            height: parent.height
-                                            text: modelData.name
-                                            color: root.subtextColor
-                                            font.pixelSize: 10
-                                            font.family: "monospace"
-                                            verticalAlignment: Text.AlignVCenter
-                                            elide: Text.ElideRight
-                                        }
-                                        Text {
-                                            width: 56
-                                            height: parent.height
-                                            text: (modelData.vram || 0) + " MiB"
-                                            color: root.accentColor
-                                            font.pixelSize: 10
-                                            font.family: "monospace"
-                                            verticalAlignment: Text.AlignVCenter
-                                            horizontalAlignment: Text.AlignRight
-                                        }
+                                        Text { width: root.colPidW; height: parent.height; text: String(modelData.pid); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
+                                        Text { width: root.gpuAppColWidth(parent.width - 8); height: parent.height; text: modelData.name; color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                                        Text { width: root.colTypeW; height: parent.height; text: root.formatGpuType(modelData.type); color: root.overlayColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
+                                        Text { width: root.colVramW; height: parent.height; text: (modelData.vram || 0) + " MiB"; color: root.accentColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                                     }
                                 }
                             }
                         }
-
-                        Item { Layout.fillHeight: true }
                     }
                 }
             }
+        }
 
-            // GPU Usage History
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 132
-                radius: root.cardRadius
-                color: root.surfaceColor
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.08)
+        // GPU Usage History — fills remaining vertical space
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 88
+            radius: root.cardRadius
+            color: root.surfaceColor
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: root.cardMargin
-                    spacing: 4
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: root.cardMargin
+                spacing: 4
 
-                    Text {
-                        text: "GPU Usage History"
-                        color: root.accentColor
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.family: "monospace"
-                    }
+                Text {
+                    text: "GPU Usage History"
+                    color: root.accentColor
+                    font.pixelSize: 11
+                    font.bold: true
+                    font.family: "monospace"
+                }
 
-                    Sparkline {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        history: service.gpuHistory
-                        fixedRange: true
-                        minValue: 0
-                        maxValue: 100
-                        drawGrid: true
-                        gridStep: 10
-                        chartTitle: ""
-                        titleColor: root.textColor
-                        lineColor: root.gaugeLowColor
-                        fillColor: Qt.rgba(0.65, 0.89, 0.63, 0.22)
-                        leftPadding: 30
-                        lineWidth: 1.2
-                    }
+                Sparkline {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 48
+                    history: service.gpuHistory
+                    fixedRange: true
+                    minValue: 0
+                    maxValue: 100
+                    drawGrid: true
+                    gridStep: 10
+                    chartTitle: ""
+                    titleColor: root.textColor
+                    lineColor: root.gaugeLowColor
+                    fillColor: Qt.rgba(0.65, 0.89, 0.63, 0.22)
+                    leftPadding: 30
+                    lineWidth: 1.2
                 }
             }
         }

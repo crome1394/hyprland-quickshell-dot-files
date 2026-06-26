@@ -367,21 +367,42 @@ psd_json=$(jq -cn \
     }' 2>/dev/null || echo '{"profile_total_mb":0,"overlay_used_mb":0,"overlay_total_gb":5.5,"profiles":[]}')
 
 # ---------- Top Processes (CPU) ----------
-top_procs=$(ps -eo pid,comm,%cpu,%mem,rss --sort=-%cpu 2>/dev/null | awk '
-  NR>1 && $3 > 0.2 {
-    printf "{\"pid\":%d,\"name\":\"%s\",\"cpu\":%.1f,\"mem\":%.1f,\"rss\":%d}\n", $1, $2, $3, $4, $5
+top_procs=$(ps -eo pid,user,comm,%cpu,%mem,rss,nlwp --sort=-%cpu 2>/dev/null | awk '
+  NR>1 && $4 > 0.2 {
+    printf "{\"pid\":%d,\"name\":\"%s\",\"user\":\"%s\",\"cpu\":%.1f,\"mem\":%.1f,\"rss\":%d,\"threads\":%d}\n", $1, $3, $2, $4, $5, $6, $7
   }
 ' | head -8 | jq -s 'map(select(.name != ""))' 2>/dev/null || echo '[]')
 
 # ---------- Top Processes (by Memory) ----------
-top_mem=$(ps -eo pid,comm,%cpu,%mem,rss --sort=-%mem 2>/dev/null | awk '
-  NR>1 && $4 > 0.1 {
-    printf "{\"pid\":%d,\"name\":\"%s\",\"cpu\":%.1f,\"mem\":%.1f,\"rss\":%d}\n", $1, $2, $3, $4, $5
+top_mem=$(ps -eo pid,user,comm,%cpu,%mem,rss,nlwp --sort=-%mem 2>/dev/null | awk '
+  NR>1 && $5 > 0.1 {
+    printf "{\"pid\":%d,\"name\":\"%s\",\"user\":\"%s\",\"cpu\":%.1f,\"mem\":%.1f,\"rss\":%d,\"threads\":%d}\n", $1, $3, $2, $4, $5, $6, $7
   }
 ' | head -8 | jq -s 'map(select(.name != ""))' 2>/dev/null || echo '[]')
 
 # ---------- Top GPU Processes (by VRAM usage from nvidia-smi) ----------
 # process_name may contain commas (e.g. browser GPU args), so parse pid + trailing VRAM explicitly.
+# GPU type (G / C / C+G) comes from nvidia-smi pmon, keyed by pid.
+gpu_type_map=$(nvidia-smi pmon -c 1 2>/dev/null | awk '
+  /^[[:space:]]+[0-9]+[[:space:]]+[0-9]+/ {
+    pid = $2
+    typ = $3
+    if (pid ~ /^[0-9]+$/ && typ != "")
+      types[pid] = typ
+  }
+  END {
+    print "{"
+    first = 1
+    for (pid in types) {
+      if (!first) printf ","
+      printf "\"%s\":\"%s\"", pid, types[pid]
+      first = 0
+    }
+    print "}"
+  }
+' 2>/dev/null)
+[[ -z "$gpu_type_map" || "$gpu_type_map" == "{}" ]] && gpu_type_map="{}"
+
 top_gpu=$(nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits 2>/dev/null | awk '
   function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
   function short_name(s) {
@@ -403,10 +424,15 @@ top_gpu=$(nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=
         printf "%s\t%s\t%d\n", pid, name, vram
     }
   }
-' | sort -t$'\t' -k3 -nr | head -8 | jq -R -s '
+' | sort -t$'\t' -k3 -nr | head -8 | jq -R -s --argjson types "$gpu_type_map" '
   split("\n")[:-1]
   | map(split("\t"))
-  | map(select(length == 3) | {pid: (.[0] | tonumber), name: .[1], vram: (.[2] | tonumber)})
+  | map(select(length == 3) | {
+      pid: (.[0] | tonumber),
+      name: .[1],
+      vram: (.[2] | tonumber),
+      type: ($types[(.[0])] // "")
+    })
 ' 2>/dev/null || echo '[]')
 
 # ---------- Assemble final JSON ----------
