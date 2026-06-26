@@ -53,6 +53,7 @@ Item {
     // === Derived state (clamped + color selection) ===
     readonly property real clamped: Math.max(0, Math.min(100, value))
     readonly property color gaugeColor: clamped > 85 ? highColor : (clamped > 65 ? midColor : lowColor)
+    property color valueColor: gaugeColor
 
     implicitWidth: size
     implicitHeight: size
@@ -115,7 +116,7 @@ Item {
             text: root.clamped.toFixed(0) + root.unitLabel
             font.pixelSize: root.size * 0.30
             font.bold: true
-            color: root.gaugeColor
+            color: root.valueColor
             font.family: "JetBrains Mono Nerd Font, monospace"  // consistent with bar
         }
 
