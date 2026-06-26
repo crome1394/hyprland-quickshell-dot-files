@@ -11,7 +11,7 @@ import Quickshell.Io as Io
 // Floating overlay for browsing and editing split Hyprland configuration.
 //
 // Features:
-//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU/GPU/Memory (sysmon), Logs
+//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU/GPU/Memory (sysmon), Logs, Services
 //   - Config Files tab (dropdown + bat) for ~/.config/hypr/config/*.lua and hypr*.conf
 //   - System info (fastfetch + clickable copy-to-clipboard values + logo)
 //   - Edit (kitty nano) and Reload per config file tab
@@ -78,6 +78,7 @@ Item {
         { label: "GPU", id: "gpu", file: "", view: "gpu" },
         { label: "Memory", id: "memory", file: "", view: "memory" },
         { label: "Logs", id: "logs", file: "", view: "logs" },
+        { label: "Services", id: "services", file: "", view: "services" },
         { label: "System Info", id: "system", file: "", view: "system" }
     ]
 
@@ -188,7 +189,7 @@ Item {
         const entries = []
         for (let i = 0; i < tabs.length; i++) {
             const tab = tabs[i]
-            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "logs") continue
+            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "logs" || tab.view === "services") continue
             if (tab.file) entries.push(tab)
         }
         for (let j = 0; j < configFileEntries.length; j++) {
@@ -357,6 +358,9 @@ Item {
         if (tab && tab.view === "logs") {
             logsViewer.refresh(true)
         }
+        if (tab && tab.view === "services") {
+            servicesViewer.refresh()
+        }
     }
 
     function refreshCurrentTab() {
@@ -376,6 +380,10 @@ Item {
         }
         if (tab.view === "logs") {
             logsViewer.refresh(true)
+            return
+        }
+        if (tab.view === "services") {
+            servicesViewer.refresh()
             return
         }
         if (tab.view === "configfiles") {
@@ -451,6 +459,20 @@ Item {
             const live = logsViewer.liveTail ? "live 3s" : "manual"
             return lines + " lines  ·  " + logsViewer.currentSourceLabel() + "  ·  last " + logsViewer.lineCount + "  ·  " + live + filterNote
         }
+        if (tab.view === "services") {
+            const rows = servicesViewer.filteredServices().length
+            const running = servicesViewer.services.filter(function(s) {
+                return (s.active_state || "").toLowerCase() === "active"
+            }).length
+            const failed = servicesViewer.services.filter(function(s) {
+                const a = (s.active_state || "").toLowerCase()
+                const sub = (s.sub_state || "").toLowerCase()
+                return a === "failed" || sub.indexOf("fail") !== -1
+            }).length
+            const sel = servicesViewer.selectedService()
+            const selNote = sel ? "  ·  " + servicesViewer.shortName(sel.id) : ""
+            return rows + " shown  ·  " + running + " running  ·  " + failed + " failed" + selNote + filterNote
+        }
         if (tab.view === "runtime") {
             const cat = runtimeViewer.currentCategory()
             const name = cat ? cat.label : "category"
@@ -478,6 +500,7 @@ Item {
         if (tab.view === "runtime") runtimeViewer.focusScroll()
         else if (tab.view === "configfiles") configFilesViewer.focusScroll()
         else if (tab.view === "logs") logsViewer.focusScroll()
+        else if (tab.view === "services") servicesViewer.focusScroll()
         else contentPanel.forceActiveFocus()
     }
 
@@ -490,6 +513,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.resetScroll()
         else if (tab.view === "memory") memoryViewer.resetScroll()
         else if (tab.view === "logs") logsViewer.resetScroll()
+        else if (tab.view === "services") servicesViewer.resetScroll()
         else if (tab.view === "runtime") runtimeViewer.resetScroll()
         else if (tab.view === "configfiles") configFilesViewer.resetScroll()
         else if (tab.view === "raw") batViewer.resetScroll()
@@ -510,6 +534,8 @@ Item {
             sysMonService.refresh()
         } else if (tab.view === "logs") {
             logsViewer.refresh(false)
+        } else if (tab.view === "services") {
+            servicesViewer.refresh()
         } else if (tab.view === "configfiles") {
             const entry = configFilesViewer.currentEntry()
             if (entry && !fileContents[entry.id]) refreshConfigFileEntry(entry)
@@ -542,6 +568,7 @@ Item {
         else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
         else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory") sysMonService.refresh()
         else if (tab.view === "logs") logsViewer.refresh(false)
+        else if (tab.view === "services") servicesViewer.refresh()
         else if (tab.view === "configfiles") {
             const entry = configFilesViewer.currentEntry()
             if (entry && !fileContents[entry.id]) refreshConfigFileEntry(entry)
@@ -916,6 +943,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.pageScroll(direction)
         else if (tab.view === "memory") memoryViewer.pageScroll(direction)
         else if (tab.view === "logs") logsViewer.pageScroll(direction)
+        else if (tab.view === "services") servicesViewer.pageScroll(direction)
         else if (tab.view === "system") scrollFlickablePage(systemFlickable, direction)
     }
 
@@ -931,6 +959,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.lineScroll(direction)
         else if (tab.view === "memory") memoryViewer.lineScroll(direction)
         else if (tab.view === "logs") logsViewer.lineScroll(direction)
+        else if (tab.view === "services") servicesViewer.lineScroll(direction)
         else if (tab.view === "system") scrollFlickableLine(systemFlickable, direction)
     }
 
@@ -1595,6 +1624,23 @@ Item {
                         overlayColor: root.overlay
                     }
 
+                    ServicesView {
+                        id: servicesViewer
+                        visible: root.currentTabInfo.view === "services"
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        active: inspectorWindow.visible && root.currentTabInfo.view === "services"
+                        globalFilter: root.globalFilter
+                        textColor: root.text
+                        subtextColor: root.subtext
+                        accentColor: root.accent
+                        surfaceColor: root.surface
+                        overlayColor: root.overlay
+                        okColor: th.gaugeLow
+                        warnColor: th.gaugeMid
+                        errorColor: th.gaugeHigh
+                    }
+
                     // System Info
                     Item {
                         visible: root.currentTabInfo.view === "system"
@@ -1732,6 +1778,8 @@ Item {
                         property int _logsTick: logsViewer.contentVersion
                         property string _logsSource: logsViewer.selectedSourceId
                         property bool _logsLive: logsViewer.liveTail
+                        property int _svcTick: servicesViewer.dataVersion
+                        property string _svcFilter: servicesViewer.filterMode
                     }
 
                     Item { Layout.fillWidth: true }
@@ -1755,7 +1803,7 @@ Item {
                     }
 
                     Rectangle {
-                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "logs"
+                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "logs" || root.currentTabInfo.view === "services"
                         width: 68
                         height: 22
                         radius: 5
@@ -1772,6 +1820,7 @@ Item {
                                 if (root.currentTabInfo.view === "runtime") runtimeViewer.refreshCategory()
                                 else if (root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory") sysMonService.refresh()
                                 else if (root.currentTabInfo.view === "logs") logsViewer.refresh(true)
+                                else if (root.currentTabInfo.view === "services") servicesViewer.refresh()
                                 else root.refreshSystemInfo()
                             }
                         }
