@@ -12,7 +12,7 @@ import Quickshell.Io as Io
 //
 // Features:
 //   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption)
-//   - Bat-syntax tabs for ~/.config/hypr/config/*.lua and hypr*.conf files
+//   - Config Files tab (dropdown + bat) for ~/.config/hypr/config/*.lua and hypr*.conf
 //   - System info (fastfetch + clickable copy-to-clipboard values + logo)
 //   - Edit (kitty nano) and Reload per config file tab
 //   - Header: Hyprland version + distro; Refresh All; wrapping tab bar
@@ -47,32 +47,53 @@ Item {
     readonly property string configDir: "/home/crome/.config/hypr/config"
     readonly property string hyprDir: "/home/crome/.config/hypr"
 
+    readonly property var configFileEntries: [
+        { id: "monitors", label: "Monitors", file: "monitors.lua" },
+        { id: "my-programs", label: "My Programs", file: "my-programs.lua" },
+        { id: "autostarts", label: "Autostarts", file: "autostarts.lua" },
+        { id: "permissions", label: "Permissions", file: "permissions.lua" },
+        { id: "look-and-feel", label: "Look & Feel", file: "look-and-feel.lua" },
+        { id: "misc", label: "Misc", file: "misc.lua" },
+        { id: "input", label: "Input", file: "input.lua" },
+        { id: "windows-and-workspaces", label: "Window & Layer Rules", file: "windows-and-workspaces.lua" },
+        { id: "hyprland", label: "Main Config", file: "hyprland.lua", dir: hyprDir },
+        { id: "hypridle", label: "Hypridle", file: "hypridle.conf", dir: hyprDir, batLanguage: "INI" },
+        { id: "hyprlock", label: "Hyprlock", file: "hyprlock.conf", dir: hyprDir, batLanguage: "Java Properties" },
+        { id: "hyprpaper", label: "Hyprpaper", file: "hyprpaper.conf", dir: hyprDir, batLanguage: "INI" }
+    ]
+
     readonly property var tabs: [
         { label: "Key Bindings", id: "keybindings", file: "keybindings.lua", view: "binds" },
         { label: "Environment", id: "environment", file: "environment-variables.lua", view: "env" },
         { label: "Runtime Options", id: "runtime-options", file: "", view: "runtime" },
-        { label: "Monitors", id: "monitors", file: "monitors.lua", view: "raw" },
-        { label: "My Programs", id: "my-programs", file: "my-programs.lua", view: "raw" },
-        { label: "Autostarts", id: "autostarts", file: "autostarts.lua", view: "raw" },
-        { label: "Permissions", id: "permissions", file: "permissions.lua", view: "raw" },
-        { label: "Look & Feel", id: "look-and-feel", file: "look-and-feel.lua", view: "raw" },
-        { label: "Misc", id: "misc", file: "misc.lua", view: "raw" },
-        { label: "Input", id: "input", file: "input.lua", view: "raw" },
-        { label: "Window & Layer Rules", id: "windows-and-workspaces", file: "windows-and-workspaces.lua", view: "raw" },
-        { label: "Hypridle", id: "hypridle", file: "hypridle.conf", view: "raw", dir: "/home/crome/.config/hypr", batLanguage: "INI" },
-        { label: "Hyprlock", id: "hyprlock", file: "hyprlock.conf", view: "raw", dir: "/home/crome/.config/hypr", batLanguage: "Java Properties" },
-        { label: "Hyprpaper", id: "hyprpaper", file: "hyprpaper.conf", view: "raw", dir: "/home/crome/.config/hypr", batLanguage: "INI" },
+        { label: "Config Files", id: "config-files", file: "", view: "configfiles" },
         { label: "System Info", id: "system", file: "", view: "system" }
     ]
 
     readonly property var currentTabInfo: (currentTab >= 0 && currentTab < tabs.length) ? tabs[currentTab] : tabs[0]
-    readonly property bool hasConfigFile: currentTabInfo.file && currentTabInfo.file.length > 0
+    readonly property bool hasConfigFile: {
+        const tab = currentTabInfo
+        if (tab.view === "configfiles") return true
+        return tab.file && tab.file.length > 0
+    }
     property string rawSource: ""
     property string batFilePath: ""
     property string batLanguage: ""
 
+    function fileEntryById(id) {
+        if (!id) return null
+        for (let i = 0; i < configFileEntries.length; i++) {
+            if (configFileEntries[i].id === id) return configFileEntries[i]
+        }
+        return null
+    }
+
     function syncRawSource() {
-        const id = currentTabInfo.id
+        let id = currentTabInfo.id
+        if (currentTabInfo.view === "configfiles") {
+            const entry = configFilesViewer.currentEntry()
+            id = entry ? entry.id : ""
+        }
         rawSource = (id && fileContents[id]) ? fileContents[id] : ""
     }
 
@@ -146,9 +167,23 @@ Item {
             + " " + pad(d.getHours()) + ":" + pad(d.getMinutes())
     }
 
-    function mtimeSuffix(tab) {
-        const formatted = formatFileMtime(tab.id)
+    function mtimeSuffix(entry) {
+        if (!entry || !entry.id) return ""
+        const formatted = formatFileMtime(entry.id)
         return formatted ? "  ·  " + formatted : ""
+    }
+
+    function fileBackedEntries() {
+        const entries = []
+        for (let i = 0; i < tabs.length; i++) {
+            const tab = tabs[i]
+            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles") continue
+            if (tab.file) entries.push(tab)
+        }
+        for (let j = 0; j < configFileEntries.length; j++) {
+            entries.push(configFileEntries[j])
+        }
+        return entries
     }
 
     function refreshFileMtime(tab) {
@@ -164,7 +199,9 @@ Item {
         setFileContent(id, body)
         if (view === "binds") _parsedBinds = parseKeybinds(body)
         else if (view === "env") _parsedEnv = parseEnvVars(body)
-        if (currentTabInfo.id === id) syncRawSource()
+        if (currentTabInfo.id === id || (currentTabInfo.view === "configfiles" && configFilesViewer.selectedFileId === id)) {
+            syncRawSource()
+        }
     }
 
     function parseAllFileOutput(text) {
@@ -199,8 +236,9 @@ Item {
             if (marker === "@@MTIME:") {
                 setFileMtime(id, body.trim())
             } else {
-                const tab = tabs.find(function(t) { return t.id === id })
-                if (tab) applyLoadedFile(id, tab.view, body)
+                const tab = tabs.find(function(t) { return t.id === id }) ||
+                    fileEntryById(id)
+                if (tab) applyLoadedFile(id, tab.view || "raw", body)
             }
             searchFrom = bodyEnd
         }
@@ -235,9 +273,9 @@ Item {
 
     function refreshAllFiles() {
         const parts = []
-        for (let i = 0; i < tabs.length; i++) {
-            const tab = tabs[i]
-            if (tab.view === "system") continue
+        const entries = fileBackedEntries()
+        for (let i = 0; i < entries.length; i++) {
+            const tab = entries[i]
             const path = tabPath(tab)
             const escaped = path.replace(/'/g, "'\\''")
             parts.push("printf '@@MTIME:" + tab.id + "@@\\n'")
@@ -247,6 +285,13 @@ Item {
         }
         if (!parts.length) return
         startFileLoad(["sh", "-c", parts.join(" && ")], false, "", "")
+    }
+
+    function refreshConfigFileEntry(entry) {
+        if (!entry || !entry.file) return
+        refreshFileMtime(entry)
+        configFilesViewer.refreshBat()
+        startFileLoad(["cat", tabPath(entry)], true, entry.id, "raw")
     }
 
     function parseHeaderInfo(text) {
@@ -284,6 +329,9 @@ Item {
         if (tab && tab.view === "raw" && tab.file) {
             batViewer.refresh()
         }
+        if (tab && tab.view === "configfiles") {
+            configFilesViewer.refreshBat()
+        }
         if (tab && tab.view === "system") {
             refreshSystemInfo()
         } else {
@@ -305,6 +353,11 @@ Item {
             runtimeViewer.refresh()
             return
         }
+        if (tab.view === "configfiles") {
+            const entry = configFilesViewer.currentEntry()
+            if (entry) refreshConfigFileEntry(entry)
+            return
+        }
         refreshFileMtime(tab)
         if (tab.view === "raw") {
             batViewer.refresh()
@@ -316,22 +369,37 @@ Item {
 
     function editCurrentConfigFile() {
         const tab = currentTabInfo
-        if (!tab || !tab.file) return
+        if (!tab) return
+        if (tab.view === "configfiles") {
+            const entry = configFilesViewer.currentEntry()
+            if (entry) Quickshell.execDetached(["kitty", "-e", "nano", tabPath(entry)])
+            return
+        }
+        if (!tab.file) return
         Quickshell.execDetached(["kitty", "-e", "nano", tabPath(tab)])
     }
 
     function statusText() {
+        if (copiedValue) return "Copied to clipboard"
         const tab = currentTabInfo
         if (!tab) return ""
-        const modified = mtimeSuffix(tab)
         const filterNote = (globalFilter && globalFilter.trim()) ? "  ·  filtered" : ""
-        if (tab.view === "binds") return filteredBinds().length + " bindings  ·  " + tab.file + modified + filterNote
-        if (tab.view === "env") return filteredEnv().length + " environment variables  ·  " + tab.file + modified + filterNote
+        if (tab.view === "binds") return filteredBinds().length + " bindings  ·  " + tab.file + mtimeSuffix(tab) + filterNote
+        if (tab.view === "env") return filteredEnv().length + " environment variables  ·  " + tab.file + mtimeSuffix(tab) + filterNote
+        if (tab.view === "configfiles") {
+            const entry = configFilesViewer.currentEntry()
+            const file = entry ? entry.file : ""
+            const id = entry ? entry.id : ""
+            const body = rawSource || (id && fileContents[id]) || ""
+            const lines = body.length ? body.split("\n").length : 0
+            const chars = body.length
+            return lines + " lines (" + chars + " chars)  ·  " + file + "  ·  bat" + mtimeSuffix(entry) + filterNote
+        }
         if (tab.view === "raw") {
             const body = rawSource || fileContents[tab.id] || ""
             const lines = body.length ? body.split("\n").length : 0
             const chars = body.length
-            return lines + " lines (" + chars + " chars)  ·  " + tab.file + "  ·  bat" + modified + filterNote
+            return lines + " lines (" + chars + " chars)  ·  " + tab.file + "  ·  bat" + mtimeSuffix(tab) + filterNote
         }
         if (tab.view === "system") return filteredSystemEntries().length + " entries  ·  system info" + filterNote
         if (tab.view === "runtime") {
@@ -356,6 +424,13 @@ Item {
         }
     }
 
+    function focusActiveTabContent() {
+        const tab = currentTabInfo
+        if (tab.view === "runtime") runtimeViewer.focusNav()
+        else if (tab.view === "configfiles") configFilesViewer.focusNav()
+        else contentPanel.forceActiveFocus()
+    }
+
     function activateTab(index) {
         if (index < 0 || index >= tabs.length) return
         currentTab = index
@@ -367,11 +442,15 @@ Item {
             refreshSystemInfo()
         } else if (tab.view === "runtime") {
             runtimeViewer.ensureLoaded()
+        } else if (tab.view === "configfiles") {
+            const entry = configFilesViewer.currentEntry()
+            if (entry && !fileContents[entry.id]) refreshConfigFileEntry(entry)
+            else configFilesViewer.refreshBat()
         } else if (tab.file && !fileContents[tab.id]) {
             refreshCurrentTab()
         }
         scrollTabIntoView()
-        Qt.callLater(function() { contentPanel.forceActiveFocus() })
+        Qt.callLater(function() { root.focusActiveTabContent() })
     }
 
     function nextTab() {
@@ -390,9 +469,14 @@ Item {
         if (!wmDistroLabel) refreshHeaderInfo()
         if (tab.view === "system" && systemDirty) refreshSystemInfo()
         else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
+        else if (tab.view === "configfiles") {
+            const entry = configFilesViewer.currentEntry()
+            if (entry && !fileContents[entry.id]) refreshConfigFileEntry(entry)
+            else configFilesViewer.refreshBat()
+        }
         Qt.callLater(function() {
             scrollTabIntoView()
-            contentPanel.forceActiveFocus()
+            root.focusActiveTabContent()
         })
     }
 
@@ -575,6 +659,30 @@ Item {
         }, 1200)
     }
 
+    readonly property bool canCopyTab: {
+        const view = currentTabInfo.view
+        return view === "raw" || view === "runtime" || view === "configfiles"
+    }
+
+    function copyCurrentTabContent() {
+        const tab = currentTabInfo
+        if (!tab) return
+        if (tab.view === "raw") {
+            const text = batViewer.plainText()
+            if (text) copyToClipboard(text)
+            return
+        }
+        if (tab.view === "configfiles") {
+            const text = configFilesViewer.plainText()
+            if (text) copyToClipboard(text)
+            return
+        }
+        if (tab.view === "runtime") {
+            const text = runtimeViewer.exportText()
+            if (text) copyToClipboard(text)
+        }
+    }
+
     Io.Process {
         id: systemProcess
         command: ["fastfetch", "--logo", "none"]
@@ -639,6 +747,7 @@ Item {
         if (tab.view === "binds") scrollFlickablePage(bindsFlickable, direction)
         else if (tab.view === "env") scrollFlickablePage(envFlickable, direction)
         else if (tab.view === "raw") batViewer.pageScroll(direction)
+        else if (tab.view === "configfiles") configFilesViewer.pageScroll(direction)
         else if (tab.view === "runtime") runtimeViewer.pageScroll(direction)
         else if (tab.view === "system") scrollFlickablePage(systemFlickable, direction)
     }
@@ -693,6 +802,17 @@ Item {
 
             Keys.onPressed: (event) => {
                 if (globalFilterField.activeFocus) return
+                const tab = root.currentTabInfo
+                if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                    if (tab.view === "runtime" && runtimeViewer.handleNavKey(event)) {
+                        runtimeViewer.focusNav()
+                        return
+                    }
+                    if (tab.view === "configfiles" && configFilesViewer.handleNavKey(event)) {
+                        configFilesViewer.focusNav()
+                        return
+                    }
+                }
                 if (event.key === Qt.Key_PageUp) {
                     root.pageContentScroll(-1)
                     event.accepted = true
@@ -993,6 +1113,31 @@ Item {
                         accentColor: root.accent
                         surfaceColor: root.surface
                         overlayColor: root.overlay
+                        onCopyRequested: (text) => root.copyToClipboard(text)
+                    }
+
+                    ConfigFilesView {
+                        id: configFilesViewer
+                        visible: root.currentTabInfo.view === "configfiles"
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        files: root.configFileEntries
+                        configDir: root.configDir
+                        globalFilter: root.globalFilter
+                        textColor: root.text
+                        subtextColor: root.subtext
+                        accentColor: root.accent
+                        surfaceColor: root.surface
+                        overlayColor: root.overlay
+                        onSelectedFileIdChanged: {
+                            root.syncRawSource()
+                            const entry = configFilesViewer.currentEntry()
+                            if (entry && !root.fileContents[entry.id]) {
+                                root.refreshConfigFileEntry(entry)
+                            } else {
+                                configFilesViewer.refreshBat()
+                            }
+                        }
                     }
 
                     // Environment
@@ -1190,9 +1335,28 @@ Item {
                         property string _filterTick: root.globalFilter
                         property int _fileTick: root.fileContentsVersion
                         property int _runtimeTick: runtimeViewer.optionsVersion
+                        property string _configFileTick: configFilesViewer.selectedFileId
                     }
 
                     Item { Layout.fillWidth: true }
+
+                    Rectangle {
+                        visible: root.canCopyTab
+                        width: 44
+                        height: 22
+                        radius: 5
+                        color: copyTabMa.containsMouse ? root.surface : "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(1,1,1,0.1)
+                        Text { anchors.centerIn: parent; text: "Copy"; color: root.accent; font.pixelSize: 11 }
+                        MouseArea {
+                            id: copyTabMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.copyCurrentTabContent()
+                        }
+                    }
 
                     Rectangle {
                         visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime"
