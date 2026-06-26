@@ -52,6 +52,7 @@ fi
 # ---------- Memory & Swap ----------
 mem_total=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
 mem_available=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+mem_free=$(awk '/MemFree:/ {print $2}' /proc/meminfo)
 swap_total=$(awk '/SwapTotal:/ {print $2}' /proc/meminfo)
 swap_free=$(awk '/SwapFree:/ {print $2}' /proc/meminfo)
 
@@ -60,6 +61,8 @@ swap_used=$(( swap_total - swap_free ))
 
 ram_total_mib=$(( mem_total / 1024 ))
 ram_used_mib=$(( ram_used / 1024 ))
+ram_available_mib=$(( mem_available / 1024 ))
+ram_free_mib=$(( mem_free / 1024 ))
 swap_total_mib=$(( swap_total / 1024 ))
 swap_used_mib=$(( swap_used / 1024 ))
 
@@ -454,6 +457,8 @@ jq -cn \
   --argjson gpu_vram_pct "${gpu_vram_pct:-0}" \
   --argjson ram_used_mib "$ram_used_mib" \
   --argjson ram_total_mib "$ram_total_mib" \
+  --argjson ram_available_mib "$ram_available_mib" \
+  --argjson ram_free_mib "$ram_free_mib" \
   --argjson ram_pct "$ram_pct" \
   --argjson swap_used_mib "$swap_used_mib" \
   --argjson swap_total_mib "$swap_total_mib" \
@@ -496,7 +501,8 @@ jq -cn \
     cpu_info: { model: $cpu_model, vendor: $cpu_vendor, arch: $cpu_arch, cores: $cpu_cores },
     gpu_info: { name: $gpu_name, driver: $gpu_driver },
     memory: {
-      ram_used: $ram_used_mib, ram_total: $ram_total_mib, ram_pct: $ram_pct,
+      ram_used: $ram_used_mib, ram_total: $ram_total_mib, ram_available: $ram_available_mib,
+      ram_free: $ram_free_mib, ram_pct: $ram_pct,
       swap_used: $swap_used_mib, swap_total: $swap_total_mib, swap_pct: $swap_pct
     },
     load: ($load_str | split(",") | map(tonumber)),
