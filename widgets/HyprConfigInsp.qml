@@ -11,7 +11,7 @@ import Quickshell.Io as Io
 // Floating overlay for browsing and editing split Hyprland configuration.
 //
 // Features:
-//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption)
+//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU (sysmon)
 //   - Config Files tab (dropdown + bat) for ~/.config/hypr/config/*.lua and hypr*.conf
 //   - System info (fastfetch + clickable copy-to-clipboard values + logo)
 //   - Edit (kitty nano) and Reload per config file tab
@@ -29,6 +29,11 @@ Item {
     required property var bar
 
     Theme { id: th }
+
+    SysMonService {
+        id: sysMonService
+        autoPoll: inspectorWindow.visible
+    }
 
     readonly property color glassPopupBg: th.glassPopupBg
     readonly property color glassPopupBorder: th.glassPopupBorder
@@ -69,6 +74,7 @@ Item {
         { label: "Environment", id: "environment", file: "environment-variables.lua", view: "env" },
         { label: "Runtime Options", id: "runtime-options", file: "", view: "runtime" },
         { label: "Config Files", id: "config-files", file: "", view: "configfiles" },
+        { label: "CPU", id: "cpu", file: "", view: "cpu" },
         { label: "System Info", id: "system", file: "", view: "system" }
     ]
 
@@ -179,7 +185,7 @@ Item {
         const entries = []
         for (let i = 0; i < tabs.length; i++) {
             const tab = tabs[i]
-            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles") continue
+            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu") continue
             if (tab.file) entries.push(tab)
         }
         for (let j = 0; j < configFileEntries.length; j++) {
@@ -342,6 +348,9 @@ Item {
         if (tab && tab.view === "runtime") {
             runtimeViewer.refresh()
         }
+        if (tab && tab.view === "cpu") {
+            sysMonService.refresh()
+        }
     }
 
     function refreshCurrentTab() {
@@ -353,6 +362,10 @@ Item {
         }
         if (tab.view === "runtime") {
             runtimeViewer.refresh()
+            return
+        }
+        if (tab.view === "cpu") {
+            sysMonService.refresh()
             return
         }
         if (tab.view === "configfiles") {
@@ -404,6 +417,11 @@ Item {
             return lines + " lines (" + chars + " chars)  ·  " + tab.file + "  ·  bat" + mtimeSuffix(tab) + filterNote
         }
         if (tab.view === "system") return filteredSystemEntries().length + " entries  ·  system info" + filterNote
+        if (tab.view === "cpu") {
+            const util = sysMonService.data.cpu ? (sysMonService.data.cpu.util || 0).toFixed(0) : "0"
+            const cores = sysMonService.data.cpu_info && sysMonService.data.cpu_info.cores ? sysMonService.data.cpu_info.cores : "?"
+            return util + "% CPU  ·  " + cores + " cores  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
+        }
         if (tab.view === "runtime") {
             const cat = runtimeViewer.currentCategory()
             const name = cat ? cat.label : "category"
@@ -438,6 +456,7 @@ Item {
         if (tab.view === "binds") bindsFlickable.contentY = 0
         else if (tab.view === "env") envFlickable.contentY = 0
         else if (tab.view === "system") systemFlickable.contentY = 0
+        else if (tab.view === "cpu") cpuViewer.resetScroll()
         else if (tab.view === "runtime") runtimeViewer.resetScroll()
         else if (tab.view === "configfiles") configFilesViewer.resetScroll()
         else if (tab.view === "raw") batViewer.resetScroll()
@@ -454,6 +473,8 @@ Item {
             refreshSystemInfo()
         } else if (tab.view === "runtime") {
             runtimeViewer.ensureLoaded()
+        } else if (tab.view === "cpu") {
+            sysMonService.refresh()
         } else if (tab.view === "configfiles") {
             const entry = configFilesViewer.currentEntry()
             if (entry && !fileContents[entry.id]) refreshConfigFileEntry(entry)
@@ -484,6 +505,7 @@ Item {
         if (!wmDistroLabel) refreshHeaderInfo()
         if (tab.view === "system" && systemDirty) refreshSystemInfo()
         else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
+        else if (tab.view === "cpu") sysMonService.refresh()
         else if (tab.view === "configfiles") {
             const entry = configFilesViewer.currentEntry()
             if (entry && !fileContents[entry.id]) refreshConfigFileEntry(entry)
@@ -849,6 +871,7 @@ Item {
         else if (tab.view === "raw") batViewer.pageScroll(direction)
         else if (tab.view === "configfiles") configFilesViewer.pageScroll(direction)
         else if (tab.view === "runtime") runtimeViewer.pageScroll(direction)
+        else if (tab.view === "cpu") cpuViewer.pageScroll(direction)
         else if (tab.view === "system") scrollFlickablePage(systemFlickable, direction)
     }
 
@@ -860,6 +883,7 @@ Item {
         else if (tab.view === "raw") batViewer.lineScroll(direction)
         else if (tab.view === "configfiles") configFilesViewer.lineScroll(direction)
         else if (tab.view === "runtime") runtimeViewer.lineScroll(direction)
+        else if (tab.view === "cpu") cpuViewer.lineScroll(direction)
         else if (tab.view === "system") scrollFlickableLine(systemFlickable, direction)
     }
 
@@ -1459,6 +1483,19 @@ Item {
                         accentColor: root.accent
                     }
 
+                    CpuMonitorView {
+                        id: cpuViewer
+                        visible: root.currentTabInfo.view === "cpu"
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        service: sysMonService
+                        textColor: root.text
+                        subtextColor: root.subtext
+                        accentColor: root.accent
+                        surfaceColor: root.surface
+                        overlayColor: root.overlay
+                    }
+
                     // System Info
                     Item {
                         visible: root.currentTabInfo.view === "system"
@@ -1589,6 +1626,8 @@ Item {
                         property int _fileTick: root.fileContentsVersion
                         property int _runtimeTick: runtimeViewer.optionsVersion
                         property string _configFileTick: configFilesViewer.selectedFileId
+                        property int _cpuTick: sysMonService.cpuHistory.length
+                        property var _cpuData: sysMonService.data
                     }
 
                     Item { Layout.fillWidth: true }
@@ -1612,7 +1651,7 @@ Item {
                     }
 
                     Rectangle {
-                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime"
+                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu"
                         width: 68
                         height: 22
                         radius: 5
@@ -1627,6 +1666,7 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (root.currentTabInfo.view === "runtime") runtimeViewer.refreshCategory()
+                                else if (root.currentTabInfo.view === "cpu") sysMonService.refresh()
                                 else root.refreshSystemInfo()
                             }
                         }
