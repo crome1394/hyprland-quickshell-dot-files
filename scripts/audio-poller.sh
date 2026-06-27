@@ -121,16 +121,117 @@ function print_record(   gsub_tmp) {
 sinks_json="$(parse_kind Sink sinks "$default_sink")"
 sources_json="$(parse_kind Source sources "$default_source" | jq '[.[] | select(.name | test("\\.monitor$") | not)]')"
 
+# sink-inputs (playback) and source-outputs (recording) for active app streams.
+parse_stream_blocks() {
+    local header="$1"
+    local device_field="$2"
+    local device_key="$3"
+
+    awk -v header="$header" -v device_field="$device_field" -v device_key="$device_key" '
+BEGIN { idx = "" }
+$0 ~ "^" header " #" {
+    if (idx != "") print_record()
+    idx = $3
+    sub(/^#/, "", idx)
+    app = ""
+    binary = ""
+    media = ""
+    mute = "false"
+    vol_pct = 0
+    corked = "false"
+    device_idx = ""
+    next
+}
+/^[\t ]*application.name = / {
+    app = substr($0, index($0, "=") + 2)
+    sub(/^[ \t]+/, "", app)
+    app = json_str(app)
+    next
+}
+/^[\t ]*application.process.binary = / {
+    binary = substr($0, index($0, "=") + 2)
+    sub(/^[ \t]+/, "", binary)
+    binary = json_str(binary)
+    next
+}
+/^[\t ]*media.name = / {
+    media = substr($0, index($0, "=") + 2)
+    sub(/^[ \t]+/, "", media)
+    media = json_str(media)
+    next
+}
+/^[\t ]*Mute: / { mute = ($2 == "yes" ? "true" : "false"); next }
+/^[\t ]*Volume:/ {
+    if (match($0, /[[:space:]]([0-9]+)%/, m)) vol_pct = m[1] + 0
+    next
+}
+/^[\t ]*Corked: / { corked = ($2 == "yes" ? "true" : "false"); next }
+$0 ~ ("^[\t ]*" device_field ": ") {
+    device_idx = $2
+    next
+}
+END { if (idx != "") print_record() }
+
+function strip_quotes(s) {
+    sub(/^"/, "", s)
+    sub(/"$/, "", s)
+    return s
+}
+
+function json_str(s) {
+    s = strip_quotes(s)
+    gsub(/\\/, "\\\\", s)
+    gsub(/"/, "\\\"", s)
+    gsub(/\t/, "\\t", s)
+    gsub(/\r/, "\\r", s)
+    gsub(/\n/, "\\n", s)
+    return s
+}
+
+function print_record() {
+    if (app == "" && binary != "") app = binary
+    if (app == "") app = "Unknown"
+    if (binary == "") binary = app
+    if (media == "") media = ""
+    printf "{\"index\":%s,\"app\":\"%s\",\"binary\":\"%s\",\"media\":\"%s\",\"mute\":%s,\"volume_pct\":%d,\"corked\":%s,\"device_index\":\"%s\",\"device_key\":\"%s\"}\n",
+        idx, app, binary, media, mute, vol_pct, corked, device_idx, device_key
+}
+' <<< "$(pactl list "$4" 2>/dev/null || true)" | jq -s '.'
+}
+
+playback_json="$(parse_stream_blocks "Sink Input" "Sink" "sink" "sink-inputs")"
+recording_json="$(parse_stream_blocks "Source Output" "Source" "source" "source-outputs")"
+
+# Resolve device_index -> device_name using sinks/sources index maps.
+streams_json="$(jq -n \
+    --argjson playback "$playback_json" \
+    --argjson recording "$recording_json" \
+    --argjson sinks "$sinks_json" \
+    --argjson sources "$sources_json" '
+    def idx_name($list):
+        reduce $list[] as $d ({}; . + { ($d.index | tostring): ($d.description // $d.name) });
+    def enrich($list; $map):
+        [$list[] | . + {device_name: ($map[.device_index] // .device_index // "")}];
+    (idx_name($sinks)) as $sink_map
+    | (idx_name($sources)) as $source_map
+    | {
+        playback: enrich($playback; $sink_map),
+        recording: enrich($recording; $source_map)
+      }
+')"
+
 jq -n \
     --argjson ts "$TS" \
     --arg default_sink "$default_sink" \
     --arg default_source "$default_source" \
     --argjson sinks "$sinks_json" \
     --argjson sources "$sources_json" \
+    --argjson streams "$streams_json" \
     '{
         timestamp: $ts,
         default_sink: $default_sink,
         default_source: $default_source,
         sinks: $sinks,
-        sources: $sources
+        sources: $sources,
+        streams: $streams
     }'

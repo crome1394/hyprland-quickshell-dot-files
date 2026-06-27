@@ -25,14 +25,21 @@ Item {
 
     readonly property string pollerScript: "/home/crome/.config/quickshell/scripts/audio-poller.sh"
     readonly property string controlScript: "/home/crome/.config/quickshell/scripts/audio-control.sh"
+    readonly property string osdScript: "/home/crome/.config/quickshell/scripts/audio-osd.sh"
+
+    readonly property color defaultBadgeText: "#86efac"
+    readonly property color defaultBadgeBg: Qt.rgba(0.13, 0.77, 0.37, 0.32)
+    readonly property color defaultBadgeBorder: Qt.rgba(0.13, 0.77, 0.37, 0.75)
 
     property var audioData: ({
         timestamp: 0,
         default_sink: "",
         default_source: "",
         sinks: [],
-        sources: []
+        sources: [],
+        streams: { playback: [], recording: [] }
     })
+    property bool streamsExpanded: false
     property string selectedSinkName: ""
     property string selectedSourceName: ""
     property bool loading: false
@@ -50,6 +57,9 @@ Item {
     readonly property int sectionSpacing: 8
     readonly property int deviceRowHeight: 66
     readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
+    readonly property int streamsHeaderHeight: 34
+    readonly property int streamsRowHeight: 24
+    readonly property int streamsMaxBodyHeight: 132
 
     function filterQuery() {
         return (globalFilter && globalFilter.trim()) ? globalFilter.toLowerCase().trim() : ""
@@ -85,6 +95,48 @@ Item {
             if (matchesSearch(list[i])) out.push(list[i])
         }
         return out
+    }
+
+    function streamList(kind) {
+        const tick = dataVersion + "|" + globalFilter
+        const streams = audioData.streams || {}
+        const list = kind === "recording" ? (streams.recording || []) : (streams.playback || [])
+        const q = filterQuery()
+        if (!q) return list
+        const out = []
+        for (let i = 0; i < list.length; i++) {
+            const s = list[i]
+            const hay = [
+                s.app, s.binary, s.media, s.device_name, kind
+            ].join(" ").toLowerCase()
+            if (hay.indexOf(q) !== -1) out.push(s)
+        }
+        return out
+    }
+
+    function activeStreamCount() {
+        return streamList("playback").length + streamList("recording").length
+    }
+
+    function streamsBodyHeight() {
+        const rows = streamList("playback").length + streamList("recording").length
+        if (rows === 0) return 28
+        return Math.min(streamsMaxBodyHeight, Math.max(56, rows * streamsRowHeight + 16))
+    }
+
+    function streamLabel(stream) {
+        if (!stream) return "--"
+        const app = stream.app || stream.binary || "Unknown"
+        if (stream.media && stream.media !== app && stream.media !== "Playback" && stream.media !== "Recording")
+            return app + " — " + stream.media
+        return app
+    }
+
+    function streamStatus(stream) {
+        if (!stream) return ""
+        if (stream.mute) return "muted"
+        if (stream.corked) return "paused"
+        return "active"
     }
 
     function deviceLabel(dev) {
@@ -127,21 +179,42 @@ Item {
         return root.subtextColor
     }
 
+    property var _pendingOsd: null
+
     function scheduleVolumeRefresh() {
         volumeRefreshTimer.restart()
     }
 
-    function setSinkVolume(name, percent) {
+    function notifyVolumeOsd(kind, percent, muted) {
+        _pendingOsd = { kind: kind, percent: percent, muted: !!muted }
+        osdTimer.restart()
+    }
+
+    function flushVolumeOsd() {
+        if (!_pendingOsd) return
+        const osd = _pendingOsd
+        _pendingOsd = null
+        Quickshell.execDetached([
+            root.osdScript,
+            osd.kind,
+            String(Math.max(0, Math.min(150, Math.round(osd.percent)))),
+            osd.muted ? "1" : "0"
+        ])
+    }
+
+    function setSinkVolume(name, percent, muted) {
         if (!name) return
         const pct = Math.max(0, Math.min(150, Math.round(percent)))
         Quickshell.execDetached([root.controlScript, "set-volume", "sink", name, String(pct)])
+        notifyVolumeOsd("sink", pct, muted)
         scheduleVolumeRefresh()
     }
 
-    function setSourceVolume(name, percent) {
+    function setSourceVolume(name, percent, muted) {
         if (!name) return
         const pct = Math.max(0, Math.min(150, Math.round(percent)))
         Quickshell.execDetached([root.controlScript, "set-volume", "source", name, String(pct)])
+        notifyVolumeOsd("source", pct, muted)
         scheduleVolumeRefresh()
     }
 
@@ -272,6 +345,13 @@ Item {
         onTriggered: root.refresh()
     }
 
+    Timer {
+        id: osdTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.flushVolumeOsd()
+    }
+
     Io.Process {
         id: pollProcess
         command: [root.pollerScript]
@@ -368,6 +448,246 @@ Item {
                             font.pixelSize: 10
                             font.family: "monospace"
                             horizontalAlignment: Text.AlignRight
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.streamsExpanded
+                ? (root.streamsHeaderHeight + root.streamsBodyHeight())
+                : root.streamsHeaderHeight
+            radius: root.cardRadius
+            color: root.surfaceColor
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+            clip: true
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: root.cardMargin
+                spacing: 4
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.streamsHeaderHeight - root.cardMargin * 2
+
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: 8
+
+                        Text {
+                            text: root.streamsExpanded ? "▼" : "▶"
+                            color: root.overlayColor
+                            font.pixelSize: 9
+                            font.family: "monospace"
+                        }
+
+                        Text {
+                            text: "Active Apps"
+                            color: root.accentColor
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: "monospace"
+                        }
+
+                        Rectangle {
+                            Layout.preferredHeight: 16
+                            Layout.preferredWidth: Math.max(18, activeCountLabel.implicitWidth + 10)
+                            radius: 8
+                            color: root.activeStreamCount() > 0
+                                ? Qt.rgba(0.55, 0.70, 0.96, 0.22)
+                                : Qt.rgba(1, 1, 1, 0.05)
+                            border.width: 1
+                            border.color: Qt.rgba(1, 1, 1, 0.08)
+
+                            Text {
+                                id: activeCountLabel
+                                anchors.centerIn: parent
+                                text: String(root.activeStreamCount())
+                                color: root.activeStreamCount() > 0 ? root.textColor : root.overlayColor
+                                font.pixelSize: 9
+                                font.bold: true
+                                font.family: "monospace"
+                            }
+                        }
+
+                        Text {
+                            text: streamList("playback").length + " playing · " + streamList("recording").length + " recording"
+                            color: root.subtextColor
+                            font.pixelSize: 9
+                            font.family: "monospace"
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.streamsExpanded = !root.streamsExpanded
+                    }
+                }
+
+                Flickable {
+                    visible: root.streamsExpanded
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.streamsBodyHeight()
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    contentWidth: width
+                    contentHeight: streamsContent.implicitHeight
+
+                    property int _tick: root.dataVersion + (root.streamsExpanded ? 1 : 0)
+
+                    Column {
+                        id: streamsContent
+                        width: parent.width
+                        spacing: 4
+
+                        Text {
+                            width: parent.width
+                            visible: root.activeStreamCount() === 0
+                            text: "No active playback or recording streams"
+                            color: root.overlayColor
+                            font.pixelSize: 9
+                            font.family: "monospace"
+                        }
+
+                        Text {
+                            width: parent.width
+                            visible: streamList("playback").length > 0
+                            text: "Playing"
+                            color: theme.audioSpeakerIcon
+                            font.pixelSize: 9
+                            font.bold: true
+                            font.family: "monospace"
+                        }
+
+                        Repeater {
+                            model: streamList("playback")
+                            delegate: Rectangle {
+                                readonly property var stream: modelData
+                                width: parent.width
+                                height: root.streamsRowHeight
+                                radius: 3
+                                color: Qt.rgba(0, 0, 0, 0.14)
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 6
+                                    anchors.rightMargin: 6
+                                    spacing: 6
+
+                                    Text {
+                                        text: theme.iconSpeaker
+                                        color: stream.mute ? theme.audioSpeakerIconMuted : theme.audioSpeakerIcon
+                                        font.pixelSize: 11
+                                        font.family: theme.fontFamily
+                                    }
+
+                                    Text {
+                                        text: root.streamLabel(stream)
+                                        color: root.textColor
+                                        font.pixelSize: 9
+                                        font.family: "monospace"
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: stream.device_name || "--"
+                                        color: root.subtextColor
+                                        font.pixelSize: 8
+                                        font.family: "monospace"
+                                        elide: Text.ElideRight
+                                        Layout.maximumWidth: 120
+                                    }
+
+                                    Text {
+                                        text: root.streamStatus(stream)
+                                        color: stream.mute ? root.warnColor : (stream.corked ? root.overlayColor : root.okColor)
+                                        font.pixelSize: 8
+                                        font.family: "monospace"
+                                    }
+
+                                    Text {
+                                        text: stream.mute ? "—" : (Number(stream.volume_pct || 0).toFixed(0) + "%")
+                                        color: root.subtextColor
+                                        font.pixelSize: 8
+                                        font.family: "monospace"
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            width: parent.width
+                            visible: streamList("recording").length > 0
+                            text: "Recording"
+                            color: theme.audioMicIcon
+                            font.pixelSize: 9
+                            font.bold: true
+                            font.family: "monospace"
+                        }
+
+                        Repeater {
+                            model: streamList("recording")
+                            delegate: Rectangle {
+                                readonly property var stream: modelData
+                                width: parent.width
+                                height: root.streamsRowHeight
+                                radius: 3
+                                color: Qt.rgba(0, 0, 0, 0.14)
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 6
+                                    anchors.rightMargin: 6
+                                    spacing: 6
+
+                                    Text {
+                                        text: theme.iconMic
+                                        color: stream.mute ? theme.audioMicIconMuted : theme.audioMicIcon
+                                        font.pixelSize: 11
+                                        font.family: theme.fontFamily
+                                    }
+
+                                    Text {
+                                        text: root.streamLabel(stream)
+                                        color: root.textColor
+                                        font.pixelSize: 9
+                                        font.family: "monospace"
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Text {
+                                        text: stream.device_name || "--"
+                                        color: root.subtextColor
+                                        font.pixelSize: 8
+                                        font.family: "monospace"
+                                        elide: Text.ElideRight
+                                        Layout.maximumWidth: 120
+                                    }
+
+                                    Text {
+                                        text: root.streamStatus(stream)
+                                        color: stream.mute ? root.warnColor : (stream.corked ? root.overlayColor : root.okColor)
+                                        font.pixelSize: 8
+                                        font.family: "monospace"
+                                    }
+
+                                    Text {
+                                        text: stream.mute ? "—" : (Number(stream.volume_pct || 0).toFixed(0) + "%")
+                                        color: root.subtextColor
+                                        font.pixelSize: 8
+                                        font.family: "monospace"
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -509,7 +829,7 @@ Item {
                                             spacing: 6
 
                                             Text {
-                                                text: (dev.is_default ? "★ " : "") + (dev.description || dev.name)
+                                                text: dev.description || dev.name
                                                 color: root.textColor
                                                 font.pixelSize: 10
                                                 font.bold: dev.is_default
@@ -526,8 +846,27 @@ Item {
                                             }
 
                                             Rectangle {
+                                                visible: dev.is_default
+                                                Layout.preferredWidth: 56
+                                                Layout.preferredHeight: 18
+                                                radius: 4
+                                                color: root.defaultBadgeBg
+                                                border.width: 1
+                                                border.color: root.defaultBadgeBorder
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "Default"
+                                                    color: root.defaultBadgeText
+                                                    font.pixelSize: 9
+                                                    font.bold: true
+                                                    font.family: "monospace"
+                                                }
+                                            }
+
+                                            Rectangle {
                                                 visible: !dev.is_default
-                                                Layout.preferredWidth: 52
+                                                Layout.preferredWidth: 72
                                                 Layout.preferredHeight: 18
                                                 radius: 4
                                                 color: defSinkMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
@@ -537,9 +876,9 @@ Item {
 
                                                 Text {
                                                     anchors.centerIn: parent
-                                                    text: "Default"
+                                                    text: "Set Default"
                                                     color: root.accentColor
-                                                    font.pixelSize: 9
+                                                    font.pixelSize: 8
                                                     font.family: "monospace"
                                                 }
 
@@ -574,7 +913,7 @@ Item {
                                                     anchors.fill: parent
                                                     value: Math.min(1, Number(dev.volume_pct || 0) / 100)
                                                     onSet: function(v) {
-                                                        root.setSinkVolume(dev.name, Math.round(v * 100))
+                                                        root.setSinkVolume(dev.name, Math.round(v * 100), dev.mute)
                                                     }
                                                 }
 
@@ -804,7 +1143,7 @@ Item {
                                             spacing: 6
 
                                             Text {
-                                                text: (dev.is_default ? "★ " : "") + (dev.description || dev.name)
+                                                text: dev.description || dev.name
                                                 color: root.textColor
                                                 font.pixelSize: 10
                                                 font.bold: dev.is_default
@@ -821,8 +1160,27 @@ Item {
                                             }
 
                                             Rectangle {
+                                                visible: dev.is_default
+                                                Layout.preferredWidth: 56
+                                                Layout.preferredHeight: 18
+                                                radius: 4
+                                                color: root.defaultBadgeBg
+                                                border.width: 1
+                                                border.color: root.defaultBadgeBorder
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "Default"
+                                                    color: root.defaultBadgeText
+                                                    font.pixelSize: 9
+                                                    font.bold: true
+                                                    font.family: "monospace"
+                                                }
+                                            }
+
+                                            Rectangle {
                                                 visible: !dev.is_default
-                                                Layout.preferredWidth: 52
+                                                Layout.preferredWidth: 72
                                                 Layout.preferredHeight: 18
                                                 radius: 4
                                                 color: defSrcMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
@@ -832,9 +1190,9 @@ Item {
 
                                                 Text {
                                                     anchors.centerIn: parent
-                                                    text: "Default"
+                                                    text: "Set Default"
                                                     color: root.accentColor
-                                                    font.pixelSize: 9
+                                                    font.pixelSize: 8
                                                     font.family: "monospace"
                                                 }
 
@@ -869,7 +1227,7 @@ Item {
                                                     anchors.fill: parent
                                                     value: Math.min(1, Number(dev.volume_pct || 0) / 100)
                                                     onSet: function(v) {
-                                                        root.setSourceVolume(dev.name, Math.round(v * 100))
+                                                        root.setSourceVolume(dev.name, Math.round(v * 100), dev.mute)
                                                     }
                                                 }
 
