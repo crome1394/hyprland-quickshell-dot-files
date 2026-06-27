@@ -72,6 +72,37 @@ A resizable floating window (`Hyprland Config Inspector`) for reading Hyprland c
 - Tail logs, manage systemd services, and review system information
 - Search across the active tab, copy values, and open config files for editing
 
+### Split Hyprland configuration
+
+Hyprland is **not** configured in a single `hyprland.conf` here. Settings are split across multiple **Lua** modules under `~/.config/hypr/config/`, with the main entry point at `~/.config/hypr/hyprland.lua`. Related tools (Hypridle, Hyprlock, Hyprpaper) keep their own `.conf` files in `~/.config/hypr/`.
+
+Typical layout:
+
+| File | Topics |
+|------|--------|
+| `keybindings.lua` | Keybinds and mouse bindings |
+| `environment-variables.lua` | `exec-once`, environment variables |
+| `monitors.lua` | Monitor and workspace layout |
+| `input.lua` | Keyboard, mouse, touchpad |
+| `look-and-feel.lua` | Gaps, borders, animations, decoration |
+| `windows-and-workspaces.lua` | Window rules, layer rules, workspaces |
+| `my-programs.lua` | Default apps (`terminal`, `fileManager`, etc.) |
+| `autostarts.lua` | Startup commands |
+| `permissions.lua` | Window permission rules |
+| `misc.lua` | Miscellaneous options |
+
+#### How the inspector uses the split config
+
+- **Config Files** tab — Primary file browser. Pick any registered config from the dropdown to view it with syntax highlighting (`bat`), filter lines with global search, copy the full file, or press **Ctrl+E** / **Edit** to open it in `$TERMINAL` with `nano`.
+- **Key Bindings** and **Environment** tabs — Read `keybindings.lua` and `environment-variables.lua` directly and show parsed tables (easier to scan than raw source).
+- **Runtime Options** tab — Shows values Hyprland is running with now via `hyprctl getoption` (useful after editing; reload Hyprland to apply file changes).
+
+The file list is defined in `widgets/HyprConfigInsp.qml` (`configFileEntries`). Add an entry there if you create a new config module.
+
+#### New to split configs?
+
+If you are used to one monolithic `hyprland.conf`, think of `hyprland.lua` as a thin loader and each file in `config/` as a chapter (bindings, monitors, input, etc.). Edit the file that matches what you want to change, then reload Hyprland (`hyprctl reload` or your usual method). Use the **Config Files** tab to jump between modules without hunting paths in a file manager.
+
 ### Key features
 
 - **14 tabs** covering config, metrics, logs, and services
@@ -90,13 +121,13 @@ A resizable floating window (`Hyprland Config Inspector`) for reading Hyprland c
 | **Key Bindings** | Parsed keybind table from `keybindings.lua` (key, action, comments) |
 | **Environment** | Parsed environment variables from `environment-variables.lua` |
 | **Runtime Options** | Live Hyprland options via `hyprctl getoption`, grouped by category with wiki links |
-| **Config Files** | Dropdown of Hypr/Hypridle/Hyprlock/Hyprpaper configs with syntax highlighting |
+| **Config Files** | Browse all split `config/*.lua` modules plus Hypridle/Hyprlock/Hyprpaper configs; syntax highlighting, search, copy, and edit |
 | **CPU** | CPU usage gauge, history sparkline, load averages, and top CPU processes |
 | **GPU** | GPU utilization, VRAM, temperature, and related stats (when available) |
 | **Memory** | RAM and swap usage with history and breakdown |
 | **Temperature** | CPU and GPU temperature monitoring with history |
 | **Network** | Interfaces, routing, DNS, latency, firewall, active connections, per-process bandwidth, and live traffic graphs |
-| **Processes** | Process list with CPU/memory usage; sort, filter, and send signals |
+| **Processes** | Process list with CPU/memory usage, PR/NI columns, sort, filter, and signal controls |
 | **Audio** | PipeWire/PulseAudio sinks, sources, ports, volumes, and default devices |
 | **Logs** | Tail Hyprland log, user/system journal, kernel, and common service logs |
 | **Services** | systemd user and system units with status filters and start/stop/restart controls |
@@ -134,7 +165,7 @@ Shortcuts apply while the inspector window is focused (search field captures typ
 
 ### Important notes
 
-**Config paths** — File-backed tabs read from `~/.config/hypr/config/` and `~/.config/hypr/` by default. Adjust paths in `widgets/HyprConfigInsp.qml` if your layout differs.
+**Config paths** — See [Split Hyprland configuration](#split-hyprland-configuration) above. Paths are hard-coded in `widgets/HyprConfigInsp.qml`; change `configDir`, `hyprDir`, or `configFileEntries` if your install differs.
 
 **Background polling** — `SysMonService` polls only while the inspector is open *and* not minimized. Closing or hiding the window stops metric polling to reduce idle CPU use.
 
