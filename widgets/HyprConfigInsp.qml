@@ -23,7 +23,7 @@ import Quickshell.Io as Io
 //   - binds/env/raw     → fileContents{} via Io.Process cat (batch or single)
 //   - configfiles       → configFileEntries + BatSyntaxView
 //   - runtime           → RuntimeOptionsView (hyprctl getoption)
-//   - cpu/gpu/memory/…  → SysMonService (scripts/sysmon-poller.sh, autoPoll when visible)
+//   - cpu/gpu/memory/network/…  → SysMonService (scripts/sysmon-poller.sh, autoPoll when visible)
 //   - processes/audio/logs/services → dedicated *View components + shell pollers
 //   - system            → fastfetch (systemProcess, lazy until tab opened)
 //
@@ -151,6 +151,7 @@ Item {
         { label: "GPU", id: "gpu", file: "", view: "gpu" },
         { label: "Memory", id: "memory", file: "", view: "memory" },
         { label: "Temperature", id: "temperature", file: "", view: "temperature" },
+        { label: "Network", id: "network", file: "", view: "network" },
         { label: "Processes", id: "processes", file: "", view: "processes" },
         { label: "Audio", id: "audio", file: "", view: "audio" },
         { label: "Logs", id: "logs", file: "", view: "logs" },
@@ -161,9 +162,9 @@ Item {
     // === View routing helpers (single place for "which tabs share behavior?") ===
     // Used by refresh/scroll/focus handlers — add new view ids here when extending.
     readonly property var _fileOnlyViews: ["binds", "env", "raw"]
-    readonly property var _sysmonMetricViews: ["cpu", "gpu", "memory", "temperature"]
+    readonly property var _sysmonMetricViews: ["cpu", "gpu", "memory", "temperature", "network"]
     readonly property var _footerRefreshViews: ["system", "runtime", "processes", "audio", "logs", "services"]
-    readonly property var _noFileTabViews: ["system", "runtime", "configfiles", "cpu", "gpu", "memory", "temperature", "processes", "audio", "logs", "services"]
+    readonly property var _noFileTabViews: ["system", "runtime", "configfiles", "cpu", "gpu", "memory", "temperature", "network", "processes", "audio", "logs", "services"]
 
     function tabView() {
         const tab = currentTabInfo
@@ -459,6 +460,7 @@ Item {
         }
         if (tab && isSysmonMetricView(tab.view)) {
             sysMonService.refresh()
+            if (tab.view === "network") networkViewer.refreshDetail()
         }
         processesViewer.refresh()
         if (tab && tab.view === "audio") {
@@ -485,6 +487,7 @@ Item {
         }
         if (isSysmonMetricView(tab.view)) {
             sysMonService.refresh()
+            if (tab.view === "network") networkViewer.refreshDetail()
             return
         }
         if (tab.view === "processes") {
@@ -578,6 +581,18 @@ Item {
             const cpuT = sysMonService.data.cpu ? (sysMonService.data.cpu.temp || 0).toFixed(0) : "0"
             const gpuT = sysMonService.data.gpu ? (sysMonService.data.gpu.temp || 0).toFixed(0) : "0"
             return "CPU " + cpuT + "°C  ·  GPU " + gpuT + "°C  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
+        }
+        if (tab.view === "network") {
+            const net = sysMonService.data.network || {}
+            const rx = formatNetRate(net.rx_rate)
+            const tx = formatNetRate(net.tx_rate)
+            const iface = net.iface || "—"
+            const stats = net.conn_stats || {}
+            const tcp = stats.tcp_established || 0
+            const pub = networkViewer.detailData.public_ip || ""
+            const pubNote = pub ? ("  ·  " + pub) : ""
+            return "↓" + rx + "  ↑" + tx + "  ·  " + iface + "  ·  " + tcp + " TCP est" + pubNote
+                + "  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
         }
         if (tab.view === "processes") {
             const stats = sysMonService.data.process_stats || {}
@@ -682,6 +697,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.resetScroll()
         else if (tab.view === "memory") memoryViewer.resetScroll()
         else if (tab.view === "temperature") tempViewer.resetScroll()
+        else if (tab.view === "network") networkViewer.resetScroll()
         else if (tab.view === "processes") processesViewer.resetScroll()
         else if (tab.view === "audio") audioViewer.resetScroll()
         else if (tab.view === "logs") logsViewer.resetScroll()
@@ -704,6 +720,7 @@ Item {
             runtimeViewer.ensureLoaded()
         } else if (isSysmonMetricView(tab.view)) {
             sysMonService.refresh()
+            if (tab.view === "network") networkViewer.refreshDetail()
         } else if (tab.view === "processes") {
             processesViewer.refresh()
         } else if (tab.view === "audio") {
@@ -742,7 +759,10 @@ Item {
         if (!wmDistroLabel) refreshHeaderInfo()
         if (tab.view === "system" && systemDirty) refreshSystemInfo()
         else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
-        else if (isSysmonMetricView(tab.view)) sysMonService.refresh()
+        else if (isSysmonMetricView(tab.view)) {
+            sysMonService.refresh()
+            if (tab.view === "network") networkViewer.refreshDetail()
+        }
         else if (tab.view === "processes") processesViewer.refresh()
         else if (tab.view === "audio") audioViewer.refresh()
         else if (tab.view === "logs") logsViewer.refresh(false)
@@ -1004,6 +1024,13 @@ Item {
         return (globalFilter && globalFilter.trim()) ? globalFilter.toLowerCase().trim() : ""
     }
 
+    function formatNetRate(bytesPerSec) {
+        const b = Number(bytesPerSec) || 0
+        const kb = b / 1024
+        if (kb >= 1024) return (kb / 1024).toFixed(1) + " MB/s"
+        return kb.toFixed(1) + " KB/s"
+    }
+
     function filteredBinds() {
         const q = filterQuery()
         if (!q) return _parsedBinds
@@ -1072,6 +1099,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.pageScroll(direction)
         else if (tab.view === "memory") memoryViewer.pageScroll(direction)
         else if (tab.view === "temperature") tempViewer.pageScroll(direction)
+        else if (tab.view === "network") networkViewer.pageScroll(direction)
         else if (tab.view === "processes") processesViewer.pageScroll(direction)
         else if (tab.view === "audio") audioViewer.pageScroll(direction)
         else if (tab.view === "logs") logsViewer.pageScroll(direction)
@@ -1091,6 +1119,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.lineScroll(direction)
         else if (tab.view === "memory") memoryViewer.lineScroll(direction)
         else if (tab.view === "temperature") tempViewer.lineScroll(direction)
+        else if (tab.view === "network") networkViewer.lineScroll(direction)
         else if (tab.view === "processes") processesViewer.lineScroll(direction)
         else if (tab.view === "audio") audioViewer.lineScroll(direction)
         else if (tab.view === "logs") logsViewer.lineScroll(direction)
@@ -1799,6 +1828,24 @@ Item {
                         gaugeHighColor: th.gaugeHigh
                     }
 
+                    NetworkMonitorView {
+                        id: networkViewer
+                        visible: root.currentTabInfo.view === "network"
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        active: inspectorWindow.visible && root.currentTabInfo.view === "network"
+                        service: sysMonService
+                        globalFilter: root.globalFilter
+                        textColor: root.text
+                        subtextColor: root.subtext
+                        accentColor: root.accent
+                        surfaceColor: root.surface
+                        overlayColor: root.overlay
+                        okColor: th.gaugeLow
+                        warnColor: th.gaugeMid
+                        errorColor: th.gaugeHigh
+                    }
+
                     ProcessMonitorView {
                         id: processesViewer
                         visible: root.currentTabInfo.view === "processes"
@@ -2000,6 +2047,8 @@ Item {
                         property int _ramTick: sysMonService.ramHistory.length
                         property int _cpuTempTick: sysMonService.cpuTempHistory.length
                         property int _gpuTempTick: sysMonService.gpuTempHistory.length
+                        property int _netRxTick: sysMonService.netRxHistory.length
+                        property int _netTxTick: sysMonService.netTxHistory.length
                         property var _cpuData: sysMonService.data
                         property int _procTick: processesViewer.dataVersion
                         property int _procSel: processesViewer.selectionVersion
@@ -2067,7 +2116,10 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (root.currentTabInfo.view === "runtime") runtimeViewer.refreshCategory()
-                                else if (isSysmonMetricView(root.currentTabInfo.view)) sysMonService.refresh()
+                                else if (isSysmonMetricView(root.currentTabInfo.view)) {
+                                    sysMonService.refresh()
+                                    if (root.currentTabInfo.view === "network") networkViewer.refreshDetail()
+                                }
                                 else if (root.currentTabInfo.view === "processes") processesViewer.refresh()
                                 else if (root.currentTabInfo.view === "audio") audioViewer.refresh()
                                 else if (root.currentTabInfo.view === "logs") logsViewer.refresh(true)

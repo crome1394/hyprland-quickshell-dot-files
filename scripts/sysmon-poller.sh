@@ -245,6 +245,329 @@ if (( prev_ts > 0 && net_tx > prev_net_tx )); then
     net_tx_rate=$(awk "BEGIN { printf \"%.0f\", ($net_tx - $prev_net_tx) / $delta_s }")
 fi
 
+# ---------- Network detail (interfaces, route, DNS, VPN, connections) ----------
+gateway=$(ip route show default 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "via") { print $(i + 1); exit }}')
+[[ -z "${gateway:-}" ]] && gateway=""
+
+dns_json='[]'
+dns_current=""
+dns_link=""
+dns_servers=()
+if command -v resolvectl >/dev/null 2>&1; then
+    while IFS= read -r line; do
+        case "$line" in
+            Link\ *' ('*')')
+                cur_link="${line#Link * (}"
+                cur_link="${cur_link%)}"
+                ;;
+            *"Current DNS Server:"*)
+                dns_current="${line#*Current DNS Server: }"
+                dns_current="${dns_current%%#*}"
+                dns_link="${cur_link:-}"
+                ;;
+            *"DNS Servers:"*)
+                rest="${line#*DNS Servers: }"
+                while read -r srv; do
+                    srv="${srv%%#*}"
+                    [[ -n "$srv" ]] && dns_servers+=("$srv")
+                done < <(tr ' ' '\n' <<<"$rest")
+                ;;
+            "Fallback DNS Servers:"*)
+                rest="${line#Fallback DNS Servers: }"
+                while read -r srv; do
+                    srv="${srv%%#*}"
+                    [[ -n "$srv" ]] && dns_servers+=("$srv")
+                done < <(tr ' ' '\n' <<<"$rest")
+                ;;
+        esac
+    done < <(resolvectl status 2>/dev/null || true)
+    while read -r ip; do
+        [[ -n "$ip" ]] && dns_servers+=("$ip")
+    done < <(resolvectl status 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | awk '!seen[$0]++')
+    if ((${#dns_servers[@]} > 0)); then
+        dns_json=$(printf '%s\n' "${dns_servers[@]}" | awk '!seen[$0]++' | head -12 \
+            | jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')
+    fi
+fi
+if [[ -z "$dns_json" || "$dns_json" == "[]" || "$dns_json" == "null" ]]; then
+    if command -v resolvectl >/dev/null 2>&1; then
+        dns_json=$(resolvectl dns 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | sort -u | head -12 \
+            | jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')
+    fi
+fi
+if [[ -z "$dns_json" || "$dns_json" == "[]" || "$dns_json" == "null" ]]; then
+    dns_json=$(grep -E '^nameserver ' /etc/resolv.conf 2>/dev/null | awk '{print $2}' | head -12 \
+        | jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo '[]')
+fi
+
+vpn_iface=""
+for v in tailscale0 wg0 tun0; do
+    if [[ -d "/sys/class/net/$v" ]]; then
+        vpn_iface="$v"
+        break
+    fi
+done
+
+tailscale_json='{"active":false,"hostname":"","ips":[],"online":false,"version":"","exit_node":"","exit_node_name":"","using_exit_node":false}'
+if command -v tailscale >/dev/null 2>&1; then
+    ts_raw=$(tailscale status --json 2>/dev/null || true)
+    if [[ -n "$ts_raw" ]]; then
+        tailscale_json=$(jq -c '{
+            active: (.BackendState == "Running"),
+            hostname: (.Self.HostName // ""),
+            ips: [.Self.TailscaleIPs[]?],
+            online: (.Self.Online // false),
+            version: (.Version // ""),
+            exit_node: (.ExitNodeStatus.ID // ""),
+            exit_node_name: (
+                if (.ExitNodeStatus.ID // "") != "" then
+                    (.Peer[.ExitNodeStatus.ID].HostName // .Peer[.ExitNodeStatus.ID].DNSName // .ExitNodeStatus.ID)
+                else "" end
+            ),
+            using_exit_node: ((.ExitNodeStatus.ID // "") != "")
+        }' <<<"$ts_raw" 2>/dev/null || echo "$tailscale_json")
+    fi
+fi
+
+conn_stats_json='{"tcp_established":0,"tcp_total":0,"udp":0,"total":0}'
+if command -v ss >/dev/null 2>&1; then
+    tcp_est=$(ss -H -tan state established 2>/dev/null | wc -l | xargs)
+    tcp_all=$(ss -H -tan 2>/dev/null | wc -l | xargs)
+    udp_all=$(ss -H -uan 2>/dev/null | wc -l | xargs)
+    conn_stats_json=$(jq -cn \
+        --argjson tcp_est "${tcp_est:-0}" \
+        --argjson tcp_all "${tcp_all:-0}" \
+        --argjson udp "${udp_all:-0}" \
+        '{tcp_established: $tcp_est, tcp_total: $tcp_all, udp: $udp, total: ($tcp_all + $udp)}')
+fi
+
+wifi_json='{"iface":"","connected":false,"ssid":"","signal_dbm":null,"signal_pct":null,"channel_mhz":null,"bitrate_mbps":null,"noise_dbm":null}'
+if command -v iw >/dev/null 2>&1; then
+    for wl in /sys/class/net/wl*; do
+        [[ -e "$wl" ]] || continue
+        wl_name=$(basename "$wl")
+        link_out=$(iw dev "$wl_name" link 2>/dev/null || true)
+        if [[ "$link_out" == *"Connected to"* ]]; then
+            wl_ssid=$(sed -n 's/^[[:space:]]*SSID: \(.*\)$/\1/p' <<<"$link_out" | head -1)
+            wl_signal=$(sed -n 's/^[[:space:]]*signal: \(-\?[0-9]*\) dBm/\1/p' <<<"$link_out" | head -1)
+            wl_freq=$(sed -n 's/^[[:space:]]*freq: \(.*\)$/\1/p' <<<"$link_out" | head -1)
+            wl_bitrate=$(sed -n 's/^[[:space:]]*bitrate: \([0-9.]*\).*/\1/p' <<<"$link_out" | head -1)
+            wl_noise=""
+            if [[ -n "$wl_freq" ]]; then
+                wl_noise=$(iw dev "$wl_name" survey dump 2>/dev/null | awk -v f="$wl_freq" '
+                    $1 == "frequency:" && ($2 == f || $2 == f" MHz") { on = 1; next }
+                    on && $1 == "noise:" { print $2; exit }
+                    on && $1 == "frequency:" { exit }
+                ' | sed 's/dBm//' | xargs)
+            fi
+            wl_pct=""
+            if [[ -n "$wl_signal" ]]; then
+                wl_pct=$(awk -v s="$wl_signal" 'BEGIN {
+                    if (s >= -50) p = 100
+                    else if (s <= -100) p = 0
+                    else p = int(2 * (s + 100))
+                    if (p < 0) p = 0; if (p > 100) p = 100
+                    print p
+                }')
+            fi
+            wifi_json=$(jq -cn \
+                --arg iface "$wl_name" \
+                --arg ssid "${wl_ssid:-}" \
+                --argjson signal_dbm "${wl_signal:-null}" \
+                --argjson signal_pct "${wl_pct:-null}" \
+                --argjson channel_mhz "${wl_freq:-null}" \
+                --argjson bitrate_mbps "${wl_bitrate:-null}" \
+                --argjson noise_dbm "${wl_noise:-null}" \
+                '{
+                    iface: $iface, connected: true, ssid: $ssid,
+                    signal_dbm: (if ($signal_dbm|type) == "number" then $signal_dbm else null end),
+                    signal_pct: (if ($signal_pct|type) == "number" then $signal_pct else null end),
+                    channel_mhz: (if ($channel_mhz|type) == "number" then $channel_mhz else null end),
+                    bitrate_mbps: (if ($bitrate_mbps|type) == "number" then $bitrate_mbps else null end),
+                    noise_dbm: (if ($noise_dbm|type) == "number" then $noise_dbm else null end)
+                }')
+            break
+        elif [[ "$(jq -r '.iface // ""' <<<"$wifi_json")" == "" ]]; then
+            wifi_json=$(jq -cn --arg iface "$wl_name" \
+                '{iface: $iface, connected: false, ssid: "", signal_dbm: null, signal_pct: null, channel_mhz: null, bitrate_mbps: null, noise_dbm: null}')
+        fi
+    done
+fi
+
+proc_bw_json='[]'
+net_proc_state='{}'
+if command -v ss >/dev/null 2>&1; then
+    proc_totals=$(ss -tnpi state established 2>/dev/null | awk '
+      function flush() {
+        if (proc != "") {
+          prx[proc] += rx; ptx[proc] += tx
+        }
+        proc = ""; rx = 0; tx = 0
+      }
+      /users:\(\("/ {
+        flush()
+        if (match($0, /users:\(\(\"[^\"]*\"/)) {
+          s = substr($0, RSTART, RLENGTH)
+          sub(/users:\(\(\"/, "", s)
+          sub(/\"/, "", s)
+          proc = s
+        }
+      }
+      /bytes_sent:/ {
+        if (match($0, /bytes_sent:[0-9]+/)) {
+          v = substr($0, RSTART, RLENGTH)
+          sub(/bytes_sent:/, "", v)
+          tx += v + 0
+        }
+        if (match($0, /bytes_received:[0-9]+/)) {
+          v = substr($0, RSTART, RLENGTH)
+          sub(/bytes_received:/, "", v)
+          rx += v + 0
+        }
+      }
+      END {
+        flush()
+        for (p in prx) printf "%s\t%d\t%d\n", p, prx[p], ptx[p]
+      }
+    ')
+    prev_net_proc=$(jq -c '.net_proc // {}' <<<"$PREV" 2>/dev/null || echo '{}')
+    proc_bw_rows=()
+    while IFS=$'\t' read -r pname prx ptx; do
+        [[ -z "${pname:-}" ]] && continue
+        prev_rx=$(jq -r --arg n "$pname" '.[$n].rx // 0' <<<"$prev_net_proc")
+        prev_tx=$(jq -r --arg n "$pname" '.[$n].tx // 0' <<<"$prev_net_proc")
+        rx_rate=0
+        tx_rate=0
+        if (( prev_ts > 0 && prx >= prev_rx )); then
+            rx_rate=$(awk "BEGIN { printf \"%.0f\", ($prx - $prev_rx) / $delta_s }")
+        fi
+        if (( prev_ts > 0 && ptx >= prev_tx )); then
+            tx_rate=$(awk "BEGIN { printf \"%.0f\", ($ptx - $prev_tx) / $delta_s }")
+        fi
+        proc_bw_rows+=("$(jq -cn \
+            --arg process "$pname" \
+            --argjson rx_rate "$rx_rate" \
+            --argjson tx_rate "$tx_rate" \
+            '{process: $process, rx_rate: $rx_rate, tx_rate: $tx_rate}')")
+    done <<<"$proc_totals"
+    if ((${#proc_bw_rows[@]} > 0)); then
+        proc_bw_json=$(printf '%s\n' "${proc_bw_rows[@]}" | jq -s 'sort_by(-(.rx_rate + .tx_rate)) | .[0:12]')
+    fi
+    net_proc_state=$(while IFS=$'\t' read -r pname prx ptx; do
+        [[ -z "${pname:-}" ]] && continue
+        echo "$pname $prx $ptx"
+    done <<<"$proc_totals" | jq -R -s '
+        split("\n") | map(select(length > 0) | split(" "))
+        | map(select(length >= 3) | {(.[0]): {rx: (.[1]|tonumber), tx: (.[2]|tonumber)}})
+        | add // {}
+    ' 2>/dev/null || echo '{}')
+fi
+
+interfaces_json='[]'
+iface_limit=0
+while IFS= read -r iface; do
+    [[ "$iface" == "lo" ]] && continue
+    iface_limit=$((iface_limit + 1))
+    (( iface_limit > 12 )) && break
+    operstate=$(cat "/sys/class/net/${iface}/operstate" 2>/dev/null || echo "unknown")
+    carrier=$(cat "/sys/class/net/${iface}/carrier" 2>/dev/null || echo -1)
+    mtu=$(cat "/sys/class/net/${iface}/mtu" 2>/dev/null || echo 0)
+    mac=$(cat "/sys/class/net/${iface}/address" 2>/dev/null || echo "")
+    speed=$(cat "/sys/class/net/${iface}/speed" 2>/dev/null || echo -1)
+    ipv4=$(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{print $4}' | paste -sd, - || true)
+    ipv6=$(ip -6 -o addr show dev "$iface" scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | paste -sd, - || true)
+    dev_line=$(awk -v iface="${iface}:" '$1 == iface { print $2, $10; exit }' /proc/net/dev 2>/dev/null || echo "0 0")
+    if_rx=$(awk '{print $1}' <<<"$dev_line")
+    if_tx=$(awk '{print $2}' <<<"$dev_line")
+    wl_ssid=""
+    wl_signal=""
+    if [[ "$iface" == wl* ]] && command -v iw >/dev/null 2>&1; then
+        wl_link=$(iw dev "$iface" link 2>/dev/null || true)
+        if [[ "$wl_link" == *"Connected to"* ]]; then
+            wl_ssid=$(sed -n 's/^[[:space:]]*SSID: \(.*\)$/\1/p' <<<"$wl_link" | head -1)
+            wl_signal=$(sed -n 's/^[[:space:]]*signal: \(-\?[0-9]*\) dBm/\1/p' <<<"$wl_link" | head -1)
+        fi
+    fi
+    entry=$(jq -n \
+        --arg name "$iface" \
+        --arg state "$operstate" \
+        --arg ipv4 "${ipv4:-}" \
+        --arg ipv6 "${ipv6:-}" \
+        --arg mac "${mac:-}" \
+        --argjson mtu "${mtu:-0}" \
+        --argjson carrier "${carrier:--1}" \
+        --argjson speed_mbps "${speed:--1}" \
+        --argjson rx_bytes "${if_rx:-0}" \
+        --argjson tx_bytes "${if_tx:-0}" \
+        --arg wifi_ssid "${wl_ssid:-}" \
+        --arg wifi_signal_dbm "${wl_signal:-}" \
+        '{
+            name: $name, state: $state, ipv4: $ipv4, ipv6: $ipv6,
+            mac: $mac, mtu: $mtu, carrier: $carrier, link_up: ($carrier == 1),
+            speed_mbps: $speed_mbps, rx_bytes: $rx_bytes, tx_bytes: $tx_bytes,
+            wifi_ssid: $wifi_ssid,
+            wifi_signal_dbm: (if $wifi_signal_dbm == "" then null else ($wifi_signal_dbm | tonumber) end)
+        }')
+    interfaces_json=$(jq -n --argjson arr "$interfaces_json" --argjson e "$entry" '$arr + [$e]')
+done < <(ls -1 /sys/class/net 2>/dev/null | sort)
+
+local_ip=""
+if [[ -n "${net_iface:-}" && "$net_iface" != "unknown" ]]; then
+    local_ip=$(ip -4 -o addr show dev "$net_iface" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+fi
+
+connections_json='[]'
+if command -v ss >/dev/null 2>&1; then
+    connections_json=$(
+        { ss -H -tanpi 2>/dev/null; ss -H -uanpi 2>/dev/null; } | awk '
+          function flush() {
+            if (state != "" && local != "") {
+              disp = state
+              if (disp == "ESTAB") disp = "ESTABLISHED"
+              gsub(/\\/, "\\\\", proc)
+              gsub(/"/, "\\\"", proc)
+              printf "{\"proto\":\"%s\",\"state\":\"%s\",\"local\":\"%s\",\"remote\":\"%s\",\"process\":\"%s\",\"bytes_sent\":%d,\"bytes_received\":%d}\n",
+                proto, disp, local, remote, proc, tx + 0, rx + 0
+            }
+            state = ""; local = ""; remote = ""; proc = ""; tx = 0; rx = 0
+          }
+          /bytes_sent:/ {
+            if (match($0, /bytes_sent:[0-9]+/)) {
+              v = substr($0, RSTART, RLENGTH); sub(/bytes_sent:/, "", v); tx = v + 0
+            }
+            if (match($0, /bytes_received:[0-9]+/)) {
+              v = substr($0, RSTART, RLENGTH); sub(/bytes_received:/, "", v); rx = v + 0
+            }
+            next
+          }
+          $1 ~ /^(ESTAB|LISTEN|TIME-WAIT|SYN-SENT|SYN-RECV|FIN-WAIT|CLOSE-WAIT|LAST-ACK|CLOSING|UNCONN)$/ {
+            flush()
+            state = $1
+            local = $4
+            remote = $5
+            proto = (state == "UNCONN" ? "udp" : "tcp")
+            p = index($0, "users:((\"")
+            if (p > 0) {
+              rest = substr($0, p + 9)
+              q = index(rest, "\"")
+              if (q > 0) proc = substr(rest, 1, q - 1)
+            }
+            next
+          }
+          END { flush() }
+        ' | jq -s '
+          map(select(.local != ""))
+          | sort_by(
+              if .state == "ESTABLISHED" then 0
+              elif .state == "LISTEN" then 1
+              else 2 end,
+              -(.bytes_sent + .bytes_received)
+            )
+          | .[0:20]
+        ' 2>/dev/null || echo '[]'
+    )
+fi
+
 # ---------- Disk I/O + Root filesystem ----------
 disk_stats=$(awk '
   $3 ~ /^(nvme[0-9]+n[0-9]+|sd[a-z])$/ {
@@ -489,8 +812,20 @@ jq -cn \
   --argjson proc_total "$proc_total" \
   --argjson uptime "$uptime_s" \
   --arg net_iface "${net_iface:-unknown}" \
+  --arg net_local_ip "${local_ip:-}" \
   --argjson net_rx_rate "$net_rx_rate" \
   --argjson net_tx_rate "$net_tx_rate" \
+  --arg net_gateway "${gateway:-}" \
+  --argjson net_dns "$dns_json" \
+  --arg net_dns_current "${dns_current:-}" \
+  --arg net_dns_link "${dns_link:-}" \
+  --arg net_vpn_iface "${vpn_iface:-}" \
+  --argjson net_tailscale "$tailscale_json" \
+  --argjson net_conn_stats "$conn_stats_json" \
+  --argjson net_wifi "$wifi_json" \
+  --argjson net_interfaces "$interfaces_json" \
+  --argjson net_connections "$connections_json" \
+  --argjson net_proc_bandwidth "$proc_bw_json" \
   --argjson disk_read_rate "$disk_read_rate" \
   --argjson disk_write_rate "$disk_write_rate" \
   --argjson root_used "${root_used:-0}" \
@@ -532,7 +867,13 @@ jq -cn \
     load: ($load_str | split(",") | map(tonumber)),
     process_stats: { running: $proc_running, total: $proc_total },
     uptime: $uptime,
-    network: { iface: $net_iface, rx_rate: $net_rx_rate, tx_rate: $net_tx_rate },
+    network: {
+      iface: $net_iface, local_ip: $net_local_ip, rx_rate: $net_rx_rate, tx_rate: $net_tx_rate,
+      gateway: $net_gateway, dns: $net_dns, dns_current: $net_dns_current, dns_link: $net_dns_link,
+      vpn_iface: $net_vpn_iface, tailscale: $net_tailscale, conn_stats: $net_conn_stats,
+      wifi: $net_wifi, interfaces: $net_interfaces, connections: $net_connections,
+      proc_bandwidth: $net_proc_bandwidth
+    },
     disk: {
       read_rate: $disk_read_rate, write_rate: $disk_write_rate,
       root_used: $root_used, root_total: $root_total, root_pct: $root_pct
@@ -554,7 +895,15 @@ fi
 rm -f "$TMP_JSON" 2>/dev/null || true
 
 # Update delta state
-cat > "$STATE_FILE" <<EOF
+jq -n \
+  --argjson ts "$NOW" \
+  --argjson net_rx "${net_rx:-0}" \
+  --argjson net_tx "${net_tx:-0}" \
+  --argjson disk_read "${disk_read:-0}" \
+  --argjson disk_write "${disk_write:-0}" \
+  --argjson net_proc "${net_proc_state:-{}}" \
+  '{ts: $ts, net_rx: $net_rx, net_tx: $net_tx, disk_read: $disk_read, disk_write: $disk_write, net_proc: $net_proc}' \
+  > "$STATE_FILE" 2>/dev/null || cat > "$STATE_FILE" <<EOF
 {
   "ts": $NOW,
   "net_rx": ${net_rx:-0},
