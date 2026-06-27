@@ -94,10 +94,26 @@ Typical layout:
 #### How the inspector uses the split config
 
 - **Config Files** tab — Primary file browser. Pick any registered config from the dropdown to view it with syntax highlighting (`bat`), filter lines with global search, copy the full file, or press **Ctrl+E** / **Edit** to open it in `$TERMINAL` with `nano`.
-- **Key Bindings** and **Environment** tabs — Read `keybindings.lua` and `environment-variables.lua` directly and show parsed tables (easier to scan than raw source).
+- **Key Bindings** and **Environment** tabs — Read `keybindings.lua` and `environment-variables.lua` directly and show parsed tables (easier to scan than raw source). See [Custom description comments](#custom-description-comments) below.
 - **Runtime Options** tab — Shows values Hyprland is running with now via `hyprctl getoption` (useful after editing; reload Hyprland to apply file changes).
 
 The file list is defined in `widgets/HyprConfigInsp.qml` (`configFileEntries`). Add an entry there if you create a new config module.
+
+#### Custom description comments
+
+In `keybindings.lua` and `environment-variables.lua`, inline comments use the `--#` prefix to attach a **human-readable description** on the same line as the config entry. The inspector parses these and surfaces them in the **Key Bindings** and **Environment** tabs — they are not Hyprland syntax; they are a local convention for documentation.
+
+```lua
+hl.bind(mainMod .. " + T", hl.dsp.exec_cmd(terminal)) --# Opens the default terminal
+hl.env("TERMINAL", terminal)                         --# Default terminal for keybinds and CLI tools
+```
+
+| File | What `--#` becomes in the inspector |
+|------|-------------------------------------|
+| `keybindings.lua` | **Action** column (the bind’s description). Only `hl.bind(...)` lines that include `--#` are listed. |
+| `environment-variables.lua` | **Comment** shown under the variable name. Plain `--` comments are also recognized as a fallback. |
+
+Use `--#` to keep Hyprland directives on the left and your notes on the right. Commented-out binds (`--hl.bind(...)`) are ignored. If you adopt this layout in your own config, match the parser expectations in `widgets/HyprConfigInsp.qml` (`parseKeybinds`, `parseEnvVars`).
 
 #### New to split configs?
 
@@ -118,8 +134,8 @@ If you are used to one monolithic `hyprland.conf`, think of `hyprland.lua` as a 
 
 | Tab | Description |
 |-----|-------------|
-| **Key Bindings** | Parsed keybind table from `keybindings.lua` (key, action, comments) |
-| **Environment** | Parsed environment variables from `environment-variables.lua` |
+| **Key Bindings** | Parsed `hl.bind` entries from `keybindings.lua` (key + `--#` description as action) |
+| **Environment** | Parsed `hl.env` entries from `environment-variables.lua` (variable, value, `--#` comment) |
 | **Runtime Options** | Live Hyprland options via `hyprctl getoption`, grouped by category with wiki links |
 | **Config Files** | Browse all split `config/*.lua` modules plus Hypridle/Hyprlock/Hyprpaper configs; syntax highlighting, search, copy, and edit |
 | **CPU** | CPU usage gauge, history sparkline, load averages, and top CPU processes |
@@ -166,6 +182,8 @@ Shortcuts apply while the inspector window is focused (search field captures typ
 ### Important notes
 
 **Config paths** — See [Split Hyprland configuration](#split-hyprland-configuration) above. Paths are hard-coded in `widgets/HyprConfigInsp.qml`; change `configDir`, `hyprDir`, or `configFileEntries` if your install differs.
+
+**`--#` descriptions** — Key Bindings and Environment tabs depend on the `--#` comment convention in `keybindings.lua` and `environment-variables.lua`. Entries without `--#` (for binds) or without a recognized comment (for env) may not appear as expected in those parsed views.
 
 **Background polling** — `SysMonService` polls only while the inspector is open *and* not minimized. Closing or hiding the window stops metric polling to reduce idle CPU use.
 
