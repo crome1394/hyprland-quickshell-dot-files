@@ -32,18 +32,20 @@ Item {
     readonly property int rowHeight: 22
     readonly property int headerHeight: 20
     readonly property int sectionSpacing: 8
-    readonly property int tblSpacing: 4
+    readonly property int tblSpacing: 6
+    readonly property int tblRowPad: 6
+    readonly property int tblCellPad: 10
 
     readonly property var colMinW: ({
         pid: 40, user: 36, cpu: 38, mem: 38, time: 42, start: 46,
-        threads: 26, rss: 38, vsz: 42, pri: 24, shr: 36, stat: 28, cmd: 120
+        threads: 26, rss: 38, vsz: 42, pri: 24, nice: 28, shr: 36, stat: 28, cmd: 120
     })
     readonly property var colMaxW: ({
         user: 92, time: 68, start: 60, cmd: 420
     })
     property var colLayout: ({
         pid: 40, user: 36, cpu: 38, mem: 38, time: 42, start: 46,
-        threads: 26, rss: 38, vsz: 42, pri: 24, shr: 36, stat: 28, cmd: 120,
+        threads: 26, rss: 38, vsz: 42, pri: 24, nice: 28, shr: 36, stat: 28, cmd: 120,
         fixed: 0, total: 640
     })
     property int colLayoutVersion: 0
@@ -496,7 +498,7 @@ Item {
     function exportText() {
         const rows = filteredProcesses()
         if (!rows.length) return ""
-        const lines = ["PID\tUser\tCPU%\tMem%\tTime\tStart\tThr\tRSS\tVSZ\tPR\tSHR\tCommand\tStat"]
+        const lines = ["PID\tUser\tCPU%\tMem%\tTime\tStart\tThr\tRSS\tVSZ\tPR\tNI\tSHR\tCommand\tStat"]
         for (let i = 0; i < rows.length; i++) {
             const p = rows[i]
             lines.push([
@@ -510,6 +512,7 @@ Item {
                 formatKiB(p.rss),
                 formatKiB(p.vsz),
                 p.pri !== undefined ? String(p.pri) : "--",
+                formatNice(p.nice),
                 formatKiB(p.shr),
                 p.cmd || p.name || "",
                 formatState(p.state)
@@ -528,7 +531,7 @@ Item {
         colMetrics.font.family = "monospace"
         colMetrics.font.bold = !!bold
         colMetrics.text = text ? String(text) : ""
-        return Math.ceil(colMetrics.advanceWidth) + 8
+        return Math.ceil(colMetrics.advanceWidth) + root.tblCellPad
     }
 
     function fitCol(key, value, bold) {
@@ -545,7 +548,7 @@ Item {
 
     function refreshColumnLayout(viewportWidth) {
         const vw = Math.max(0, Math.round(viewportWidth || 0))
-        const fixedKeys = ["pid", "user", "cpu", "mem", "time", "start", "threads", "rss", "vsz", "pri", "shr", "stat"]
+        const fixedKeys = ["pid", "user", "cpu", "mem", "time", "start", "threads", "rss", "vsz", "pri", "nice", "shr", "stat"]
         const w = {}
 
         for (let i = 0; i < fixedKeys.length; i++)
@@ -561,6 +564,7 @@ Item {
         w.rss = Math.max(w.rss, fitCol("rss", "RSS", true))
         w.vsz = Math.max(w.vsz, fitCol("vsz", "VSZ", true))
         w.pri = Math.max(w.pri, fitCol("pri", "PR", true))
+        w.nice = Math.max(w.nice, fitCol("nice", "NI", true))
         w.shr = Math.max(w.shr, fitCol("shr", "SHR", true))
         w.stat = Math.max(w.stat, fitCol("stat", "Stat", true))
 
@@ -591,6 +595,7 @@ Item {
             w.rss = Math.max(w.rss, fitCol("rss", formatKiB(p.rss), false))
             w.vsz = Math.max(w.vsz, fitCol("vsz", formatKiB(p.vsz), false))
             w.pri = Math.max(w.pri, fitCol("pri", p.pri !== undefined ? String(p.pri) : "--", false))
+            w.nice = Math.max(w.nice, fitCol("nice", formatNice(p.nice), false))
             w.shr = Math.max(w.shr, fitCol("shr", formatKiB(p.shr), false))
             w.stat = Math.max(w.stat, fitCol("stat", formatState(p.state), false))
             const cmd = displayRowCmdText(p)
@@ -598,10 +603,10 @@ Item {
             cmdContentMin = Math.max(cmdContentMin, fitCol("cmd", cmd, false) + cmdPad)
         }
 
-        let fixed = 8
+        let fixed = tblRowPad * 2
         for (let f = 0; f < fixedKeys.length; f++)
             fixed += w[fixedKeys[f]]
-        fixed += tblSpacing * 12
+        fixed += tblSpacing * fixedKeys.length
 
         const minTotal = fixed + colMinW.cmd
         const neededTotal = fixed + cmdContentMin
@@ -632,6 +637,11 @@ Item {
     function formatState(state) {
         if (!state) return "--"
         return String(state).charAt(0).toUpperCase()
+    }
+
+    function formatNice(value) {
+        if (value === undefined || value === null) return "--"
+        return String(value)
     }
 
     function stateColor(state) {
@@ -1263,8 +1273,8 @@ Item {
 
                         Row {
                             anchors.fill: parent
-                            anchors.leftMargin: 4
-                            anchors.rightMargin: 4
+                            anchors.leftMargin: root.tblRowPad
+                            anchors.rightMargin: root.tblRowPad
                             spacing: root.tblSpacing
                             clip: true
 
@@ -1278,6 +1288,7 @@ Item {
                             Text { property int _cw: root.colLayoutVersion; width: root.colW("rss"); height: parent.height; text: "RSS"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
                             Text { property int _cw: root.colLayoutVersion; width: root.colW("vsz"); height: parent.height; text: "VSZ"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
                             Text { property int _cw: root.colLayoutVersion; width: root.colW("pri"); height: parent.height; text: "PR"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("nice"); height: parent.height; text: "NI"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
                             Text { property int _cw: root.colLayoutVersion; width: root.colW("shr"); height: parent.height; text: "SHR"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
                             Text { property int _cw: root.colLayoutVersion; width: root.colW("cmd"); height: parent.height; text: "Command"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; clip: true }
                             Text { property int _cw: root.colLayoutVersion; width: root.colW("stat"); height: parent.height; text: "Stat"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter; clip: true }
@@ -1350,8 +1361,8 @@ Item {
 
                             Row {
                                 anchors.fill: parent
-                                anchors.leftMargin: 4
-                                anchors.rightMargin: 4
+                                anchors.leftMargin: root.tblRowPad
+                                anchors.rightMargin: root.tblRowPad
                                 spacing: root.tblSpacing
                                 clip: true
 
@@ -1516,6 +1527,18 @@ Item {
                                     width: root.colW("pri")
                                     height: parent.height
                                     text: rowRoot.isGroup ? "--" : (modelData.pri !== undefined ? modelData.pri : "--")
+                                    color: root.textColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("nice")
+                                    height: parent.height
+                                    text: rowRoot.isGroup ? "--" : root.formatNice(modelData.nice)
                                     color: root.textColor
                                     font.pixelSize: 10
                                     font.family: "monospace"
