@@ -41,9 +41,12 @@ Item {
     readonly property int colTimeW: 54
     readonly property int colThreadsW: 30
     readonly property int colRssW: 42
+    readonly property int colVszW: 40
+    readonly property int colStartW: 50
     readonly property int colPriW: 28
     readonly property int colShrW: 38
     readonly property int colStatW: 32
+    readonly property int colCmdMinW: 96
 
     property var processes: []
     property int dataVersion: 0
@@ -67,6 +70,7 @@ Item {
     property int _actionIndex: 0
     property string _pendingAction: ""
     property bool killConfirmVisible: false
+    property int lastUpdatedMs: 0
 
     readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
 
@@ -82,8 +86,10 @@ Item {
             cpu: Number(p.cpu || 0),
             mem: Number(p.mem || 0),
             rss: p.rss,
+            vsz: p.vsz,
             shr: p.shr,
             time: p.time || "",
+            start: p.start || "",
             threads: p.threads
         }
     }
@@ -118,7 +124,8 @@ Item {
                 const hay = [
                     String(p.pid || ""),
                     p.user, p.name, p.cmd,
-                    formatState(p.state)
+                    formatState(p.state),
+                    p.start || ""
                 ].join(" ").toLowerCase()
                 if (hay.indexOf(q) === -1)
                     continue
@@ -148,8 +155,10 @@ Item {
                 cpu: row.cpu,
                 mem: row.mem,
                 rss: row.rss,
+                vsz: row.vsz,
                 shr: row.shr,
                 time: row.time,
+                start: row.start,
                 threads: row.threads,
                 groupStart: j === 0 || commandGroupKey(row) !== commandGroupKey(rows[j - 1])
             })
@@ -247,7 +256,7 @@ Item {
     function exportText() {
         const rows = filteredProcesses()
         if (!rows.length) return ""
-        const lines = ["PID\tUser\tCPU%\tMem%\tTime\tThr\tRSS\tPR\tSHR\tCommand\tStat"]
+        const lines = ["PID\tUser\tCPU%\tMem%\tTime\tStart\tThr\tRSS\tVSZ\tPR\tSHR\tCommand\tStat"]
         for (let i = 0; i < rows.length; i++) {
             const p = rows[i]
             lines.push([
@@ -256,8 +265,10 @@ Item {
                 p.cpu.toFixed(1),
                 p.mem.toFixed(1),
                 formatTime(p.time),
+                formatStart(p.start),
                 p.threads !== undefined ? String(p.threads) : "--",
                 formatKiB(p.rss),
+                formatKiB(p.vsz),
                 p.pri !== undefined ? String(p.pri) : "--",
                 formatKiB(p.shr),
                 p.cmd || p.name || "",
@@ -272,10 +283,18 @@ Item {
         if (text) copyToClipboard(text)
     }
 
+    function fixedTableWidth() {
+        return colPidW + colUserW + colCpuW + colMemW + colTimeW + colStartW
+            + colThreadsW + colRssW + colVszW + colPriW + colShrW + colStatW
+            + tblSpacing * 12 + 8
+    }
+
+    function tableContentWidth(viewportWidth) {
+        return Math.max(viewportWidth, fixedTableWidth() + colCmdMinW)
+    }
+
     function cmdColWidth(totalWidth) {
-        const fixed = colPidW + colUserW + colCpuW + colMemW + colTimeW
-            + colThreadsW + colRssW + colPriW + colShrW + colStatW + tblSpacing * 11 + 8
-        return Math.max(120, totalWidth - fixed)
+        return Math.max(colCmdMinW, totalWidth - fixedTableWidth())
     }
 
     function formatLoad(load) {
@@ -309,6 +328,17 @@ Item {
     function formatTime(value) {
         if (!value) return "--"
         return String(value)
+    }
+
+    function formatStart(value) {
+        if (!value) return "--"
+        return String(value)
+    }
+
+    function formatLastUpdated() {
+        if (!lastUpdatedMs) return "—"
+        const d = new Date(lastUpdatedMs)
+        return Qt.formatDateTime(d, "MMM d, hh:mm:ss")
     }
 
     function summaryStats() {
@@ -383,6 +413,7 @@ Item {
             }
             processes = copy
             dataVersion++
+            lastUpdatedMs = parsed.timestamp ? Number(parsed.timestamp) : Date.now()
             pruneSelection()
             lastError = ""
         } catch (e) {
@@ -793,7 +824,7 @@ Item {
                 anchors.margins: 8
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                contentWidth: width
+                contentWidth: root.tableContentWidth(width)
                 contentHeight: Math.max(height, procTable.implicitHeight)
 
                 property int _dataTick: root.dataVersion
@@ -823,9 +854,18 @@ Item {
                     }
                 }
 
+                ScrollBar.horizontal: ScrollBar {
+                    policy: procFlickable.contentWidth > procFlickable.width + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                    contentItem: Rectangle {
+                        implicitHeight: 6
+                        radius: 3
+                        color: parent.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
+                    }
+                }
+
                 Column {
                     id: procTable
-                    width: parent.width
+                    width: root.tableContentWidth(procFlickable.width)
                     spacing: 0
 
                     Rectangle {
@@ -845,11 +885,13 @@ Item {
                             Text { width: root.colCpuW; height: parent.height; text: "CPU%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                             Text { width: root.colMemW; height: parent.height; text: "Mem%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                             Text { width: root.colTimeW; height: parent.height; text: "Time"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
+                            Text { width: root.colStartW; height: parent.height; text: "Start"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                             Text { width: root.colThreadsW; height: parent.height; text: "Thr"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                             Text { width: root.colRssW; height: parent.height; text: "RSS"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
+                            Text { width: root.colVszW; height: parent.height; text: "VSZ"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                             Text { width: root.colPriW; height: parent.height; text: "PR"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                             Text { width: root.colShrW; height: parent.height; text: "SHR"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.cmdColWidth(parent.width - 8); height: parent.height; text: "Command"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                            Text { width: root.cmdColWidth(parent.width); height: parent.height; text: "Command"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
                             Text { width: root.colStatW; height: parent.height; text: "Stat"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
                         }
                     }
@@ -923,11 +965,13 @@ Item {
                                 Text { width: root.colCpuW; height: parent.height; text: modelData.cpu.toFixed(1); color: root.accentColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                                 Text { width: root.colMemW; height: parent.height; text: modelData.mem.toFixed(1); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                                 Text { width: root.colTimeW; height: parent.height; text: root.formatTime(modelData.time); color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
+                                Text { width: root.colStartW; height: parent.height; text: root.formatStart(modelData.start); color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight }
                                 Text { width: root.colThreadsW; height: parent.height; text: modelData.threads !== undefined ? modelData.threads : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                                 Text { width: root.colRssW; height: parent.height; text: root.formatKiB(modelData.rss); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
+                                Text { width: root.colVszW; height: parent.height; text: root.formatKiB(modelData.vsz); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                                 Text { width: root.colPriW; height: parent.height; text: modelData.pri !== undefined ? modelData.pri : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
                                 Text { width: root.colShrW; height: parent.height; text: root.formatKiB(modelData.shr); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.cmdColWidth(parent.width - 8); height: parent.height; text: modelData.cmd || modelData.name || "--"; color: parent.isSelected ? root.textColor : root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                                Text { width: root.cmdColWidth(parent.width); height: parent.height; text: modelData.cmd || modelData.name || "--"; color: parent.isSelected ? root.textColor : root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
                                 Text { width: root.colStatW; height: parent.height; text: root.formatState(modelData.state); color: root.stateColor(modelData.state); font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
                             }
 
@@ -944,6 +988,17 @@ Item {
                     }
                 }
             }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.topMargin: 2
+            horizontalAlignment: Text.AlignRight
+            visible: root.lastUpdatedMs > 0
+            text: root.loading ? "Refreshing…" : ("Last updated: " + root.formatLastUpdated())
+            color: root.overlayColor
+            font.pixelSize: 10
+            font.family: "monospace"
         }
     }
 

@@ -1038,6 +1038,12 @@ Item {
         }
 
         Shortcut {
+            sequence: "Ctrl+R"
+            enabled: inspectorWindow.visible
+            onActivated: root.refreshAll()
+        }
+
+        Shortcut {
             sequence: "Tab"
             enabled: inspectorWindow.visible && !globalFilterField.activeFocus
             onActivated: root.nextTab()
