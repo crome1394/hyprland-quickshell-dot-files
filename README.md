@@ -165,6 +165,26 @@ SUPER + SLASH   →   qs ipc call hyprConfigInsp toggle
 
 The inspector is registered in `shell.qml` as `hyprConfigInsp`. Run `qs ipc show` to list available IPC targets.
 
+### Recommended window rule
+
+Add this to `~/.config/hypr/config/windows-and-workspaces.lua` (or your window-rules module) so the inspector opens centered and floating at a comfortable default size. Adjust `size` to taste — the window remains user-resizable.
+
+```lua
+-- Hyprland Config Inspector
+hl.window_rule({
+    name     = "Hyprland Config Inspector",
+    match    = { title = "^(Hyprland Config Inspector)$" },
+    float    = true,
+    center   = true,
+    fullscreen = false,
+    immediate  = false,
+    pin  = false,
+    size   = { 1231, 1029 },
+})
+```
+
+The rule matches the window title set in `widgets/HyprConfigInsp.qml`. If you change the title there, update `match` accordingly.
+
 ### Keyboard shortcuts
 
 Shortcuts apply while the inspector window is focused (search field captures typing when active).
