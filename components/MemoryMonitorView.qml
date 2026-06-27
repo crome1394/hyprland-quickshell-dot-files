@@ -20,32 +20,11 @@ Item {
 
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10
-    readonly property int processRowHeight: 15
-    readonly property int processHeaderHeight: 17
     readonly property int sectionSpacing: 8
-    readonly property int tblSpacing: 4
-    readonly property int colPidW: 34
-    readonly property int colUserW: 44
-    readonly property int colRamPctW: 34
-    readonly property int colMemW: 38
-    readonly property int colThreadsW: 30
-
-    function memTableFixedWidth() {
-        return colPidW + colUserW + colRamPctW + colMemW + colThreadsW + tblSpacing * 5
-    }
-
-    function memAppColWidth(totalWidth) {
-        return Math.max(56, totalWidth - memTableFixedWidth())
-    }
 
     function formatGiB(mib) {
         if (mib === undefined || mib === null) return "--"
         return (Number(mib) / 1024).toFixed(1) + " GiB"
-    }
-
-    function formatRssMiB(rss) {
-        if (!rss) return "--"
-        return Math.round(Number(rss) / 1024) + "M"
     }
 
     function barColor(pct) {
@@ -61,7 +40,7 @@ Item {
     readonly property var memProcessRows: {
         const tick = service && service.data ? service.data.timestamp : 0
         if (!service || !service.data || !service.data.top_memory) return []
-        return service.data.top_memory.slice(0, 8)
+        return service.data.top_memory
     }
 
     function resetScroll() {}
@@ -261,82 +240,17 @@ Item {
                 border.color: Qt.rgba(1, 1, 1, 0.08)
                 clip: true
 
-                ColumnLayout {
+                TopProcessPanel {
                     anchors.fill: parent
                     anchors.margins: root.cardMargin
-                    spacing: 4
-
-                    Text {
-                        text: "Top Memory Processes"
-                        color: root.accentColor
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.family: "monospace"
-                    }
-
-                    Flickable {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-                        contentWidth: width
-                        contentHeight: memProcessTable.implicitHeight
-
-                        Column {
-                            id: memProcessTable
-                            width: parent.width
-                            spacing: 0
-
-                            Rectangle {
-                                width: parent.width
-                                height: root.processHeaderHeight
-                                radius: 3
-                                color: Qt.rgba(0.55, 0.70, 0.96, 0.12)
-
-                                Row {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 4
-                                    anchors.rightMargin: 4
-                                    spacing: root.tblSpacing
-
-                                    Text { width: root.colPidW; height: parent.height; text: "PID"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    Text { width: root.memAppColWidth(parent.width - 8); height: parent.height; text: "App"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                                    Text { width: root.colUserW; height: parent.height; text: "User"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignLeft }
-                                    Text { width: root.colRamPctW; height: parent.height; text: "RAM%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    Text { width: root.colMemW; height: parent.height; text: "Mem"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    Text { width: root.colThreadsW; height: parent.height; text: "Thr"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                }
-                            }
-
-                            Repeater {
-                                model: root.memProcessRows
-                                delegate: Item {
-                                    width: parent.width
-                                    height: root.processRowHeight
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: 2
-                                        color: index % 2 === 0 ? "transparent" : Qt.rgba(1, 1, 1, 0.02)
-                                    }
-
-                                    Row {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 4
-                                        anchors.rightMargin: 4
-                                        spacing: root.tblSpacing
-
-                                        Text { width: root.colPidW; height: parent.height; text: modelData.pid; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                        Text { width: root.memAppColWidth(parent.width - 8); height: parent.height; text: modelData.name; color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                                        Text { width: root.colUserW; height: parent.height; text: modelData.user || "--"; color: root.overlayColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                                        Text { width: root.colRamPctW; height: parent.height; text: Number(modelData.mem || 0).toFixed(1) + "%"; color: root.accentColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                        Text { width: root.colMemW; height: parent.height; text: root.formatRssMiB(modelData.rss); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                        Text { width: root.colThreadsW; height: parent.height; text: modelData.threads !== undefined ? modelData.threads : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    title: "Top Memory Processes"
+                    mode: "mem"
+                    rows: root.memProcessRows
+                    textColor: root.textColor
+                    subtextColor: root.subtextColor
+                    accentColor: root.accentColor
+                    surfaceColor: root.surfaceColor
+                    overlayColor: root.overlayColor
                 }
             }
         }

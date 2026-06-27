@@ -16,29 +16,7 @@ Item {
 
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10
-    readonly property int processRowHeight: 15
-    readonly property int processHeaderHeight: 17
     readonly property int sectionSpacing: 8
-    readonly property int tblSpacing: 4
-    readonly property int colPidW: 34
-    readonly property int colUserW: 44
-    readonly property int colCpuW: 34
-    readonly property int colRamPctW: 34
-    readonly property int colMemW: 38
-    readonly property int colThreadsW: 30
-
-    function cpuTableFixedWidth() {
-        return colPidW + colUserW + colCpuW + colRamPctW + colMemW + colThreadsW + tblSpacing * 6
-    }
-
-    function cpuAppColWidth(totalWidth) {
-        return Math.max(56, totalWidth - cpuTableFixedWidth())
-    }
-
-    function formatRssMiB(rss) {
-        if (!rss) return "--"
-        return Math.round(rss / 1024) + "M"
-    }
 
     readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
     readonly property int middleHeight: Math.max(124, Math.min(260, Math.round(height * 0.34)))
@@ -46,7 +24,7 @@ Item {
     readonly property var cpuProcessRows: {
         const tick = service && service.data ? service.data.timestamp : 0
         if (!service || !service.data || !service.data.top_processes) return []
-        return service.data.top_processes.slice(0, 8)
+        return service.data.top_processes
     }
 
     function resetScroll() {}
@@ -180,84 +158,17 @@ Item {
                 border.color: Qt.rgba(1, 1, 1, 0.08)
                 clip: true
 
-                ColumnLayout {
+                TopProcessPanel {
                     anchors.fill: parent
                     anchors.margins: root.cardMargin
-                    spacing: 4
-
-                    Text {
-                        text: "Top CPU Processes"
-                        color: root.accentColor
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.family: "monospace"
-                    }
-
-                    Flickable {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-                        contentWidth: width
-                        contentHeight: cpuProcessTable.implicitHeight
-
-                        Column {
-                            id: cpuProcessTable
-                            width: parent.width
-                            spacing: 0
-
-                            Rectangle {
-                                width: parent.width
-                                height: root.processHeaderHeight
-                                radius: 3
-                                color: Qt.rgba(0.55, 0.70, 0.96, 0.12)
-
-                                Row {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 4
-                                    anchors.rightMargin: 4
-                                    spacing: root.tblSpacing
-
-                                    Text { width: root.colPidW; height: parent.height; text: "PID"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    Text { width: root.cpuAppColWidth(parent.width - 8); height: parent.height; text: "App"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                                    Text { width: root.colUserW; height: parent.height; text: "User"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignLeft }
-                                    Text { width: root.colCpuW; height: parent.height; text: "CPU%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    Text { width: root.colRamPctW; height: parent.height; text: "RAM%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    Text { width: root.colMemW; height: parent.height; text: "Mem"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    Text { width: root.colThreadsW; height: parent.height; text: "Thr"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                }
-                            }
-
-                            Repeater {
-                                model: root.cpuProcessRows
-                                delegate: Item {
-                                    width: parent.width
-                                    height: root.processRowHeight
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        radius: 2
-                                        color: index % 2 === 0 ? "transparent" : Qt.rgba(1, 1, 1, 0.02)
-                                    }
-
-                                    Row {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 4
-                                        anchors.rightMargin: 4
-                                        spacing: root.tblSpacing
-
-                                        Text { width: root.colPidW; height: parent.height; text: modelData.pid; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                        Text { width: root.cpuAppColWidth(parent.width - 8); height: parent.height; text: modelData.name; color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                                        Text { width: root.colUserW; height: parent.height; text: modelData.user || "--"; color: root.overlayColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                                        Text { width: root.colCpuW; height: parent.height; text: (modelData.cpu || 0).toFixed(1) + "%"; color: root.accentColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                        Text { width: root.colRamPctW; height: parent.height; text: (modelData.mem || 0).toFixed(1) + "%"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                        Text { width: root.colMemW; height: parent.height; text: root.formatRssMiB(modelData.rss); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                        Text { width: root.colThreadsW; height: parent.height; text: modelData.threads !== undefined ? modelData.threads : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    title: "Top CPU Processes"
+                    mode: "cpu"
+                    rows: root.cpuProcessRows
+                    textColor: root.textColor
+                    subtextColor: root.subtextColor
+                    accentColor: root.accentColor
+                    surfaceColor: root.surfaceColor
+                    overlayColor: root.overlayColor
                 }
             }
         }

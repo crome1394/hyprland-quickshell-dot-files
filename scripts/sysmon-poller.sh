@@ -395,14 +395,14 @@ top_procs=$(ps -eo pid,user,comm,%cpu,%mem,rss,nlwp --sort=-%cpu 2>/dev/null | a
   NR>1 && $4 > 0.2 {
     printf "{\"pid\":%d,\"name\":\"%s\",\"user\":\"%s\",\"cpu\":%.1f,\"mem\":%.1f,\"rss\":%d,\"threads\":%d}\n", $1, $3, $2, $4, $5, $6, $7
   }
-' | head -8 | jq -s 'map(select(.name != ""))' 2>/dev/null || echo '[]')
+' | head -40 | jq -s 'map(select(.name != ""))' 2>/dev/null || echo '[]')
 
 # ---------- Top Processes (by Memory) ----------
 top_mem=$(ps -eo pid,user,comm,%cpu,%mem,rss,nlwp --sort=-%mem 2>/dev/null | awk '
   NR>1 && $5 > 0.1 {
     printf "{\"pid\":%d,\"name\":\"%s\",\"user\":\"%s\",\"cpu\":%.1f,\"mem\":%.1f,\"rss\":%d,\"threads\":%d}\n", $1, $3, $2, $4, $5, $6, $7
   }
-' | head -8 | jq -s 'map(select(.name != ""))' 2>/dev/null || echo '[]')
+' | head -40 | jq -s 'map(select(.name != ""))' 2>/dev/null || echo '[]')
 
 # ---------- Top GPU Processes (by VRAM usage from nvidia-smi) ----------
 # process_name may contain commas (e.g. browser GPU args), so parse pid + trailing VRAM explicitly.
@@ -448,7 +448,7 @@ top_gpu=$(nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=
         printf "%s\t%s\t%d\n", pid, name, vram
     }
   }
-' | sort -t$'\t' -k3 -nr | head -8 | jq -R -s --argjson types "$gpu_type_map" '
+' | sort -t$'\t' -k3 -nr | head -40 | jq -R -s --argjson types "$gpu_type_map" '
   split("\n")[:-1]
   | map(split("\t"))
   | map(select(length == 3) | {
