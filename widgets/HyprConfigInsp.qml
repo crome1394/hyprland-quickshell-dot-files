@@ -483,8 +483,7 @@ Item {
             const total = stats.total || 0
             const loadStr = load.length ? Number(load[0] || 0).toFixed(2) : "--"
             const rows = processesViewer.filteredProcesses().length
-            const sel = processesViewer.selectedPid
-            const selNote = sel ? "  ·  PID " + sel : ""
+            const selNote = processesViewer.hasSelection ? ("  ·  " + processesViewer.selectionLabel()) : ""
             return rows + " shown  ·  " + total + " total  ·  " + running + " running  ·  load " + loadStr + selNote
                 + "  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
         }
@@ -1889,7 +1888,7 @@ Item {
                         property int _gpuTempTick: sysMonService.gpuTempHistory.length
                         property var _cpuData: sysMonService.data
                         property int _procTick: processesViewer.dataVersion
-                        property int _procSel: processesViewer.selectedPid
+                        property int _procSel: processesViewer.selectionVersion
                         property int _logsTick: logsViewer.contentVersion
                         property string _logsSource: logsViewer.selectedSourceId
                         property bool _logsLive: logsViewer.liveTail

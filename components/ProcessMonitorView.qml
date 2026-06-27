@@ -50,14 +50,23 @@ Item {
     property bool loading: false
     property string sortKey: "cpu"
     property bool highUsageOnly: false
-    property int selectedPid: 0
+    property var selectedPids: []
+    property int selectionVersion: 0
+    property int anchorIndex: -1
     property bool acting: false
-    readonly property bool hasSelection: selectedPid > 0
+    readonly property bool hasSelection: selectedPids.length > 0
+    readonly property int selectedCount: selectedPids.length
+    // Back-compat for status bar bindings
+    readonly property int selectedPid: selectedPids.length === 1 ? selectedPids[0] : 0
     property string lastError: ""
     property string lastAction: ""
     property bool _loadHandled: false
     property bool _actionHandled: false
     property int _lastActionExitCode: 0
+    property var _actionQueue: []
+    property int _actionIndex: 0
+    property string _pendingAction: ""
+    property bool killConfirmVisible: false
 
     readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
 
@@ -162,16 +171,77 @@ Item {
         }, 1200)
     }
 
+    function isPidSelected(pid) {
+        const tick = selectionVersion
+        void tick
+        return selectedPids.indexOf(pid) !== -1
+    }
+
+    function setSelectedPids(pids) {
+        const unique = []
+        for (let i = 0; i < pids.length; i++) {
+            const pid = pids[i]
+            if (pid && unique.indexOf(pid) === -1)
+                unique.push(pid)
+        }
+        selectedPids = unique
+        selectionVersion++
+    }
+
+    function clearSelection() {
+        selectedPids = []
+        anchorIndex = -1
+        selectionVersion++
+    }
+
+    function selectionLabel() {
+        const n = selectedCount
+        if (!n) return ""
+        if (n === 1) return "PID " + selectedPids[0]
+        return n + " selected"
+    }
+
+    function handleRowClick(pid, rowIndex, mouse) {
+        const mods = mouse.modifiers || 0
+        const ctrl = (mods & Qt.ControlModifier) || (mods & Qt.MetaModifier)
+        const shift = mods & Qt.ShiftModifier
+        const rows = filteredProcesses()
+
+        if (shift && anchorIndex >= 0 && anchorIndex < rows.length) {
+            const lo = Math.min(anchorIndex, rowIndex)
+            const hi = Math.max(anchorIndex, rowIndex)
+            const next = ctrl ? selectedPids.slice() : []
+            for (let i = lo; i <= hi; i++)
+                next.push(rows[i].pid)
+            setSelectedPids(next)
+        } else if (ctrl) {
+            const next = selectedPids.slice()
+            const pos = next.indexOf(pid)
+            if (pos === -1) next.push(pid)
+            else next.splice(pos, 1)
+            setSelectedPids(next)
+            anchorIndex = rowIndex
+        } else {
+            setSelectedPids([pid])
+            anchorIndex = rowIndex
+        }
+    }
+
     function copySelectedPid() {
-        const proc = selectedProcess()
-        if (!proc) return
-        copyToClipboard(String(proc.pid))
+        if (!hasSelection) return
+        if (selectedCount === 1)
+            copyToClipboard(String(selectedPids[0]))
+        else
+            copyToClipboard(selectedPids.join("\n"))
     }
 
     function copySelectedCommand() {
-        const proc = selectedProcess()
-        if (!proc) return
-        copyToClipboard(proc.cmd || proc.name || "")
+        const procs = selectedProcesses()
+        if (!procs.length) return
+        const lines = []
+        for (let i = 0; i < procs.length; i++)
+            lines.push(procs[i].cmd || procs[i].name || "")
+        copyToClipboard(lines.join("\n"))
     }
 
     function exportText() {
@@ -251,23 +321,37 @@ Item {
         }
     }
 
-    function selectedProcess() {
-        if (!selectedPid) return null
-        for (let i = 0; i < processes.length; i++) {
-            if (processes[i].pid === selectedPid)
-                return processes[i]
+    function selectedProcesses() {
+        const tick = selectionVersion
+        void tick
+        if (!hasSelection) return []
+        const wanted = {}
+        for (let i = 0; i < selectedPids.length; i++)
+            wanted[selectedPids[i]] = true
+        const out = []
+        for (let j = 0; j < processes.length; j++) {
+            const p = processes[j]
+            if (p && wanted[p.pid])
+                out.push(p)
         }
-        return null
+        return out
     }
 
-    function pruneSelectedPid() {
-        if (!selectedPid) return
+    function pruneSelection() {
+        if (!hasSelection) return
         const rows = filteredProcesses()
-        for (let i = 0; i < rows.length; i++) {
-            if (rows[i].pid === selectedPid)
-                return
+        const visible = {}
+        for (let i = 0; i < rows.length; i++)
+            visible[rows[i].pid] = true
+        const next = []
+        for (let j = 0; j < selectedPids.length; j++) {
+            if (visible[selectedPids[j]])
+                next.push(selectedPids[j])
         }
-        selectedPid = 0
+        if (next.length !== selectedPids.length)
+            setSelectedPids(next)
+        if (anchorIndex >= rows.length)
+            anchorIndex = rows.length > 0 ? Math.min(anchorIndex, rows.length - 1) : -1
     }
 
     function refresh() {
@@ -299,36 +383,80 @@ Item {
             }
             processes = copy
             dataVersion++
-            pruneSelectedPid()
+            pruneSelection()
             lastError = ""
         } catch (e) {
             lastError = "Failed to parse process JSON"
         }
     }
 
-    function runAction(action) {
-        const proc = selectedProcess()
-        if (!proc || acting || !hasSelection) return
+    function requestAction(action) {
+        if (!hasSelection || acting || loading) return
+        if (action === "kill" && selectedCount > 1) {
+            killConfirmVisible = true
+            return
+        }
+        startAction(action)
+    }
+
+    function confirmKill() {
+        killConfirmVisible = false
+        startAction("kill")
+    }
+
+    function cancelKill() {
+        killConfirmVisible = false
+    }
+
+    function startAction(action) {
+        if (!hasSelection || acting) return
+        _pendingAction = action
+        _actionQueue = selectedPids.slice()
+        _actionIndex = 0
         acting = true
         lastAction = ""
         lastError = ""
+        runNextAction()
+    }
+
+    function runNextAction() {
+        if (_actionIndex >= _actionQueue.length) {
+            finishAllActions()
+            return
+        }
         _actionHandled = false
         actionProcess.running = false
-        actionProcess.command = [root.controlScript, action, String(proc.pid)]
+        actionProcess.command = [root.controlScript, _pendingAction, String(_actionQueue[_actionIndex])]
         actionProcess.running = true
     }
 
     function finishAction(exitCode) {
         if (_actionHandled) return
         _actionHandled = true
-        acting = false
         const code = exitCode !== undefined ? exitCode : _lastActionExitCode
         if (code !== 0) {
             const err = (actionStderr.text || actionStdout.text || "").trim()
-            lastError = err.length ? err : "Process action failed (exit " + code + ")"
+            const pid = _actionQueue[_actionIndex]
+            lastError = err.length ? err
+                : (_pendingAction + " failed for PID " + pid + " (exit " + code + ")")
+            acting = false
+            _actionQueue = []
+            _pendingAction = ""
             return
         }
-        lastAction = "Action completed"
+        _actionIndex++
+        if (_actionIndex < _actionQueue.length)
+            Qt.callLater(function() { root.runNextAction() })
+        else
+            finishAllActions()
+    }
+
+    function finishAllActions() {
+        const count = _actionIndex
+        acting = false
+        _actionQueue = []
+        _pendingAction = ""
+        lastAction = count > 1 ? ("Action completed (" + count + " processes)") : "Action completed"
         Qt.callLater(function() { root.refresh() })
     }
 
@@ -358,9 +486,14 @@ Item {
         if (active) refresh()
     }
 
-    onSortKeyChanged: pruneSelectedPid()
-    onHighUsageOnlyChanged: pruneSelectedPid()
-    onGlobalFilterChanged: pruneSelectedPid()
+    onSortKeyChanged: pruneSelection()
+    onHighUsageOnlyChanged: pruneSelection()
+    onGlobalFilterChanged: pruneSelection()
+
+    onSelectionVersionChanged: {
+        if (killConfirmVisible)
+            killConfirmVisible = false
+    }
 
     onVisibleChanged: {
         if (visible && active) Qt.callLater(function() { root.focusScroll() })
@@ -436,9 +569,10 @@ Item {
                         }
                         Text {
                             property int _rows: root.dataVersion
+                            property int _sel: root.selectionVersion
                             text: root.loading ? "Loading process list…"
                                 : ("Showing " + root.filteredProcesses().length + " processes"
-                                    + (root.selectedPid ? "  ·  PID " + root.selectedPid : ""))
+                                    + (root.hasSelection ? "  ·  " + root.selectionLabel() : ""))
                             color: root.overlayColor
                             font.pixelSize: 11
                             font.family: "monospace"
@@ -606,7 +740,7 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     enabled: root.hasSelection && !root.acting && !root.loading
-                    onClicked: root.runAction("kill")
+                    onClicked: root.requestAction("kill")
                 }
             }
 
@@ -630,7 +764,7 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     enabled: root.hasSelection && !root.acting && !root.loading
-                    onClicked: root.runAction("restart")
+                    onClicked: root.requestAction("restart")
                 }
             }
 
@@ -757,7 +891,8 @@ Item {
                             width: parent.width
                             height: root.rowHeight
 
-                            readonly property bool isSelected: modelData.pid === root.selectedPid
+                            property int _selTick: root.selectionVersion
+                            readonly property bool isSelected: root.isPidSelected(modelData.pid)
                             readonly property bool rowHover: rowMa.containsMouse
                             readonly property bool groupStart: modelData.groupStart === true
 
@@ -801,8 +936,114 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.selectedPid = modelData.pid
+                                onClicked: function(mouse) {
+                                    root.handleRowClick(modelData.pid, index, mouse)
+                                }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        visible: root.killConfirmVisible
+        color: Qt.rgba(0, 0, 0, 0.55)
+        z: 100
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.cancelKill()
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 40, 360)
+            height: killConfirmColumn.implicitHeight + 28
+            radius: root.cardRadius
+            color: root.surfaceColor
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.12)
+
+            MouseArea {
+                anchors.fill: parent
+            }
+
+            ColumnLayout {
+                id: killConfirmColumn
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 12
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Kill " + root.selectedCount + " processes?"
+                    color: root.textColor
+                    font.pixelSize: 13
+                    font.bold: true
+                    font.family: "monospace"
+                    wrapMode: Text.Wrap
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "This sends SIGTERM to each selected process."
+                    color: root.subtextColor
+                    font.pixelSize: 11
+                    font.family: "monospace"
+                    wrapMode: Text.Wrap
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Item { Layout.fillWidth: true }
+
+                    Rectangle {
+                        Layout.preferredWidth: 72
+                        Layout.preferredHeight: 28
+                        radius: 6
+                        color: cancelKillMa.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.1)
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Cancel"
+                            color: root.textColor
+                            font.pixelSize: 11
+                        }
+                        MouseArea {
+                            id: cancelKillMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.cancelKill()
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 72
+                        Layout.preferredHeight: 28
+                        radius: 6
+                        color: confirmKillMa.containsMouse ? Qt.rgba(0.95, 0.55, 0.66, 0.2) : Qt.rgba(0.95, 0.55, 0.66, 0.12)
+                        border.width: 1
+                        border.color: root.errorColor
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Kill"
+                            color: root.errorColor
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                        MouseArea {
+                            id: confirmKillMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.confirmKill()
                         }
                     }
                 }
