@@ -29,6 +29,7 @@ import Quickshell.Io as Io
 //
 // Theming:
 //   - Theme { id: th } is the single visual source (see Theme.qml HYPR CONFIG INSPECTOR).
+//   - Window fill: inspWindowBg (solid) or inspUseGradient + inspGradientTop/Bottom.
 //   - Short aliases below (accent, inspTabRadius, …) keep QML bindings readable.
 //   - `required property var bar` is passed from shell.qml for API consistency; visuals use `th`.
 //
@@ -43,7 +44,7 @@ import Quickshell.Io as Io
 // Features:
 //   - Parsed tabs: Key Bindings, Environment, Runtime Options, Config Files, sysmon tabs, Audio, Logs, Services, System Info
 //   - Edit (kitty nano) and Reload per config file tab
-//   - Global search (Ctrl+F, Esc), Tab/Shift+Tab, PgUp/PgDown/arrow scroll
+//   - Global search (Ctrl+F, Esc), edit file (Ctrl+E on tabs with Edit), Tab/Shift+Tab, PgUp/PgDown/arrow scroll
 //   - Resizable FloatingWindow (title: "Hyprland Config Inspector")
 // =============================================================================
 
@@ -64,10 +65,15 @@ Item {
     }
 
     // === Theme aliases — short names for bindings (all values from Theme.qml) ===
+    // Inspector window background (inspWindow* — independent of other bar popups)
+    readonly property color inspWindowBg: th.inspWindowBg
+    readonly property color inspWindowBorder: th.inspWindowBorder
+    readonly property color inspWindowHighlight: th.inspWindowHighlight
+    readonly property bool inspUseGradient: th.inspUseGradient
+    readonly property color inspGradientTop: th.inspGradientTop
+    readonly property color inspGradientBottom: th.inspGradientBottom
+
     // Base palette
-    readonly property color glassPopupBg: th.glassPopupBg
-    readonly property color glassPopupBorder: th.glassPopupBorder
-    readonly property color glassPopupHighlight: th.glassPopupHighlight
     readonly property color text: th.text
     readonly property color subtext: th.subtext
     readonly property color overlay: th.overlay
@@ -516,11 +522,14 @@ Item {
         if (!tab) return
         if (tab.view === "configfiles") {
             const entry = configFilesViewer.currentEntry()
-            if (entry) Quickshell.execDetached(["kitty", "-e", "nano", tabPath(entry)])
+            if (!entry) return
+            Quickshell.execDetached(["kitty", "-e", "nano", tabPath(entry)])
+            hide()
             return
         }
         if (!tab.file) return
         Quickshell.execDetached(["kitty", "-e", "nano", tabPath(tab)])
+        hide()
     }
 
     function statusText() {
@@ -1117,6 +1126,12 @@ Item {
         }
 
         Shortcut {
+            sequence: "Ctrl+E"
+            enabled: inspectorWindow.visible && root.hasConfigFile
+            onActivated: root.editCurrentConfigFile()
+        }
+
+        Shortcut {
             sequence: "Tab"
             enabled: inspectorWindow.visible && !globalFilterField.activeFocus
             onActivated: root.nextTab()
@@ -1156,10 +1171,19 @@ Item {
             id: contentPanel
             anchors.fill: parent
             radius: root.popupRadiusLarge
-            color: root.glassPopupBg
+            color: root.inspUseGradient ? "transparent" : root.inspWindowBg
             border.width: 1
-            border.color: root.glassPopupBorder
+            border.color: root.inspWindowBorder
             focus: inspectorWindow.visible
+
+            // Vertical gradient fill (Theme: inspUseGradient + inspGradientTop/Bottom)
+            gradient: root.inspUseGradient ? contentPanelGradient : null
+
+            Gradient {
+                id: contentPanelGradient
+                GradientStop { position: 0.0; color: root.inspGradientTop }
+                GradientStop { position: 1.0; color: root.inspGradientBottom }
+            }
 
             Keys.onPressed: (event) => {
                 if (globalFilterField.activeFocus) return
@@ -1204,7 +1228,7 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: 1.5
-                color: root.glassPopupHighlight
+                color: root.inspWindowHighlight
                 radius: parent.radius
             }
 
@@ -1277,7 +1301,7 @@ Item {
                             Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 14; color: th.inspHeaderDivider }
 
                             Text {
-                                text: "SUPER + ?  ·  Tab / Shift+Tab  ·  PgUp / PgDown / ↑ / ↓"
+                                text: "SUPER + ?  ·  Tab / Shift+Tab  ·  Ctrl+E (edit)  ·  PgUp / PgDown / ↑ / ↓"
                                 color: root.overlay
                                 font.pixelSize: root.inspSubtitleFontSize
                             }
@@ -1873,7 +1897,7 @@ Item {
                                 Rectangle {
                                     Layout.fillWidth: true
                                     height: 1
-                                    color: root.glassPopupBorder
+                                    color: root.inspWindowBorder
                                     opacity: 0.5
                                 }
 

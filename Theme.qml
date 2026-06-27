@@ -416,6 +416,27 @@ QtObject {
     readonly property int inspContentPadding: 18      // inner margin around the whole layout
     readonly property int inspSectionSpacing: 12      // vertical gap between header/tabs/content/footer
 
+    // --- Window background (inspector-only — does NOT affect audio/power/calendar popups)
+    // Defaults mirror glassPopup* so the out-of-box look is unchanged.
+    //
+    // Solid mode (default):
+    //   inspUseGradient = false  →  contentPanel uses inspWindowBg
+    //
+    // Gradient mode:
+    //   inspUseGradient = true   →  vertical fade inspGradientTop → inspGradientBottom
+    //   (inspWindowBg is ignored while gradient is active)
+    //
+    // Example — subtle dark vertical fade:
+    //   inspUseGradient: true
+    //   inspGradientTop: Qt.rgba(0.10, 0.10, 0.14, 0.93)
+    //   inspGradientBottom: Qt.rgba(0.05, 0.05, 0.08, 0.96)
+    readonly property color inspWindowBg:         glassPopupBg
+    readonly property color inspWindowBorder:     glassPopupBorder
+    readonly property color inspWindowHighlight:  glassPopupHighlight
+    readonly property bool  inspUseGradient:      false
+    readonly property color inspGradientTop:      glassPopupBg
+    readonly property color inspGradientBottom:   Qt.rgba(0.05, 0.05, 0.08, 0.94)
+
     // --- Tab bar (wrapping Flow of chips + vertical scrollbar when many tabs)
     readonly property int inspTabBarMaxHeight: 102
     readonly property int inspTabHeight:       30
@@ -430,10 +451,10 @@ QtObject {
 
     // --- Global search field (right of tab bar)
     readonly property int inspSearchWidth:   220
-    readonly property int inspSearchHeight:   28
+    readonly property int inspSearchHeight:   28        
     readonly property int inspSearchRadius:    6
     readonly property int inspSearchPadding:   4
-    readonly property int inspSearchFontSize:   14
+    readonly property int inspSearchFontSize:   12          //14
     readonly property color inspSearchSelectionBg: Qt.rgba(0.55, 0.70, 0.96, 0.35)
 
     // --- Header (title row, version/distro, keyboard hints)
