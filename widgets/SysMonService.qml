@@ -184,9 +184,20 @@ Item {
         }
     }
 
+    onAutoPollChanged: {
+        if (!autoPoll)
+            root.stopPolling()
+    }
+
     // === Public API (called by UI or on demand) ===
+    function stopPolling() {
+        if (poller.running)
+            poller.running = false
+        root.isRefreshing = false
+    }
+
     function refresh() {
-        if (poller.running) return
+        if (!root.autoPoll || poller.running) return
         root.isRefreshing = true
         root.lastStatus = "Refreshing..."
         poller.running = true

@@ -182,10 +182,12 @@ Item {
     property var _pendingOsd: null
 
     function scheduleVolumeRefresh() {
+        if (!root.active) return
         volumeRefreshTimer.restart()
     }
 
     function notifyVolumeOsd(kind, percent, muted) {
+        if (!root.active) return
         _pendingOsd = { kind: kind, percent: percent, muted: !!muted }
         osdTimer.restart()
     }
@@ -335,20 +337,33 @@ Item {
     }
 
     onActiveChanged: {
-        if (active && !(audioData.sinks && audioData.sinks.length)) refresh()
+        if (active && !(audioData.sinks && audioData.sinks.length)) {
+            refresh()
+        } else if (!active) {
+            volumeRefreshTimer.stop()
+            osdTimer.stop()
+            if (pollProcess.running)
+                pollProcess.running = false
+            loading = false
+        }
     }
 
     Timer {
         id: volumeRefreshTimer
         interval: 350
         repeat: false
-        onTriggered: root.refresh()
+        running: false
+        onTriggered: {
+            if (root.active)
+                root.refresh()
+        }
     }
 
     Timer {
         id: osdTimer
         interval: 120
         repeat: false
+        running: false
         onTriggered: root.flushVolumeOsd()
     }
 

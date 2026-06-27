@@ -232,7 +232,13 @@ Item {
     }
 
     onActiveChanged: {
-        if (active && !services.length) refresh()
+        if (active && !services.length) {
+            refresh()
+        } else if (!active) {
+            if (pollProcess.running)
+                pollProcess.running = false
+            loading = false
+        }
     }
 
     onVisibleChanged: {

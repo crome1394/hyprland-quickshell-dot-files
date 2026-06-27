@@ -23,7 +23,7 @@ import Quickshell.Io as Io
 //   - binds/env/raw     → fileContents{} via Io.Process cat (batch or single)
 //   - configfiles       → configFileEntries + BatSyntaxView
 //   - runtime           → RuntimeOptionsView (hyprctl getoption)
-//   - cpu/gpu/memory/network/…  → SysMonService (scripts/sysmon-poller.sh, autoPoll when visible)
+//   - cpu/gpu/memory/network/…  → SysMonService (scripts/sysmon-poller.sh, autoPoll when inspectorActive)
 //   - processes/audio/logs/services → dedicated *View components + shell pollers
 //   - system            → fastfetch (systemProcess, lazy until tab opened)
 //
@@ -61,7 +61,7 @@ Item {
 
     SysMonService {
         id: sysMonService
-        autoPoll: inspectorWindow.visible   // poll only while overlay is open (saves CPU)
+        autoPoll: root.inspectorActive   // poll only while overlay is shown (not minimized)
     }
 
     // === Theme aliases — short names for bindings (all values from Theme.qml) ===
@@ -213,13 +213,37 @@ Item {
     property int inspectorHeight: popupHelpHeight
 
     // === Public API (toggle from shell IPC: qs ipc call hyprConfigInsp toggle) ===
+    // True when the window is open and not minimized — gates all live polling/timers.
+    readonly property bool inspectorActive: inspectorWindow.visible && inspectorWindow.backingWindowVisible
     property bool open: inspectorWindow.visible
     signal opened()
     signal closed()
 
+    property bool _initialLoadDone: false
+
     function toggle() {
         if (inspectorWindow.visible) hide()
         else show()
+    }
+
+    function stopBackgroundWork() {
+        sysMonService.stopPolling()
+        if (fileCat.running) fileCat.running = false
+        if (statProcess.running) statProcess.running = false
+        if (headerProcess.running) headerProcess.running = false
+        if (systemProcess.running) systemProcess.running = false
+        _loading = false
+        _loadHandled = true
+        _pendingMtimeId = ""
+    }
+
+    function handleWindowClosed() {
+        hide()
+    }
+
+    onInspectorActiveChanged: {
+        if (!inspectorActive)
+            stopBackgroundWork()
     }
 
     // === Navigation + search ===
@@ -441,6 +465,7 @@ Item {
     }
 
     function refreshAll() {
+        if (!inspectorActive) return
         refreshHeaderInfo()
         refreshAllFiles()
         const tab = currentTabInfo
@@ -753,6 +778,12 @@ Item {
 
     function show() {
         inspectorWindow.visible = true
+        if (!_initialLoadDone) {
+            _initialLoadDone = true
+            refreshHeaderInfo()
+            refreshAllFiles()
+        }
+        opened()
         const tab = currentTabInfo
         batLanguage = (tab.view === "raw" && tab.batLanguage) ? tab.batLanguage : ""
         batFilePath = (tab.view === "raw" && tab.file) ? tabPath(tab) : ""
@@ -780,7 +811,11 @@ Item {
     }
 
     function hide() {
+        const wasVisible = inspectorWindow.visible
         inspectorWindow.visible = false
+        stopBackgroundWork()
+        if (wasVisible)
+            closed()
     }
 
     // === Background I/O: batch/single config file reads (@@FILE:/@@MTIME: protocol) ===
@@ -816,8 +851,6 @@ Item {
     }
 
     Component.onCompleted: {
-        refreshHeaderInfo()
-        refreshAllFiles()
         syncRawSource()
     }
 
@@ -1135,6 +1168,8 @@ Item {
         implicitWidth: root.inspectorWidth
         implicitHeight: root.inspectorHeight
         minimumSize: Qt.size(root.inspMinWidth, root.inspMinHeight)
+
+        onClosed: root.handleWindowClosed()
 
         Shortcut {
             sequence: "Escape"
@@ -1833,7 +1868,7 @@ Item {
                         visible: root.currentTabInfo.view === "network"
                         anchors.fill: parent
                         anchors.margins: 10
-                        active: inspectorWindow.visible && root.currentTabInfo.view === "network"
+                        active: root.inspectorActive && root.currentTabInfo.view === "network"
                         service: sysMonService
                         globalFilter: root.globalFilter
                         textColor: root.text
@@ -1851,7 +1886,7 @@ Item {
                         visible: root.currentTabInfo.view === "processes"
                         anchors.fill: parent
                         anchors.margins: 10
-                        active: inspectorWindow.visible && root.currentTabInfo.view === "processes"
+                        active: root.inspectorActive && root.currentTabInfo.view === "processes"
                         globalFilter: root.globalFilter
                         service: sysMonService
                         textColor: root.text
@@ -1869,7 +1904,7 @@ Item {
                         visible: root.currentTabInfo.view === "audio"
                         anchors.fill: parent
                         anchors.margins: 10
-                        active: inspectorWindow.visible && root.currentTabInfo.view === "audio"
+                        active: root.inspectorActive && root.currentTabInfo.view === "audio"
                         globalFilter: root.globalFilter
                         textColor: root.text
                         subtextColor: root.subtext
@@ -1886,7 +1921,7 @@ Item {
                         visible: root.currentTabInfo.view === "logs"
                         anchors.fill: parent
                         anchors.margins: 10
-                        active: inspectorWindow.visible && root.currentTabInfo.view === "logs"
+                        active: root.inspectorActive && root.currentTabInfo.view === "logs"
                         globalFilter: root.globalFilter
                         textColor: root.text
                         subtextColor: root.subtext
@@ -1900,7 +1935,7 @@ Item {
                         visible: root.currentTabInfo.view === "services"
                         anchors.fill: parent
                         anchors.margins: 10
-                        active: inspectorWindow.visible && root.currentTabInfo.view === "services"
+                        active: root.inspectorActive && root.currentTabInfo.view === "services"
                         globalFilter: root.globalFilter
                         textColor: root.text
                         subtextColor: root.subtext

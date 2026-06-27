@@ -469,8 +469,17 @@ Item {
         scrollArea(fwFlickable, direction, 0.14)
     }
 
+    function suspendBackgroundWork() {
+        if (detailProcess.running)
+            detailProcess.running = false
+        detailLoading = false
+    }
+
     onActiveChanged: {
-        if (active) refreshDetail()
+        if (active)
+            refreshDetail()
+        else
+            suspendBackgroundWork()
     }
 
     // Section title row + optional copy chip

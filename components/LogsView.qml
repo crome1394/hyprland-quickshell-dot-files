@@ -251,6 +251,10 @@ Item {
     onActiveChanged: {
         if (active) {
             if (!rawText.length) refresh(false)
+        } else {
+            if (logProcess.running)
+                logProcess.running = false
+            loading = false
         }
     }
 

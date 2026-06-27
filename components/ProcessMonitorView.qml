@@ -840,7 +840,13 @@ Item {
     }
 
     onActiveChanged: {
-        if (active) refresh()
+        if (active) {
+            refresh()
+        } else {
+            if (pollProcess.running)
+                pollProcess.running = false
+            loading = false
+        }
     }
 
     onSortKeyChanged: {
