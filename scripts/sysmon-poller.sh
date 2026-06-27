@@ -516,57 +516,8 @@ if [[ -n "${net_iface:-}" && "$net_iface" != "unknown" ]]; then
     local_ip=$(ip -4 -o addr show dev "$net_iface" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
 fi
 
+# Connections table moved to network-privileged-poller.sh (manual refresh; may need root).
 connections_json='[]'
-if command -v ss >/dev/null 2>&1; then
-    connections_json=$(
-        { ss -H -tanpi 2>/dev/null; ss -H -uanpi 2>/dev/null; } | awk '
-          function flush() {
-            if (state != "" && local != "") {
-              disp = state
-              if (disp == "ESTAB") disp = "ESTABLISHED"
-              gsub(/\\/, "\\\\", proc)
-              gsub(/"/, "\\\"", proc)
-              printf "{\"proto\":\"%s\",\"state\":\"%s\",\"local\":\"%s\",\"remote\":\"%s\",\"process\":\"%s\",\"bytes_sent\":%d,\"bytes_received\":%d}\n",
-                proto, disp, local, remote, proc, tx + 0, rx + 0
-            }
-            state = ""; local = ""; remote = ""; proc = ""; tx = 0; rx = 0
-          }
-          /bytes_sent:/ {
-            if (match($0, /bytes_sent:[0-9]+/)) {
-              v = substr($0, RSTART, RLENGTH); sub(/bytes_sent:/, "", v); tx = v + 0
-            }
-            if (match($0, /bytes_received:[0-9]+/)) {
-              v = substr($0, RSTART, RLENGTH); sub(/bytes_received:/, "", v); rx = v + 0
-            }
-            next
-          }
-          $1 ~ /^(ESTAB|LISTEN|TIME-WAIT|SYN-SENT|SYN-RECV|FIN-WAIT|CLOSE-WAIT|LAST-ACK|CLOSING|UNCONN)$/ {
-            flush()
-            state = $1
-            local = $4
-            remote = $5
-            proto = (state == "UNCONN" ? "udp" : "tcp")
-            p = index($0, "users:((\"")
-            if (p > 0) {
-              rest = substr($0, p + 9)
-              q = index(rest, "\"")
-              if (q > 0) proc = substr(rest, 1, q - 1)
-            }
-            next
-          }
-          END { flush() }
-        ' | jq -s '
-          map(select(.local != ""))
-          | sort_by(
-              if .state == "ESTABLISHED" then 0
-              elif .state == "LISTEN" then 1
-              else 2 end,
-              -(.bytes_sent + .bytes_received)
-            )
-          | .[0:20]
-        ' 2>/dev/null || echo '[]'
-    )
-fi
 
 # ---------- Disk I/O + Root filesystem ----------
 disk_stats=$(awk '

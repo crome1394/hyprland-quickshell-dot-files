@@ -1867,7 +1867,7 @@ Item {
                         id: networkViewer
                         visible: root.currentTabInfo.view === "network"
                         anchors.fill: parent
-                        anchors.margins: 10
+                        anchors.margins: 8
                         active: root.inspectorActive && root.currentTabInfo.view === "network"
                         service: sysMonService
                         globalFilter: root.globalFilter

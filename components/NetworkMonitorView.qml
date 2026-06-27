@@ -24,29 +24,51 @@ Item {
     property color errorColor: "#f38ba8"
 
     readonly property string detailPollerScript: "/home/crome/.config/quickshell/scripts/run-network-detail-poller.sh"
+    readonly property string privilegedPollerScript: "/home/crome/.config/quickshell/scripts/run-network-privileged-poller.sh"
     readonly property bool narrowLayout: width < 520
 
     readonly property int cardRadius: 6
-    readonly property int cardMargin: 10
-    readonly property int rowHeight: 22
-    readonly property int connRowHeight: narrowLayout ? 34 : 22
-    readonly property int ifaceRowHeight: 40
-    readonly property int headerHeight: 20
-    readonly property int sectionSpacing: 8
-    readonly property int graphsMinHeight: 52
-    readonly property int wifiPanelHeight: (wifiInfo.iface && wifiInfo.connected) ? 58 : 0
-    readonly property int staticBlockHeight: {
-        void narrowLayout
-        const left = ifacePanelHeight + routePanelHeight + dnsPanelHeight + sectionSpacing * 2
-        const right = latencyPanelHeight + procPanelHeight + wifiPanelHeight
-            + (wifiPanelHeight > 0 ? sectionSpacing : 0) + sectionSpacing
-        return narrowLayout ? (left + right + sectionSpacing) : Math.max(left, right)
+    readonly property int cardMargin: 6
+    readonly property int panelSpacing: 2
+    readonly property int panelTailPad: 3
+    readonly property int rowHeight: 20
+    readonly property int connRowHeight: narrowLayout ? 32 : 20
+    readonly property int ifaceRowHeight: 34
+    readonly property int headerHeight: 18
+    readonly property int sectionSpacing: 3
+    readonly property int maxTableRows: 10
+    readonly property int graphsMinHeight: 44
+    readonly property int wifiPanelHeight: (wifiInfo.iface && wifiInfo.connected) ? 44 : 0
+    readonly property int dnsListMinHeight: 36
+    readonly property int firewallScrollHeight: 28
+    readonly property int fwRowHeight: root.cardMargin * 2 + 18 + 11 + root.firewallScrollHeight + root.panelTailPad
+    readonly property int connTableViewportHeight: maxTableRows * connRowHeight + Math.max(0, maxTableRows - 1) * 2
+    readonly property int procTableViewportHeight: maxTableRows * rowHeight + Math.max(0, maxTableRows - 1) * 2
+    readonly property int connPanelHeight: root.cardMargin * 2 + 18 + 10 + root.headerHeight + connTableViewportHeight + root.panelTailPad
+    readonly property int procPanelHeight: root.cardMargin * 2 + 18 + 10 + root.headerHeight + procTableViewportHeight + root.panelTailPad
+    readonly property int privilegedConnCount: {
+        void _privilegedData.timestamp
+        return filteredConnections().length
     }
-    readonly property int staticSectionHeight: Math.min(
-        staticBlockHeight,
-        Math.max(150, Math.round(height * 0.44))
-    )
-    readonly property int tableSectionPreferred: Math.max(120, Math.round(height * 0.30))
+    readonly property int staticColumnsMinHeight: {
+        void narrowLayout
+        if (narrowLayout) {
+            let h = ifacePanelHeight + sectionSpacing + routePanelMinHeight
+                + sectionSpacing + latencyPanelHeight + sectionSpacing + dnsPanelMinHeight
+            if (wifiPanelHeight > 0)
+                h += sectionSpacing + wifiPanelHeight
+            return h + sectionSpacing + connPanelHeight + sectionSpacing + procPanelHeight
+        }
+        const left = ifacePanelHeight + sectionSpacing + routePanelMinHeight
+            + sectionSpacing + procPanelHeight
+        let right = latencyPanelHeight + sectionSpacing + dnsPanelMinHeight
+        if (wifiPanelHeight > 0)
+            right += sectionSpacing + wifiPanelHeight
+        right += sectionSpacing + connPanelHeight
+        return Math.max(left, right)
+    }
+    readonly property int staticBlockMinHeight: staticColumnsMinHeight + sectionSpacing + fwRowHeight
+    readonly property int graphsSectionPreferred: Math.max(56, Math.round(height * 0.18))
 
     readonly property var netData: service && service.data && service.data.network ? service.data.network : ({})
     readonly property var detailData: _detailData
@@ -56,38 +78,41 @@ Item {
     readonly property int ifacePanelHeight: {
         const tick = service && service.data ? service.data.timestamp : 0
         void tick
-        const n = Math.max(1, Math.min(4, filteredInterfaces().length))
-        return root.cardMargin * 2 + 22 + root.headerHeight + n * root.ifaceRowHeight + 6
+        const n = Math.max(1, Math.min(3, filteredInterfaces().length))
+        return root.cardMargin * 2 + 18 + root.headerHeight + n * root.ifaceRowHeight + root.panelTailPad
     }
-    readonly property int routePanelHeight: {
-        void detailData.timestamp
-        const n = Math.max(1, filteredRoutes().length)
-        return root.cardMargin * 2 + 22 + n * 16 + 8
+    readonly property int routePanelMinHeight: {
+        void _privilegedData.timestamp
+        const n = Math.max(1, Math.min(3, filteredRoutes().length))
+        return root.cardMargin * 2 + 18 + n * 14 + root.panelTailPad
     }
-    readonly property int dnsPanelHeight: {
+    readonly property int dnsPanelMinHeight: {
         void detailData.timestamp
-        const n = Math.max(1, filteredDnsServers().length)
-        return root.cardMargin * 2 + 22 + 18 + n * 15 + 8
+        return root.cardMargin * 2 + 18 + 12 + root.dnsListMinHeight + root.panelTailPad
     }
     readonly property int latencyPanelHeight: {
-        void detailData.timestamp
-        return root.cardMargin * 2 + 22 + root.headerHeight
-            + 3 * root.rowHeight + (detailLoading || detailError.length > 0 ? 18 : 8)
-    }
-    readonly property int procPanelHeight: {
-        const tick = service && service.data ? service.data.timestamp : 0
-        void tick
-        const n = Math.max(1, Math.min(8, filteredProcBandwidth().length))
-        return root.cardMargin * 2 + 22 + root.headerHeight + n * root.rowHeight + 6
+        void _privilegedData.timestamp
+        return root.cardMargin * 2 + 18 + root.headerHeight
+            + 3 * root.rowHeight + (privilegedLoading || privilegedError.length > 0 ? 12 : root.panelTailPad)
     }
 
     property var _detailData: ({})
     property bool detailLoading: false
     property string detailError: ""
     property bool _detailHandled: false
+
+    property var _privilegedData: ({ firewall: {}, connections: [], routes: [], latency: {} })
+    property bool privilegedLoading: false
+    property string privilegedError: ""
+    property bool _privilegedHandled: false
+    property bool _privilegedFetched: false
+
     property string copyHint: ""
 
     property var _flickable: null
+    property var _connFlickable: null
+    property var _procFlickable: null
+    property var _fwFlickable: null
 
     function filterQuery() {
         return (globalFilter && globalFilter.trim()) ? globalFilter.toLowerCase().trim() : ""
@@ -207,7 +232,7 @@ Item {
     function filteredInterfaces() {
         const tick = service && service.data ? service.data.timestamp : 0
         void tick
-        const list = (netData.interfaces || []).slice(0, 4)
+        const list = (netData.interfaces || []).slice(0, 3)
         const q = filterQuery()
         if (!q) return list
         return list.filter(function(row) {
@@ -232,9 +257,8 @@ Item {
     }
 
     function filteredConnections() {
-        const tick = service && service.data ? service.data.timestamp : 0
-        void tick
-        const list = netData.connections || []
+        void _privilegedData.timestamp
+        const list = _privilegedData.connections || []
         const q = filterQuery()
         if (!q) return list
         return list.filter(function(row) {
@@ -247,7 +271,8 @@ Item {
     }
 
     function filteredRoutes() {
-        const routes = detailData.routes || []
+        void _privilegedData.timestamp
+        const routes = _privilegedData.routes || []
         const q = filterQuery()
         if (!q) return routes
         return routes.filter(function(row) {
@@ -265,7 +290,7 @@ Item {
     }
 
     function filteredFirewallRules() {
-        const fw = detailData.firewall || {}
+        const fw = _privilegedData.firewall || {}
         const rules = fw.rules || []
         const q = filterQuery()
         if (!q) return rules
@@ -287,7 +312,8 @@ Item {
     }
 
     function latencyRows() {
-        const lat = detailData.latency || {}
+        void _privilegedData.timestamp
+        const lat = _privilegedData.latency || {}
         return [
             lat.gateway || { label: "Gateway", host: netData.gateway || "" },
             lat.google_dns || { label: "Google DNS", host: "8.8.8.8" },
@@ -382,7 +408,7 @@ Item {
 
     function copyProcBwText() {
         const lines = ["Bandwidth by Process", "Process\tDownload\tUpload"]
-        filteredProcBandwidth().slice(0, 8).forEach(function(r) {
+        filteredProcBandwidth().forEach(function(r) {
             lines.push((r.process || "—") + "\t" + formatRate(r.rx_rate) + "\t" + formatRate(r.tx_rate))
         })
         return lines.join("\n")
@@ -395,10 +421,24 @@ Item {
     }
 
     function copyFirewallText() {
-        const fw = detailData.firewall || {}
+        const fw = _privilegedData.firewall || {}
         const lines = ["Firewall", fw.summary || "—"]
         if (fw.backend && fw.backend !== "none") lines.push("Backend: " + fw.backend)
         filteredFirewallRules().forEach(function(r) { lines.push(String(r)) })
+        return lines.join("\n")
+    }
+
+    function copyConnStatsText() {
+        const s = connStats
+        const lines = [
+            "Active Connections (live)",
+            "TCP established: " + (s.tcp_established || 0),
+            "TCP sockets: " + (s.tcp_total || 0),
+            "UDP sockets: " + (s.udp || 0),
+            "Total sockets: " + (s.total || 0)
+        ]
+        if (_privilegedFetched)
+            lines.push("Shown in table: " + privilegedConnCount)
         return lines.join("\n")
     }
 
@@ -433,6 +473,16 @@ Item {
         detailProcess.running = true
     }
 
+    function refreshPrivileged() {
+        if (privilegedProcess.running) return
+        privilegedLoading = true
+        privilegedError = ""
+        _privilegedHandled = false
+        privilegedProcess.running = false
+        privilegedProcess.running = true
+    }
+
+    // Live metrics (detail poller) — safe for periodic / footer refresh.
     function refresh() {
         refreshDetail()
     }
@@ -453,33 +503,67 @@ Item {
         }
     }
 
+    function finishPrivilegedPoll() {
+        if (_privilegedHandled) return
+        const raw = (privilegedStdout.text || "").trim()
+        if (!raw)
+            return
+
+        _privilegedHandled = true
+        privilegedLoading = false
+        _privilegedFetched = true
+
+        try {
+            const parsed = JSON.parse(raw)
+            _privilegedData = {
+                timestamp: parsed.timestamp || 0,
+                latency: parsed.latency || {},
+                routes: parsed.routes || [],
+                firewall: parsed.firewall || {},
+                connections: parsed.connections || []
+            }
+            privilegedError = ""
+        } catch (e) {
+            privilegedError = "Failed to parse privileged network JSON"
+        }
+    }
+
     function resetScroll() {
-        if (connFlickable) connFlickable.contentY = 0
-        if (fwFlickable) fwFlickable.contentY = 0
-        root._flickable = connFlickable
+        if (_connFlickable) _connFlickable.contentY = 0
+        if (_procFlickable) _procFlickable.contentY = 0
+        if (_fwFlickable) _fwFlickable.contentY = 0
+        root._flickable = _connFlickable || _fwFlickable
     }
 
     function pageScroll(direction) {
-        if (scrollArea(connFlickable, direction, 0.85)) return
-        scrollArea(fwFlickable, direction, 0.85)
+        if (scrollArea(_connFlickable, direction, 0.85)) return
+        if (scrollArea(_procFlickable, direction, 0.85)) return
+        scrollArea(_fwFlickable, direction, 0.85)
     }
 
     function lineScroll(direction) {
-        if (scrollArea(connFlickable, direction, 0.14)) return
-        scrollArea(fwFlickable, direction, 0.14)
+        if (scrollArea(_connFlickable, direction, 0.14)) return
+        if (scrollArea(_procFlickable, direction, 0.14)) return
+        scrollArea(_fwFlickable, direction, 0.14)
     }
 
     function suspendBackgroundWork() {
         if (detailProcess.running)
             detailProcess.running = false
+        if (privilegedProcess.running)
+            privilegedProcess.running = false
         detailLoading = false
+        privilegedLoading = false
     }
 
     onActiveChanged: {
-        if (active)
+        if (active) {
             refreshDetail()
-        else
+            refreshPrivileged()
+        } else {
             suspendBackgroundWork()
+            _privilegedFetched = false
+        }
     }
 
     // Section title row + optional copy chip
@@ -487,8 +571,11 @@ Item {
         property string title: ""
         property string copyPayload: ""
         property color titleColor: root.accentColor
+        property bool showRefresh: false
+        property bool refreshBusy: false
+        signal refreshClicked()
         Layout.fillWidth: true
-        spacing: 6
+        spacing: 4
 
         Text {
             text: title
@@ -498,6 +585,31 @@ Item {
             font.family: "monospace"
         }
         Item { Layout.fillWidth: true }
+        Rectangle {
+            visible: showRefresh
+            width: refreshMa.containsMouse ? 58 : 54
+            height: 18
+            radius: 4
+            color: refreshMa.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.12)
+            opacity: refreshBusy ? 0.55 : 1
+            Text {
+                anchors.centerIn: parent
+                text: refreshBusy ? "…" : "Refresh"
+                color: root.accentColor
+                font.pixelSize: 9
+                font.family: "monospace"
+            }
+            MouseArea {
+                id: refreshMa
+                anchors.fill: parent
+                hoverEnabled: true
+                enabled: !refreshBusy
+                cursorShape: Qt.PointingHandCursor
+                onClicked: refreshClicked()
+            }
+        }
         Rectangle {
             visible: copyPayload.length > 0
             width: 40
@@ -542,6 +654,25 @@ Item {
         })
     }
 
+    Io.Process {
+        id: privilegedProcess
+        command: [root.privilegedPollerScript]
+        running: false
+        stdout: Io.StdioCollector {
+            id: privilegedStdout
+            onStreamFinished: root.finishPrivilegedPoll()
+        }
+        onExited: Qt.callLater(function() {
+            root.finishPrivilegedPoll()
+            if (!root._privilegedHandled) {
+                root._privilegedHandled = true
+                root.privilegedLoading = false
+                if (!(privilegedStdout.text || "").trim())
+                    root.privilegedError = "Empty response from privileged network poller"
+            }
+        })
+    }
+
     ColumnLayout {
         id: contentCol
         anchors.fill: parent
@@ -563,7 +694,7 @@ Item {
                     id: summaryInner
                     anchors.fill: parent
                     anchors.margins: root.cardMargin
-                    spacing: 4
+                    spacing: root.panelSpacing
 
                     SectionBar {
                         title: "NETWORK SUMMARY"
@@ -572,11 +703,11 @@ Item {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 10
+                        spacing: 8
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 2
+                            spacing: 1
                             Text {
                                 text: (netData.iface || "—") + "  ·  Gateway " + (netData.gateway || "—")
                                     + "  ·  " + (connStats.tcp_established || 0) + " TCP est"
@@ -597,19 +728,19 @@ Item {
                         }
 
                         ColumnLayout {
-                            spacing: 2
+                            spacing: 1
                             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                             Text {
                                 text: "↓ " + formatRate(netData.rx_rate)
                                 color: root.okColor
-                                font.pixelSize: 14
+                                font.pixelSize: 12
                                 font.bold: true
                                 font.family: "monospace"
                             }
                             Text {
                                 text: "↑ " + formatRate(netData.tx_rate)
                                 color: root.accentColor
-                                font.pixelSize: 14
+                                font.pixelSize: 12
                                 font.bold: true
                                 font.family: "monospace"
                             }
@@ -618,7 +749,7 @@ Item {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 6
                         Rectangle {
                             width: graphsToggleMa.containsMouse ? 96 : 92
                             height: 22
@@ -667,7 +798,7 @@ Item {
                     id: vpnInner
                     anchors.fill: parent
                     anchors.margins: root.cardMargin
-                    spacing: 3
+                    spacing: root.panelSpacing
 
                     SectionBar {
                         title: "VPN / TAILSCALE"
@@ -694,333 +825,68 @@ Item {
                 }
             }
 
-            // --- Static panels (stacked when narrow) ---
+            // --- Main body: status strip + balanced detail grid (tables capped at 10 rows) ---
             Loader {
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.staticSectionHeight
-                Layout.maximumHeight: Math.round(root.height * 0.46)
-                sourceComponent: root.narrowLayout ? narrowStaticComponent : wideStaticComponent
+                Layout.fillHeight: true
+                Layout.minimumHeight: root.staticBlockMinHeight
+                Layout.preferredHeight: root.staticBlockMinHeight
+                Layout.alignment: Qt.AlignTop
+                sourceComponent: root.narrowLayout ? narrowBodyComponent : wideBodyComponent
             }
 
             Component {
-                id: wideStaticComponent
-                RowLayout {
-                    width: contentCol.width
-                    spacing: root.sectionSpacing
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: root.sectionSpacing
-                        StaticLeftPanels {}
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: root.sectionSpacing
-                        StaticRightPanels {}
-                    }
-                }
-            }
-
-            Component {
-                id: narrowStaticComponent
+                id: wideBodyComponent
                 ColumnLayout {
                     width: contentCol.width
                     spacing: root.sectionSpacing
-                    StaticLeftPanels {}
-                    StaticRightPanels {}
+
+                    FwConnRow {}
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: root.sectionSpacing
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            spacing: root.sectionSpacing
+                            StaticLeftPanels {}
+                            ProcTableCard {}
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            spacing: root.sectionSpacing
+                            StaticRightPanels {}
+                            ConnTableCard {}
+                        }
+                    }
                 }
             }
 
-            // --- Scrollable: connections + firewall ---
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: !root.showGraphs
-                Layout.preferredHeight: root.showGraphs ? root.tableSectionPreferred : -1
-                Layout.minimumHeight: 120
-                spacing: root.sectionSpacing
+            Component {
+                id: narrowBodyComponent
+                ColumnLayout {
+                    width: contentCol.width
+                    spacing: root.sectionSpacing
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    radius: root.cardRadius
-                    color: root.surfaceColor
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: root.cardMargin
-                        spacing: 4
-
-                        SectionBar {
-                            title: "CONNECTIONS"
-                            copyPayload: root.copyConnectionsText()
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: root.headerHeight
-                            radius: 4
-                            color: Qt.rgba(1, 1, 1, 0.03)
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 4
-                                anchors.rightMargin: 4
-                                spacing: 4
-                                Text { Layout.preferredWidth: 28; text: "Proto"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
-                                Text { Layout.preferredWidth: root.narrowLayout ? 0 : 68; visible: !root.narrowLayout; text: "State"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
-                                Text { Layout.preferredWidth: 52; text: "Process"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
-                                Text { Layout.fillWidth: true; text: "Local"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
-                                Text { Layout.fillWidth: true; text: "Remote"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
-                                Text { Layout.preferredWidth: 48; text: "RX"; color: root.okColor; font.pixelSize: 8; font.bold: true; font.family: "monospace"; horizontalAlignment: Text.AlignRight }
-                                Text { Layout.preferredWidth: 48; text: "TX"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace"; horizontalAlignment: Text.AlignRight }
-                            }
-                        }
-
-                        Flickable {
-                            id: connFlickable
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            contentWidth: Math.max(width, connCol.implicitWidth)
-                            contentHeight: connCol.implicitHeight
-                            clip: true
-                            boundsBehavior: Flickable.StopAtBounds
-
-                            ScrollBar.vertical: ScrollBar {
-                                policy: connFlickable.contentHeight > connFlickable.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-                                contentItem: Rectangle {
-                                    implicitWidth: 5
-                                    radius: 2
-                                    color: parent.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
-                                }
-                            }
-
-                            Column {
-                                id: connCol
-                                width: Math.max(connFlickable.width, root.narrowLayout ? connFlickable.width : 520)
-                                spacing: 2
-
-                                Repeater {
-                                    model: filteredConnections()
-                                    delegate: Item {
-                                        width: connCol.width
-                                        height: root.connRowHeight
-
-                                        ColumnLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 4
-                                            anchors.rightMargin: 4
-                                            spacing: 0
-                                            visible: root.narrowLayout
-
-                                            RowLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 4
-                                                Text {
-                                                    text: (modelData.proto || "—").toUpperCase() + "  " + (modelData.state || "—")
-                                                    color: connStateColor(modelData.state)
-                                                    font.pixelSize: 9
-                                                    font.family: "monospace"
-                                                }
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.process || "—"
-                                                    color: root.textColor
-                                                    font.pixelSize: 9
-                                                    font.family: "monospace"
-                                                    elide: Text.ElideRight
-                                                }
-                                                Text {
-                                                    text: formatBytes(modelData.bytes_received)
-                                                    color: root.okColor
-                                                    font.pixelSize: 9
-                                                    font.family: "monospace"
-                                                }
-                                                Text {
-                                                    text: formatBytes(modelData.bytes_sent)
-                                                    color: root.accentColor
-                                                    font.pixelSize: 9
-                                                    font.family: "monospace"
-                                                }
-                                            }
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: (modelData.local || "—") + " → " + (modelData.remote || "—")
-                                                color: root.subtextColor
-                                                font.pixelSize: 8
-                                                font.family: "monospace"
-                                                elide: Text.ElideMiddle
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 4
-                                            anchors.rightMargin: 4
-                                            spacing: 4
-                                            visible: !root.narrowLayout
-
-                                            Text {
-                                                Layout.preferredWidth: 28
-                                                text: (modelData.proto || "—").toUpperCase()
-                                                color: root.subtextColor
-                                                font.pixelSize: 9
-                                                font.family: "monospace"
-                                            }
-                                            Text {
-                                                Layout.preferredWidth: 68
-                                                text: modelData.state || "—"
-                                                color: connStateColor(modelData.state)
-                                                font.pixelSize: 9
-                                                font.family: "monospace"
-                                                elide: Text.ElideRight
-                                            }
-                                            Text {
-                                                Layout.preferredWidth: 52
-                                                text: modelData.process || "—"
-                                                color: root.textColor
-                                                font.pixelSize: 9
-                                                font.family: "monospace"
-                                                elide: Text.ElideRight
-                                            }
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: modelData.local || "—"
-                                                color: root.subtextColor
-                                                font.pixelSize: 8
-                                                font.family: "monospace"
-                                                elide: Text.ElideMiddle
-                                            }
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: modelData.remote || "—"
-                                                color: root.subtextColor
-                                                font.pixelSize: 8
-                                                font.family: "monospace"
-                                                elide: Text.ElideMiddle
-                                            }
-                                            Text {
-                                                Layout.preferredWidth: 48
-                                                text: formatBytes(modelData.bytes_received)
-                                                color: root.okColor
-                                                font.pixelSize: 9
-                                                font.family: "monospace"
-                                                horizontalAlignment: Text.AlignRight
-                                            }
-                                            Text {
-                                                Layout.preferredWidth: 48
-                                                text: formatBytes(modelData.bytes_sent)
-                                                color: root.accentColor
-                                                font.pixelSize: 9
-                                                font.family: "monospace"
-                                                horizontalAlignment: Text.AlignRight
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    width: connCol.width
-                                    visible: filteredConnections().length === 0
-                                    text: "No connections"
-                                    color: root.overlayColor
-                                    font.pixelSize: 10
-                                    font.family: "monospace"
-                                    topPadding: 4
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    radius: root.cardRadius
-                    color: root.surfaceColor
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: root.cardMargin
-                        spacing: 4
-
-                        SectionBar {
-                            title: "FIREWALL"
-                            copyPayload: root.copyFirewallText()
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: {
-                                const fw = detailData.firewall || {}
-                                if (detailLoading && !fw.summary) return "loading…"
-                                let s = fw.summary || "—"
-                                if (fw.backend && fw.backend !== "none") s += "  ·  " + fw.backend
-                                return s
-                            }
-                            color: (detailData.firewall && detailData.firewall.active) ? root.okColor : root.subtextColor
-                            font.pixelSize: 10
-                            font.family: "monospace"
-                            wrapMode: Text.Wrap
-                        }
-
-                        Flickable {
-                            id: fwFlickable
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            contentWidth: width
-                            contentHeight: fwRulesCol.implicitHeight
-                            clip: true
-                            boundsBehavior: Flickable.StopAtBounds
-
-                            ScrollBar.vertical: ScrollBar {
-                                policy: fwFlickable.contentHeight > fwFlickable.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-                                contentItem: Rectangle {
-                                    implicitWidth: 5
-                                    radius: 2
-                                    color: parent.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
-                                }
-                            }
-
-                            Column {
-                                id: fwRulesCol
-                                width: parent.width
-                                spacing: 2
-
-                                Repeater {
-                                    model: filteredFirewallRules()
-                                    delegate: Text {
-                                        width: fwRulesCol.width
-                                        text: modelData
-                                        color: root.subtextColor
-                                        font.pixelSize: 9
-                                        font.family: "monospace"
-                                        wrapMode: Text.Wrap
-                                    }
-                                }
-
-                                Text {
-                                    width: fwRulesCol.width
-                                    visible: !detailLoading && filteredFirewallRules().length === 0
-                                    text: "No firewall rules available"
-                                    color: root.overlayColor
-                                    font.pixelSize: 10
-                                    font.family: "monospace"
-                                }
-                            }
-                        }
-                    }
+                    FwConnRow {}
+                    StaticLeftPanels {}
+                    StaticRightPanels {}
+                    ConnTableCard {}
+                    ProcTableCard {}
                 }
             }
 
             // --- Bandwidth graphs (bottom, optional) ---
             RowLayout {
                 Layout.fillWidth: true
-                Layout.fillHeight: root.showGraphs
-                Layout.minimumHeight: root.graphsMinHeight
+                Layout.preferredHeight: root.showGraphs ? root.graphsSectionPreferred : 0
+                Layout.maximumHeight: root.showGraphs ? root.graphsSectionPreferred : 0
+                Layout.minimumHeight: root.showGraphs ? root.graphsMinHeight : 0
                 visible: root.showGraphs
                 spacing: root.sectionSpacing
 
@@ -1034,7 +900,7 @@ Item {
 
                     ColumnLayout {
                         anchors.fill: parent
-                        anchors.margins: 8
+                        anchors.margins: 6
                         spacing: 2
                         Text {
                             text: "↓ Download History"
@@ -1065,7 +931,7 @@ Item {
 
                     ColumnLayout {
                         anchors.fill: parent
-                        anchors.margins: 8
+                        anchors.margins: 6
                         spacing: 2
                         Text {
                             text: "↑ Upload History"
@@ -1088,10 +954,168 @@ Item {
             }
         }
 
+    component ConnTableCard: Rectangle {
+        Layout.fillWidth: true
+        Layout.preferredHeight: root.connPanelHeight
+        Layout.maximumHeight: root.connPanelHeight
+        radius: root.cardRadius
+        color: root.surfaceColor
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
+
+        ConnectionsPanel {
+            anchors.fill: parent
+            anchors.margins: root.cardMargin
+        }
+    }
+
+    component ProcTableCard: Rectangle {
+        Layout.fillWidth: true
+        Layout.preferredHeight: root.procPanelHeight
+        Layout.maximumHeight: root.procPanelHeight
+        radius: root.cardRadius
+        color: root.surfaceColor
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
+
+        ProcBandwidthPanel {
+            anchors.fill: parent
+            anchors.margins: root.cardMargin
+        }
+    }
+
+    component FwConnRow: RowLayout {
+        Layout.fillWidth: true
+        Layout.preferredHeight: root.fwRowHeight
+        Layout.maximumHeight: root.fwRowHeight
+        spacing: root.sectionSpacing
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            radius: root.cardRadius
+            color: root.surfaceColor
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+
+            FirewallPanel {
+                anchors.fill: parent
+                anchors.margins: root.cardMargin
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            radius: root.cardRadius
+            color: root.surfaceColor
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+
+            ActiveConnectionsTile {
+                anchors.fill: parent
+                anchors.margins: root.cardMargin
+            }
+        }
+    }
+
+    component FirewallPanel: ColumnLayout {
+        spacing: root.panelSpacing
+
+        SectionBar {
+            title: "FIREWALL"
+            copyPayload: root.copyFirewallText()
+            showRefresh: true
+            refreshBusy: root.privilegedLoading
+            onRefreshClicked: root.refreshPrivileged()
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: {
+                const fw = _privilegedData.firewall || {}
+                if (privilegedLoading && !fw.summary) return "loading…"
+                let s = fw.summary || "—"
+                if (fw.backend && fw.backend !== "none") s += "  ·  " + fw.backend
+                return s
+            }
+            color: (_privilegedData.firewall && _privilegedData.firewall.active) ? root.okColor : root.subtextColor
+            font.pixelSize: 9
+            font.family: "monospace"
+            elide: Text.ElideRight
+            maximumLineCount: 1
+        }
+
+        Flickable {
+            id: fwFlickable
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.firewallScrollHeight
+            Layout.maximumHeight: root.firewallScrollHeight
+            contentWidth: width
+            contentHeight: fwRulesCol.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            Component.onCompleted: root._fwFlickable = fwFlickable
+            Component.onDestruction: {
+                if (root._fwFlickable === fwFlickable)
+                    root._fwFlickable = null
+            }
+
+            ScrollBar.vertical: ScrollBar {
+                policy: fwFlickable.contentHeight > fwFlickable.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                contentItem: Rectangle {
+                    implicitWidth: 4
+                    radius: 2
+                    color: parent.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
+                }
+            }
+
+            Column {
+                id: fwRulesCol
+                width: parent.width
+                spacing: 1
+
+                Repeater {
+                    model: filteredFirewallRules()
+                    delegate: Text {
+                        width: fwRulesCol.width
+                        text: modelData
+                        color: root.subtextColor
+                        font.pixelSize: 8
+                        font.family: "monospace"
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                    }
+                }
+
+                Text {
+                    width: fwRulesCol.width
+                    visible: !privilegedLoading && privilegedError.length > 0 && filteredFirewallRules().length === 0
+                    text: privilegedError
+                    color: root.errorColor
+                    font.pixelSize: 9
+                    font.family: "monospace"
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+                Text {
+                    width: fwRulesCol.width
+                    visible: !privilegedLoading && privilegedError.length === 0 && filteredFirewallRules().length === 0
+                    text: "No firewall rules"
+                    color: root.overlayColor
+                    font.pixelSize: 9
+                    font.family: "monospace"
+                }
+            }
+        }
+    }
+
     // Shared panel groups (used in wide + narrow layouts)
     component StaticLeftPanels: ColumnLayout {
         spacing: root.sectionSpacing
         Layout.fillWidth: true
+        Layout.fillHeight: !root.narrowLayout
 
         Rectangle {
             Layout.fillWidth: true
@@ -1104,7 +1128,7 @@ Item {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: root.cardMargin
-                spacing: 4
+                spacing: root.panelSpacing
 
                 SectionBar { title: "INTERFACES"; copyPayload: root.copyInterfacesText() }
 
@@ -1185,7 +1209,8 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: root.routePanelHeight
+            Layout.fillHeight: true
+            Layout.minimumHeight: root.routePanelMinHeight
             radius: root.cardRadius
             color: root.surfaceColor
             border.width: 1
@@ -1194,81 +1219,77 @@ Item {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: root.cardMargin
-                spacing: 4
-                SectionBar { title: "ROUTING"; copyPayload: root.copyRoutesText() }
-                Repeater {
-                    model: filteredRoutes()
-                    delegate: Text {
-                        Layout.fillWidth: true
-                        text: routeLine(modelData)
-                        color: (modelData && modelData.dst === "default") ? root.okColor : root.subtextColor
-                        font.pixelSize: 10
-                        font.family: "monospace"
-                        wrapMode: Text.Wrap
-                    }
+                spacing: root.panelSpacing
+                SectionBar {
+                    title: "ROUTING"
+                    copyPayload: root.copyRoutesText()
+                    showRefresh: true
+                    refreshBusy: root.privilegedLoading
+                    onRefreshClicked: root.refreshPrivileged()
                 }
-                Text {
+                Flickable {
                     Layout.fillWidth: true
-                    visible: !detailLoading && filteredRoutes().length === 0
-                    text: "No routes available"
-                    color: root.overlayColor
-                    font.pixelSize: 10
-                    font.family: "monospace"
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 28
+                    contentWidth: width
+                    contentHeight: routeCol.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: parent.contentHeight > parent.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                        contentItem: Rectangle {
+                            implicitWidth: 4
+                            radius: 2
+                            color: parent.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
+                        }
+                    }
+
+                    Column {
+                        id: routeCol
+                        width: parent.width
+                        spacing: 1
+
+                        Repeater {
+                            model: filteredRoutes()
+                            delegate: Text {
+                                width: routeCol.width
+                                text: routeLine(modelData)
+                                color: (modelData && modelData.dst === "default") ? root.okColor : root.subtextColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                wrapMode: Text.Wrap
+                            }
+                        }
+
+                        Text {
+                            width: routeCol.width
+                            visible: root.privilegedLoading && filteredRoutes().length === 0
+                            text: "loading…"
+                            color: root.overlayColor
+                            font.pixelSize: 10
+                            font.family: "monospace"
+                        }
+                        Text {
+                            width: routeCol.width
+                            visible: !root.privilegedLoading && filteredRoutes().length === 0
+                            text: root.privilegedError.length > 0 ? root.privilegedError : "No routes available"
+                            color: root.privilegedError.length > 0 ? root.errorColor : root.overlayColor
+                            font.pixelSize: 10
+                            font.family: "monospace"
+                            wrapMode: Text.Wrap
+                        }
+                    }
                 }
             }
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: root.dnsPanelHeight
-            radius: root.cardRadius
-            color: root.surfaceColor
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.08)
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: root.cardMargin
-                spacing: 4
-                SectionBar { title: "DNS RESOLUTION"; copyPayload: root.copyDnsText() }
-                Text {
-                    Layout.fillWidth: true
-                    text: {
-                        const d = detailDns()
-                        let s = ""
-                        if (d.current) s += "Active: " + d.current
-                        if (d.link) s += " (" + d.link + ")"
-                        if (d.domain) s += (s ? "  ·  " : "") + "domain " + d.domain
-                        const c = d.cache || {}
-                        if (c.cache_size !== undefined)
-                            s += (s ? "  ·  " : "") + "cache " + c.cache_size
-                                + " entries · " + (c.cache_hits || 0) + " hits · "
-                                + (c.cache_misses || 0) + " misses"
-                        return s || (detailLoading ? "loading…" : "—")
-                    }
-                    color: root.subtextColor
-                    font.pixelSize: 10
-                    font.family: "monospace"
-                    wrapMode: Text.Wrap
-                }
-                Repeater {
-                    model: filteredDnsServers()
-                    delegate: Text {
-                        Layout.fillWidth: true
-                        text: "• " + modelData
-                        color: (modelData === detailDns().current || modelData === netData.dns_current)
-                            ? root.okColor : root.subtextColor
-                        font.pixelSize: 10
-                        font.family: "monospace"
-                    }
-                }
-            }
-        }
     }
 
     component StaticRightPanels: ColumnLayout {
         spacing: root.sectionSpacing
         Layout.fillWidth: true
+        Layout.fillHeight: !root.narrowLayout
 
         Rectangle {
             Layout.fillWidth: true
@@ -1281,8 +1302,14 @@ Item {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: root.cardMargin
-                spacing: 4
-                SectionBar { title: "LATENCY & PACKET LOSS"; copyPayload: root.copyLatencyText() }
+                spacing: root.panelSpacing
+                SectionBar {
+                    title: "LATENCY & PACKET LOSS"
+                    copyPayload: root.copyLatencyText()
+                    showRefresh: true
+                    refreshBusy: root.privilegedLoading
+                    onRefreshClicked: root.refreshPrivileged()
+                }
                 Rectangle {
                     Layout.fillWidth: true
                     height: root.headerHeight
@@ -1330,20 +1357,94 @@ Item {
                     }
                 }
                 Text {
-                    visible: detailLoading
+                    visible: privilegedLoading
                     text: "measuring (3 pings each)…"
                     color: root.overlayColor
                     font.pixelSize: 9
                     font.family: "monospace"
                 }
                 Text {
-                    visible: detailError.length > 0
-                    text: detailError
+                    visible: privilegedError.length > 0
+                    text: privilegedError
                     color: root.errorColor
                     font.pixelSize: 9
                     font.family: "monospace"
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: root.dnsPanelMinHeight
+            radius: root.cardRadius
+            color: root.surfaceColor
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: root.cardMargin
+                spacing: root.panelSpacing
+                SectionBar { title: "DNS RESOLUTION"; copyPayload: root.copyDnsText() }
+                Text {
+                    Layout.fillWidth: true
+                    text: {
+                        const d = detailDns()
+                        let s = ""
+                        if (d.current) s += "Active: " + d.current
+                        if (d.link) s += " (" + d.link + ")"
+                        if (d.domain) s += (s ? "  ·  " : "") + "domain " + d.domain
+                        const c = d.cache || {}
+                        if (c.cache_size !== undefined)
+                            s += (s ? "  ·  " : "") + "cache " + c.cache_size
+                                + " entries · " + (c.cache_hits || 0) + " hits · "
+                                + (c.cache_misses || 0) + " misses"
+                        return s || (detailLoading ? "loading…" : "—")
+                    }
+                    color: root.subtextColor
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                }
+                Flickable {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: root.dnsListMinHeight
+                    contentWidth: width
+                    contentHeight: dnsCol.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: parent.contentHeight > parent.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                        contentItem: Rectangle {
+                            implicitWidth: 5
+                            radius: 2
+                            color: parent.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
+                        }
+                    }
+
+                    Column {
+                        id: dnsCol
+                        width: parent.width
+                        spacing: 2
+                        Repeater {
+                            model: filteredDnsServers()
+                            delegate: Text {
+                                width: dnsCol.width
+                                text: "• " + modelData
+                                color: (modelData === detailDns().current || modelData === netData.dns_current)
+                                    ? root.okColor : root.subtextColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1361,7 +1462,7 @@ Item {
                 id: wifiBlock
                 anchors.fill: parent
                 anchors.margins: root.cardMargin
-                spacing: 3
+                spacing: root.panelSpacing
                 SectionBar {
                     title: "WIFI"
                     copyPayload: {
@@ -1390,71 +1491,431 @@ Item {
             }
         }
 
-        Rectangle {
+    }
+
+    component ActiveConnectionsTile: ColumnLayout {
+        spacing: root.panelSpacing
+
+        property int _liveTick: service && service.data ? service.data.timestamp : 0
+
+        SectionBar {
+            title: "ACTIVE CONNECTIONS"
+            copyPayload: root.copyConnStatsText()
+        }
+
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: root.procPanelHeight
-            radius: root.cardRadius
-            color: root.surfaceColor
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.08)
+            spacing: 6
 
             ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: root.cardMargin
-                spacing: 4
-                SectionBar { title: "BANDWIDTH BY PROCESS"; copyPayload: root.copyProcBwText() }
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: root.headerHeight
-                    radius: 4
-                    color: Qt.rgba(1, 1, 1, 0.03)
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 6
-                        anchors.rightMargin: 6
-                        spacing: 8
-                        Text { Layout.fillWidth: true; text: "Process"; color: root.accentColor; font.pixelSize: 9; font.bold: true; font.family: "monospace" }
-                        Text { Layout.minimumWidth: 72; text: "Download"; color: root.okColor; font.pixelSize: 9; font.bold: true; font.family: "monospace"; horizontalAlignment: Text.AlignRight }
-                        Text { Layout.minimumWidth: 72; text: "Upload"; color: root.accentColor; font.pixelSize: 9; font.bold: true; font.family: "monospace"; horizontalAlignment: Text.AlignRight }
-                    }
-                }
-                Repeater {
-                    model: filteredProcBandwidth().slice(0, 8)
-                    delegate: RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Text {
-                            Layout.fillWidth: true
-                            text: modelData.process || "—"
-                            color: root.textColor
-                            font.pixelSize: 10
-                            font.family: "monospace"
-                        }
-                        Text {
-                            Layout.minimumWidth: 72
-                            text: formatRate(modelData.rx_rate)
-                            color: root.okColor
-                            font.pixelSize: 10
-                            font.family: "monospace"
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        Text {
-                            Layout.minimumWidth: 72
-                            text: formatRate(modelData.tx_rate)
-                            color: root.accentColor
-                            font.pixelSize: 10
-                            font.family: "monospace"
-                            horizontalAlignment: Text.AlignRight
-                        }
-                    }
+                Layout.preferredWidth: 44
+                spacing: 0
+
+                Text {
+                    text: String(connStats.tcp_established || 0)
+                    color: root.okColor
+                    font.pixelSize: 18
+                    font.bold: true
+                    font.family: "monospace"
                 }
                 Text {
+                    text: "estab"
+                    color: root.overlayColor
+                    font.pixelSize: 7
+                    font.family: "monospace"
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: 4
+                rowSpacing: 1
+
+                Text {
+                    text: "TCP"
+                    color: root.overlayColor
+                    font.pixelSize: 8
+                    font.family: "monospace"
+                }
+                Text {
+                    text: String(connStats.tcp_total || 0)
+                    color: root.subtextColor
+                    font.pixelSize: 9
+                    font.family: "monospace"
+                    horizontalAlignment: Text.AlignRight
                     Layout.fillWidth: true
+                }
+                Text {
+                    text: "UDP"
+                    color: root.overlayColor
+                    font.pixelSize: 8
+                    font.family: "monospace"
+                }
+                Text {
+                    text: String(connStats.udp || 0)
+                    color: root.subtextColor
+                    font.pixelSize: 9
+                    font.family: "monospace"
+                    horizontalAlignment: Text.AlignRight
+                    Layout.fillWidth: true
+                }
+                Text {
+                    text: "Total"
+                    color: root.overlayColor
+                    font.pixelSize: 8
+                    font.family: "monospace"
+                }
+                Text {
+                    text: String(connStats.total || 0)
+                    color: root.textColor
+                    font.pixelSize: 9
+                    font.bold: true
+                    font.family: "monospace"
+                    horizontalAlignment: Text.AlignRight
+                    Layout.fillWidth: true
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: root._privilegedFetched
+            text: "in table: " + root.privilegedConnCount
+            color: root.overlayColor
+            font.pixelSize: 8
+            font.family: "monospace"
+            elide: Text.ElideRight
+            maximumLineCount: 1
+        }
+    }
+
+    component ConnectionsPanel: ColumnLayout {
+        spacing: root.panelSpacing
+
+        Component.onCompleted: root._connFlickable = connFlickable
+        Component.onDestruction: {
+            if (root._connFlickable === connFlickable)
+                root._connFlickable = null
+        }
+
+        SectionBar {
+            title: "CONNECTIONS"
+            copyPayload: root.copyConnectionsText()
+            showRefresh: true
+            refreshBusy: root.privilegedLoading
+            onRefreshClicked: root.refreshPrivileged()
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: filteredConnections().length > 0
+            text: {
+                const n = filteredConnections().length
+                return n > root.maxTableRows
+                    ? ("top " + root.maxTableRows + " of " + n + " · scroll for more")
+                    : (n + " shown")
+            }
+            color: root.overlayColor
+            font.pixelSize: 8
+            font.family: "monospace"
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: root.headerHeight
+            radius: 4
+            color: Qt.rgba(1, 1, 1, 0.03)
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 4
+                anchors.rightMargin: 4
+                spacing: 4
+                Text { Layout.preferredWidth: 28; text: "Proto"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
+                Text { Layout.preferredWidth: root.narrowLayout ? 0 : 68; visible: !root.narrowLayout; text: "State"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
+                Text { Layout.preferredWidth: 52; text: "Process"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
+                Text { Layout.fillWidth: true; text: "Local"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
+                Text { Layout.fillWidth: true; text: "Remote"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace" }
+                Text { Layout.preferredWidth: 48; text: "RX"; color: root.okColor; font.pixelSize: 8; font.bold: true; font.family: "monospace"; horizontalAlignment: Text.AlignRight }
+                Text { Layout.preferredWidth: 48; text: "TX"; color: root.accentColor; font.pixelSize: 8; font.bold: true; font.family: "monospace"; horizontalAlignment: Text.AlignRight }
+            }
+        }
+
+        Flickable {
+            id: connFlickable
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.connTableViewportHeight
+            Layout.maximumHeight: root.connTableViewportHeight
+            contentWidth: Math.max(width, connCol.implicitWidth)
+            contentHeight: connCol.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            ScrollBar.vertical: ScrollBar {
+                policy: connFlickable.contentHeight > connFlickable.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                contentItem: Rectangle {
+                    implicitWidth: 5
+                    radius: 2
+                    color: parent.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
+                }
+            }
+
+            Column {
+                id: connCol
+                width: Math.max(connFlickable.width, root.narrowLayout ? connFlickable.width : 520)
+                spacing: 2
+
+                Repeater {
+                    model: filteredConnections()
+                    delegate: Item {
+                        width: connCol.width
+                        height: root.connRowHeight
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+                            spacing: 0
+                            visible: root.narrowLayout
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 4
+                                Text {
+                                    text: (modelData.proto || "—").toUpperCase() + "  " + (modelData.state || "—")
+                                    color: connStateColor(modelData.state)
+                                    font.pixelSize: 9
+                                    font.family: "monospace"
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.process || "—"
+                                    color: root.textColor
+                                    font.pixelSize: 9
+                                    font.family: "monospace"
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    text: formatBytes(modelData.bytes_received)
+                                    color: root.okColor
+                                    font.pixelSize: 9
+                                    font.family: "monospace"
+                                }
+                                Text {
+                                    text: formatBytes(modelData.bytes_sent)
+                                    color: root.accentColor
+                                    font.pixelSize: 9
+                                    font.family: "monospace"
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: (modelData.local || "—") + " → " + (modelData.remote || "—")
+                                color: root.subtextColor
+                                font.pixelSize: 8
+                                font.family: "monospace"
+                                elide: Text.ElideMiddle
+                            }
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+                            spacing: 4
+                            visible: !root.narrowLayout
+
+                            Text {
+                                Layout.preferredWidth: 28
+                                text: (modelData.proto || "—").toUpperCase()
+                                color: root.subtextColor
+                                font.pixelSize: 9
+                                font.family: "monospace"
+                            }
+                            Text {
+                                Layout.preferredWidth: 68
+                                text: modelData.state || "—"
+                                color: connStateColor(modelData.state)
+                                font.pixelSize: 9
+                                font.family: "monospace"
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                Layout.preferredWidth: 52
+                                text: modelData.process || "—"
+                                color: root.textColor
+                                font.pixelSize: 9
+                                font.family: "monospace"
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.local || "—"
+                                color: root.subtextColor
+                                font.pixelSize: 8
+                                font.family: "monospace"
+                                elide: Text.ElideMiddle
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.remote || "—"
+                                color: root.subtextColor
+                                font.pixelSize: 8
+                                font.family: "monospace"
+                                elide: Text.ElideMiddle
+                            }
+                            Text {
+                                Layout.preferredWidth: 48
+                                text: formatBytes(modelData.bytes_received)
+                                color: root.okColor
+                                font.pixelSize: 9
+                                font.family: "monospace"
+                                horizontalAlignment: Text.AlignRight
+                            }
+                            Text {
+                                Layout.preferredWidth: 48
+                                text: formatBytes(modelData.bytes_sent)
+                                color: root.accentColor
+                                font.pixelSize: 9
+                                font.family: "monospace"
+                                horizontalAlignment: Text.AlignRight
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    width: connCol.width
+                    visible: root.privilegedLoading && filteredConnections().length === 0
+                    text: "loading…"
+                    color: root.overlayColor
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                    topPadding: 4
+                }
+                Text {
+                    width: connCol.width
+                    visible: !root.privilegedLoading && filteredConnections().length === 0
+                    text: root.privilegedError.length > 0 ? root.privilegedError : "No connections"
+                    color: root.privilegedError.length > 0 ? root.errorColor : root.overlayColor
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                    topPadding: 4
+                    wrapMode: Text.Wrap
+                }
+            }
+        }
+    }
+
+    component ProcBandwidthPanel: ColumnLayout {
+        spacing: root.panelSpacing
+
+        Component.onCompleted: root._procFlickable = procFlickable
+        Component.onDestruction: {
+            if (root._procFlickable === procFlickable)
+                root._procFlickable = null
+        }
+
+        SectionBar { title: "BANDWIDTH BY PROCESS"; copyPayload: root.copyProcBwText() }
+
+        Text {
+            Layout.fillWidth: true
+            visible: filteredProcBandwidth().length > 0
+            text: {
+                const n = filteredProcBandwidth().length
+                return n > root.maxTableRows
+                    ? ("top " + root.maxTableRows + " of " + n + " · scroll for more")
+                    : (n + " shown")
+            }
+            color: root.overlayColor
+            font.pixelSize: 8
+            font.family: "monospace"
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: root.headerHeight
+            radius: 4
+            color: Qt.rgba(1, 1, 1, 0.03)
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                spacing: 8
+                Text { Layout.fillWidth: true; text: "Process"; color: root.accentColor; font.pixelSize: 9; font.bold: true; font.family: "monospace" }
+                Text { Layout.minimumWidth: 72; text: "Download"; color: root.okColor; font.pixelSize: 9; font.bold: true; font.family: "monospace"; horizontalAlignment: Text.AlignRight }
+                Text { Layout.minimumWidth: 72; text: "Upload"; color: root.accentColor; font.pixelSize: 9; font.bold: true; font.family: "monospace"; horizontalAlignment: Text.AlignRight }
+            }
+        }
+        Flickable {
+            id: procFlickable
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.procTableViewportHeight
+            Layout.maximumHeight: root.procTableViewportHeight
+            contentWidth: width
+            contentHeight: procCol.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            ScrollBar.vertical: ScrollBar {
+                policy: procFlickable.contentHeight > procFlickable.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                contentItem: Rectangle {
+                    implicitWidth: 5
+                    radius: 2
+                    color: parent.pressed ? root.accentColor : Qt.rgba(1, 1, 1, 0.2)
+                }
+            }
+
+            Column {
+                id: procCol
+                width: parent.width
+                spacing: 2
+
+                Repeater {
+                    model: filteredProcBandwidth()
+                    delegate: Item {
+                        width: procCol.width
+                        height: root.rowHeight
+
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 8
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.process || "—"
+                                color: root.textColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                Layout.minimumWidth: 72
+                                text: formatRate(modelData.rx_rate)
+                                color: root.okColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                horizontalAlignment: Text.AlignRight
+                            }
+                            Text {
+                                Layout.minimumWidth: 72
+                                text: formatRate(modelData.tx_rate)
+                                color: root.accentColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                horizontalAlignment: Text.AlignRight
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    width: procCol.width
                     visible: filteredProcBandwidth().length === 0
                     text: "No per-process traffic yet"
                     color: root.overlayColor
                     font.pixelSize: 10
                     font.family: "monospace"
+                    topPadding: 4
                 }
             }
         }
