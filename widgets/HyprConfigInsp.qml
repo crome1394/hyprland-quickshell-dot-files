@@ -1953,107 +1953,111 @@ Item {
                         anchors.fill: parent
                         anchors.margins: 10
 
-                        RowLayout {
+                        ColumnLayout {
                             anchors.fill: parent
-                            spacing: 20
+                            spacing: 10
 
-                            Image {
-                                source: "/home/crome/.config/quickshell/cachyos-linux.svg"
-                                Layout.preferredWidth: 180
-                                Layout.preferredHeight: 180
-                                fillMode: Image.PreserveAspectFit
-                            }
-
-                            ColumnLayout {
+                            RowLayout {
                                 Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                spacing: 4
+                                Layout.preferredHeight: 128
+                                spacing: 16
 
                                 Text {
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignVCenter
                                     text: "crome@crome-dt"
                                     font.pixelSize: 18
                                     font.bold: true
                                     color: root.accent
+                                    wrapMode: Text.Wrap
                                 }
 
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 1
-                                    color: root.inspWindowBorder
-                                    opacity: 0.5
+                                Image {
+                                    source: "/home/crome/.config/quickshell/cachyos-linux.svg"
+                                    Layout.preferredWidth: 120
+                                    Layout.preferredHeight: 120
+                                    Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                                    fillMode: Image.PreserveAspectFit
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: root.inspWindowBorder
+                                opacity: 0.5
+                            }
+
+                            Flickable {
+                                id: systemFlickable
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.minimumHeight: 0
+                                clip: true
+                                property int _sysTick: root.systemEntries.length
+                                property string _filterTick: root.globalFilter
+                                contentHeight: Math.max(sysList.implicitHeight, 1)
+                                boundsBehavior: Flickable.StopAtBounds
+                                interactive: true
+
+                                WheelHandler {
+                                    onWheel: function(event) {
+                                        const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
+                                        if (delta === 0) return
+                                        root.flickableWheelScroll(systemFlickable, delta)
+                                        event.accepted = true
+                                    }
                                 }
 
-                                Flickable {
-                                    id: systemFlickable
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    Layout.minimumHeight: 0
-                                    clip: true
-                                    property int _sysTick: root.systemEntries.length
-                                    property string _filterTick: root.globalFilter
-                                    contentHeight: Math.max(sysList.implicitHeight, 1)
-                                    boundsBehavior: Flickable.StopAtBounds
-                                    interactive: true
-
-                                    WheelHandler {
-                                        onWheel: function(event) {
-                                            const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
-                                            if (delta === 0) return
-                                            root.flickableWheelScroll(systemFlickable, delta)
-                                            event.accepted = true
-                                        }
+                                ScrollBar.vertical: ScrollBar {
+                                    id: systemScrollBar
+                                    policy: systemFlickable.contentHeight > systemFlickable.height + 1
+                                        ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                    contentItem: Rectangle {
+                                        implicitWidth: root.inspScrollBarWidth
+                                        radius: root.inspScrollBarRadius
+                                        color: systemScrollBar.pressed ? root.accent : root.inspScrollBarIdle
                                     }
+                                }
 
-                                    ScrollBar.vertical: ScrollBar {
-                                        id: systemScrollBar
-                                        policy: systemFlickable.contentHeight > systemFlickable.height + 1
-                                            ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-                                        contentItem: Rectangle {
-                                            implicitWidth: root.inspScrollBarWidth
-                                            radius: root.inspScrollBarRadius
-                                            color: systemScrollBar.pressed ? root.accent : root.inspScrollBarIdle
-                                        }
-                                    }
+                                Column {
+                                    id: sysList
+                                    width: parent.width
+                                    spacing: 2
 
-                                    Column {
-                                        id: sysList
-                                        width: parent.width
-                                        spacing: 2
+                                    Repeater {
+                                        model: root.filteredSystemEntries()
+                                        delegate: Rectangle {
+                                            width: parent.width
+                                            height: 24
+                                            color: valueMa.containsMouse ? root.inspRowHoverBgStrong : "transparent"
 
-                                        Repeater {
-                                            model: root.filteredSystemEntries()
-                                            delegate: Rectangle {
-                                                width: parent.width
-                                                height: 24
-                                                color: valueMa.containsMouse ? root.inspRowHoverBgStrong : "transparent"
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 4
+                                                anchors.rightMargin: 8
+                                                spacing: 12
 
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.leftMargin: 4
-                                                    anchors.rightMargin: 8
-                                                    spacing: 12
+                                                Text {
+                                                    Layout.preferredWidth: 210
+                                                    text: modelData.label + ":"
+                                                    color: root.accent
+                                                    font.pixelSize: 13
+                                                    font.family: root.fontMono
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData.value
+                                                    color: root.text
+                                                    font.pixelSize: 13
+                                                    font.family: root.fontMono
 
-                                                    Text {
-                                                        Layout.preferredWidth: 210
-                                                        text: modelData.label + ":"
-                                                        color: root.accent
-                                                        font.pixelSize: 13
-                                                        font.family: root.fontMono
-                                                    }
-                                                    Text {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.value
-                                                        color: root.text
-                                                        font.pixelSize: 13
-                                                        font.family: root.fontMono
-
-                                                        MouseArea {
-                                                            id: valueMa
-                                                            anchors.fill: parent
-                                                            hoverEnabled: true
-                                                            cursorShape: Qt.PointingHandCursor
-                                                            onClicked: root.copyToClipboard(modelData.value)
-                                                        }
+                                                    MouseArea {
+                                                        id: valueMa
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: root.copyToClipboard(modelData.value)
                                                     }
                                                 }
                                             }
