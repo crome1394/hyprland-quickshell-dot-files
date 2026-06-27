@@ -71,8 +71,11 @@ Item {
     property string _pendingAction: ""
     property bool killConfirmVisible: false
     property int lastUpdatedMs: 0
+    property var expandedGroups: ({})
+    property int groupStateVersion: 0
 
     readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
+    readonly property int groupIndent: 14
 
     function cloneProcessRow(p) {
         return {
@@ -134,36 +137,223 @@ Item {
         }
 
         const metric = sortKey === "mem" ? "mem" : "cpu"
-        rows.sort(function(a, b) {
-            const ga = commandGroupKey(a)
-            const gb = commandGroupKey(b)
-            if (ga !== gb) return ga < gb ? -1 : 1
-            return b[metric] - a[metric]
+        rows.sort(function(a, b) { return b[metric] - a[metric] })
+        return rows
+    }
+
+    function isGroupExpanded(key) {
+        const tick = groupStateVersion
+        void tick
+        return !!expandedGroups[key]
+    }
+
+    function toggleGroup(key) {
+        if (!key) return
+        const next = Object.assign({}, expandedGroups)
+        if (next[key])
+            delete next[key]
+        else
+            next[key] = true
+        expandedGroups = next
+        groupStateVersion++
+        Qt.callLater(function() { root.refreshColumnLayout(procFlickable.width) })
+    }
+
+    function processDisplayRow(p, rowType, indent) {
+        return {
+            rowType: rowType,
+            groupKey: commandGroupKey(p),
+            indent: indent || 0,
+            pid: p.pid,
+            user: p.user,
+            name: p.name,
+            cmd: p.cmd,
+            state: p.state,
+            nice: p.nice,
+            pri: p.pri,
+            cpu: p.cpu,
+            mem: p.mem,
+            rss: p.rss,
+            vsz: p.vsz,
+            shr: p.shr,
+            time: p.time,
+            start: p.start,
+            threads: p.threads,
+            memberPids: []
+        }
+    }
+
+    function buildGroupRow(key, members, expanded) {
+        let cpu = 0
+        let mem = 0
+        let rss = 0
+        let vsz = 0
+        let shr = 0
+        let threads = 0
+        const pids = []
+        let user = members[0].user || ""
+        let mixedUser = false
+        for (let i = 0; i < members.length; i++) {
+            const p = members[i]
+            pids.push(p.pid)
+            cpu += p.cpu
+            mem += p.mem
+            rss += Number(p.rss) || 0
+            vsz += Number(p.vsz) || 0
+            shr += Number(p.shr) || 0
+            threads += Number(p.threads) || 0
+            if ((p.user || "") !== user)
+                mixedUser = true
+        }
+        return {
+            rowType: "group",
+            groupKey: key,
+            label: key,
+            count: members.length,
+            expanded: expanded,
+            memberPids: pids,
+            indent: 0,
+            pid: 0,
+            user: mixedUser ? "…" : user,
+            name: key,
+            cmd: key + " (" + members.length + ")",
+            state: "",
+            nice: undefined,
+            pri: undefined,
+            cpu: cpu,
+            mem: mem,
+            rss: rss,
+            vsz: vsz,
+            shr: shr,
+            time: "",
+            start: "",
+            threads: threads
+        }
+    }
+
+    function displayRows() {
+        const tick = dataVersion + "|" + sortKey + "|" + (highUsageOnly ? "1" : "0")
+            + "|" + globalFilter + "|" + groupStateVersion
+        void tick
+
+        const procs = filteredProcesses()
+        if (!procs.length)
+            return []
+
+        const metric = sortKey === "mem" ? "mem" : "cpu"
+        const groups = {}
+        const order = []
+        for (let i = 0; i < procs.length; i++) {
+            const p = procs[i]
+            const key = commandGroupKey(p)
+            if (!groups[key]) {
+                groups[key] = []
+                order.push(key)
+            }
+            groups[key].push(p)
+        }
+
+        for (let g = 0; g < order.length; g++)
+            groups[order[g]].sort(function(a, b) { return b[metric] - a[metric] })
+
+        order.sort(function(a, b) {
+            const ma = groups[a]
+            const mb = groups[b]
+            let sumA = 0
+            let sumB = 0
+            for (let i = 0; i < ma.length; i++)
+                sumA += ma[i][metric]
+            for (let j = 0; j < mb.length; j++)
+                sumB += mb[j][metric]
+            if (sumB !== sumA)
+                return sumB - sumA
+            return a < b ? -1 : 1
         })
 
         const out = []
-        for (let j = 0; j < rows.length; j++) {
-            const row = rows[j]
-            out.push({
-                pid: row.pid,
-                user: row.user,
-                name: row.name,
-                cmd: row.cmd,
-                state: row.state,
-                nice: row.nice,
-                pri: row.pri,
-                cpu: row.cpu,
-                mem: row.mem,
-                rss: row.rss,
-                vsz: row.vsz,
-                shr: row.shr,
-                time: row.time,
-                start: row.start,
-                threads: row.threads,
-                groupStart: j === 0 || commandGroupKey(row) !== commandGroupKey(rows[j - 1])
-            })
+        for (let o = 0; o < order.length; o++) {
+            const key = order[o]
+            const members = groups[key]
+            if (members.length === 1) {
+                out.push(processDisplayRow(members[0], "process", 0))
+            } else {
+                const expanded = isGroupExpanded(key)
+                out.push(buildGroupRow(key, members, expanded))
+                if (expanded) {
+                    for (let c = 0; c < members.length; c++)
+                        out.push(processDisplayRow(members[c], "child", 1))
+                }
+            }
         }
         return out
+    }
+
+    function rowSelectionPids(row) {
+        if (!row)
+            return []
+        if (row.rowType === "group")
+            return row.memberPids ? row.memberPids.slice() : []
+        return row.pid ? [row.pid] : []
+    }
+
+    function isDisplayRowSelected(row) {
+        const tick = selectionVersion
+        void tick
+        if (!row)
+            return false
+        if (row.rowType === "group") {
+            const pids = row.memberPids || []
+            if (!pids.length)
+                return false
+            for (let i = 0; i < pids.length; i++) {
+                if (!isPidSelected(pids[i]))
+                    return false
+            }
+            return true
+        }
+        return isPidSelected(row.pid)
+    }
+
+    function displayRowCmdText(row) {
+        if (!row)
+            return "--"
+        return row.cmd || row.name || "--"
+    }
+
+    function groupedAppCount() {
+        const tick = dataVersion + "|" + globalFilter + "|" + sortKey
+        void tick
+        const procs = filteredProcesses()
+        const counts = {}
+        let multi = 0
+        for (let i = 0; i < procs.length; i++) {
+            const k = commandGroupKey(procs[i])
+            counts[k] = (counts[k] || 0) + 1
+        }
+        for (const key in counts) {
+            if (counts[key] > 1)
+                multi++
+        }
+        return multi
+    }
+
+    function pruneExpandedGroups() {
+        const procs = filteredProcesses()
+        const valid = {}
+        for (let i = 0; i < procs.length; i++)
+            valid[commandGroupKey(procs[i])] = true
+        const next = {}
+        let changed = false
+        for (const key in expandedGroups) {
+            if (valid[key] && expandedGroups[key])
+                next[key] = true
+            else
+                changed = true
+        }
+        if (changed) {
+            expandedGroups = next
+            groupStateVersion++
+        }
     }
 
     function copyToClipboard(text) {
@@ -210,28 +400,61 @@ Item {
         return n + " selected"
     }
 
-    function handleRowClick(pid, rowIndex, mouse) {
+    function mergePids(target, pids) {
+        const next = target.slice()
+        for (let i = 0; i < pids.length; i++) {
+            if (next.indexOf(pids[i]) === -1)
+                next.push(pids[i])
+        }
+        return next
+    }
+
+    function togglePidsInSelection(pids) {
+        const next = selectedPids.slice()
+        let allPresent = pids.length > 0
+        for (let i = 0; i < pids.length; i++) {
+            if (next.indexOf(pids[i]) === -1) {
+                allPresent = false
+                break
+            }
+        }
+        if (allPresent) {
+            for (let j = 0; j < pids.length; j++) {
+                const pos = next.indexOf(pids[j])
+                if (pos !== -1)
+                    next.splice(pos, 1)
+            }
+        } else {
+            for (let k = 0; k < pids.length; k++) {
+                if (next.indexOf(pids[k]) === -1)
+                    next.push(pids[k])
+            }
+        }
+        setSelectedPids(next)
+    }
+
+    function handleDisplayRowClick(row, rowIndex, mouse) {
         const mods = mouse.modifiers || 0
         const ctrl = (mods & Qt.ControlModifier) || (mods & Qt.MetaModifier)
         const shift = mods & Qt.ShiftModifier
-        const rows = filteredProcesses()
+        const rows = displayRows()
+        const pids = rowSelectionPids(row)
+
+        if (!pids.length)
+            return
 
         if (shift && anchorIndex >= 0 && anchorIndex < rows.length) {
             const lo = Math.min(anchorIndex, rowIndex)
             const hi = Math.max(anchorIndex, rowIndex)
-            const next = ctrl ? selectedPids.slice() : []
+            let next = ctrl ? selectedPids.slice() : []
             for (let i = lo; i <= hi; i++)
-                next.push(rows[i].pid)
+                next = mergePids(next, rowSelectionPids(rows[i]))
             setSelectedPids(next)
         } else if (ctrl) {
-            const next = selectedPids.slice()
-            const pos = next.indexOf(pid)
-            if (pos === -1) next.push(pid)
-            else next.splice(pos, 1)
-            setSelectedPids(next)
+            togglePidsInSelection(pids)
             anchorIndex = rowIndex
         } else {
-            setSelectedPids([pid])
+            setSelectedPids(pids)
             anchorIndex = rowIndex
         }
     }
@@ -324,10 +547,23 @@ Item {
         w.shr = Math.max(w.shr, fitCol("shr", "SHR", true))
         w.stat = Math.max(w.stat, fitCol("stat", "Stat", true))
 
+        w.pid = Math.max(w.pid, fitCol("pid", ">", false))
+
         let cmdContentMin = colMinW.cmd
-        const rows = filteredProcesses()
+        const rows = displayRows()
         for (let r = 0; r < rows.length; r++) {
             const p = rows[r]
+            if (p.rowType === "group") {
+                w.cpu = Math.max(w.cpu, fitCol("cpu", p.cpu.toFixed(1), true))
+                w.mem = Math.max(w.mem, fitCol("mem", p.mem.toFixed(1), true))
+                w.threads = Math.max(w.threads, fitCol("threads", p.threads !== undefined ? String(p.threads) : "--", true))
+                w.rss = Math.max(w.rss, fitCol("rss", formatKiB(p.rss), true))
+                w.vsz = Math.max(w.vsz, fitCol("vsz", formatKiB(p.vsz), true))
+                w.shr = Math.max(w.shr, fitCol("shr", formatKiB(p.shr), true))
+                w.user = Math.max(w.user, fitCol("user", p.user || "…", true))
+                cmdContentMin = Math.max(cmdContentMin, fitCol("cmd", p.cmd || p.label || "--", true))
+                continue
+            }
             w.pid = Math.max(w.pid, fitCol("pid", String(p.pid), false))
             w.user = Math.max(w.user, fitCol("user", p.user || "--", false))
             w.cpu = Math.max(w.cpu, fitCol("cpu", p.cpu.toFixed(1), false))
@@ -340,8 +576,9 @@ Item {
             w.pri = Math.max(w.pri, fitCol("pri", p.pri !== undefined ? String(p.pri) : "--", false))
             w.shr = Math.max(w.shr, fitCol("shr", formatKiB(p.shr), false))
             w.stat = Math.max(w.stat, fitCol("stat", formatState(p.state), false))
-            const cmd = p.cmd || p.name || "--"
-            cmdContentMin = Math.max(cmdContentMin, fitCol("cmd", cmd, false))
+            const cmd = displayRowCmdText(p)
+            const cmdPad = p.rowType === "child" ? groupIndent : 0
+            cmdContentMin = Math.max(cmdContentMin, fitCol("cmd", cmd, false) + cmdPad)
         }
 
         let fixed = 8
@@ -450,8 +687,9 @@ Item {
         }
         if (next.length !== selectedPids.length)
             setSelectedPids(next)
-        if (anchorIndex >= rows.length)
-            anchorIndex = rows.length > 0 ? Math.min(anchorIndex, rows.length - 1) : -1
+        const display = displayRows()
+        if (anchorIndex >= display.length)
+            anchorIndex = display.length > 0 ? Math.min(anchorIndex, display.length - 1) : -1
     }
 
     function refresh() {
@@ -485,6 +723,7 @@ Item {
             dataVersion++
             lastUpdatedMs = parsed.timestamp ? Number(parsed.timestamp) : Date.now()
             pruneSelection()
+            pruneExpandedGroups()
             lastError = ""
             Qt.callLater(function() { root.refreshColumnLayout(procFlickable.width) })
         } catch (e) {
@@ -687,8 +926,10 @@ Item {
                         Text {
                             property int _rows: root.dataVersion
                             property int _sel: root.selectionVersion
+                            property int _grp: root.groupStateVersion
                             text: root.loading ? "Loading process list…"
                                 : ("Showing " + root.filteredProcesses().length + " processes"
+                                    + (root.groupedAppCount() > 0 ? ("  ·  " + root.groupedAppCount() + " groups") : "")
                                     + (root.hasSelection ? "  ·  " + root.selectionLabel() : ""))
                             color: root.overlayColor
                             font.pixelSize: 11
@@ -915,7 +1156,7 @@ Item {
 
                 property int _dataTick: root.dataVersion
                 property int _colTick: root.colLayoutVersion
-                property string _filterTick: root.globalFilter + "|" + root.sortKey + "|" + (root.highUsageOnly ? "1" : "0")
+                property string _filterTick: root.globalFilter + "|" + root.sortKey + "|" + (root.highUsageOnly ? "1" : "0") + "|" + root.groupStateVersion
 
                 focus: true
 
@@ -1019,30 +1260,35 @@ Item {
                     }
 
                     Repeater {
-                        model: root.filteredProcesses()
+                        model: root.displayRows()
                         delegate: Item {
+                            id: rowRoot
                             width: parent.width
                             height: root.rowHeight
 
                             property int _selTick: root.selectionVersion
-                            readonly property bool isSelected: root.isPidSelected(modelData.pid)
+                            property int _grpTick: root.groupStateVersion
+                            readonly property bool isGroup: modelData.rowType === "group"
+                            readonly property bool isChild: modelData.rowType === "child"
+                            readonly property bool isSelected: root.isDisplayRowSelected(modelData)
                             readonly property bool rowHover: rowMa.containsMouse
-                            readonly property bool groupStart: modelData.groupStart === true
 
                             Rectangle {
                                 anchors.top: parent.top
                                 width: parent.width
                                 height: 1
                                 color: Qt.rgba(1, 1, 1, 0.1)
-                                visible: parent.groupStart && index > 0
+                                visible: rowRoot.isGroup && index > 0
                             }
 
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 2
-                                color: parent.isSelected ? Qt.rgba(0.55, 0.70, 0.96, 0.18)
-                                    : (parent.rowHover ? Qt.rgba(1, 1, 1, 0.04)
-                                        : (parent.groupStart ? Qt.rgba(1, 1, 1, 0.03) : (index % 2 === 0 ? "transparent" : Qt.rgba(1, 1, 1, 0.02))))
+                                color: rowRoot.isSelected ? Qt.rgba(0.55, 0.70, 0.96, 0.18)
+                                    : (rowRoot.rowHover ? Qt.rgba(1, 1, 1, 0.04)
+                                        : (rowRoot.isGroup ? Qt.rgba(0.55, 0.70, 0.96, 0.08)
+                                            : (rowRoot.isChild ? Qt.rgba(1, 1, 1, 0.015)
+                                                : (index % 2 === 0 ? "transparent" : Qt.rgba(1, 1, 1, 0.02)))))
                             }
 
                             Row {
@@ -1052,19 +1298,219 @@ Item {
                                 spacing: root.tblSpacing
                                 clip: true
 
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("pid"); height: parent.height; text: modelData.pid; color: parent.isSelected ? root.accentColor : root.textColor; font.pixelSize: 10; font.family: "monospace"; font.bold: parent.isSelected; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("user"); height: parent.height; text: modelData.user || "--"; color: root.overlayColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("cpu"); height: parent.height; text: modelData.cpu.toFixed(1); color: root.accentColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("mem"); height: parent.height; text: modelData.mem.toFixed(1); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("time"); height: parent.height; text: root.formatTime(modelData.time); color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("start"); height: parent.height; text: root.formatStart(modelData.start); color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("threads"); height: parent.height; text: modelData.threads !== undefined ? modelData.threads : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("rss"); height: parent.height; text: root.formatKiB(modelData.rss); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("vsz"); height: parent.height; text: root.formatKiB(modelData.vsz); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("pri"); height: parent.height; text: modelData.pri !== undefined ? modelData.pri : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("shr"); height: parent.height; text: root.formatKiB(modelData.shr); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("cmd"); height: parent.height; text: modelData.cmd || modelData.name || "--"; color: parent.isSelected ? root.textColor : root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; clip: true }
-                                Text { property int _cw: root.colLayoutVersion; width: root.colW("stat"); height: parent.height; text: root.formatState(modelData.state); color: root.stateColor(modelData.state); font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter; clip: true }
+                                Item {
+                                    width: root.colW("pid")
+                                    height: parent.height
+                                    clip: true
+
+                                    Text {
+                                        visible: rowRoot.isGroup
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        leftPadding: 2
+                                        text: modelData.expanded ? "v" : ">"
+                                        color: root.accentColor
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        font.family: "monospace"
+                                    }
+
+                                    Text {
+                                        visible: !rowRoot.isGroup
+                                        anchors.fill: parent
+                                        text: modelData.pid
+                                        color: rowRoot.isSelected ? root.accentColor : root.textColor
+                                        font.pixelSize: 10
+                                        font.family: "monospace"
+                                        font.bold: rowRoot.isSelected
+                                        verticalAlignment: Text.AlignVCenter
+                                        horizontalAlignment: Text.AlignRight
+                                        clip: true
+                                    }
+
+                                    Text {
+                                        visible: rowRoot.isGroup
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: String(modelData.count || "")
+                                        color: root.overlayColor
+                                        font.pixelSize: 9
+                                        font.family: "monospace"
+                                        clip: true
+                                    }
+
+                                    MouseArea {
+                                        visible: rowRoot.isGroup
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: function(mouse) {
+                                            root.toggleGroup(modelData.groupKey)
+                                            mouse.accepted = true
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("user")
+                                    height: parent.height
+                                    text: rowRoot.isGroup ? (modelData.user || "…") : (modelData.user || "--")
+                                    color: rowRoot.isGroup ? root.textColor : root.overlayColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    font.bold: rowRoot.isGroup
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("cpu")
+                                    height: parent.height
+                                    text: modelData.cpu.toFixed(1)
+                                    color: root.accentColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    font.bold: rowRoot.isGroup
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("mem")
+                                    height: parent.height
+                                    text: modelData.mem.toFixed(1)
+                                    color: root.textColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    font.bold: rowRoot.isGroup
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("time")
+                                    height: parent.height
+                                    text: rowRoot.isGroup ? "--" : root.formatTime(modelData.time)
+                                    color: root.subtextColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("start")
+                                    height: parent.height
+                                    text: rowRoot.isGroup ? "--" : root.formatStart(modelData.start)
+                                    color: root.subtextColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    elide: Text.ElideRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("threads")
+                                    height: parent.height
+                                    text: modelData.threads !== undefined ? String(modelData.threads) : "--"
+                                    color: root.textColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    font.bold: rowRoot.isGroup
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("rss")
+                                    height: parent.height
+                                    text: root.formatKiB(modelData.rss)
+                                    color: root.textColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    font.bold: rowRoot.isGroup
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("vsz")
+                                    height: parent.height
+                                    text: root.formatKiB(modelData.vsz)
+                                    color: root.textColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    font.bold: rowRoot.isGroup
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("pri")
+                                    height: parent.height
+                                    text: rowRoot.isGroup ? "--" : (modelData.pri !== undefined ? modelData.pri : "--")
+                                    color: root.textColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("shr")
+                                    height: parent.height
+                                    text: root.formatKiB(modelData.shr)
+                                    color: root.textColor
+                                    font.pixelSize: 10
+                                    font.family: "monospace"
+                                    font.bold: rowRoot.isGroup
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignRight
+                                    clip: true
+                                }
+                                Item {
+                                    width: root.colW("cmd")
+                                    height: parent.height
+                                    clip: true
+
+                                    Text {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: rowRoot.isChild ? root.groupIndent : 0
+                                        text: root.displayRowCmdText(modelData)
+                                        color: rowRoot.isSelected ? root.textColor
+                                            : (rowRoot.isGroup ? root.textColor : root.subtextColor)
+                                        font.pixelSize: 10
+                                        font.family: "monospace"
+                                        font.bold: rowRoot.isGroup
+                                        verticalAlignment: Text.AlignVCenter
+                                        elide: Text.ElideRight
+                                        clip: true
+                                    }
+                                }
+                                Text {
+                                    property int _cw: root.colLayoutVersion
+                                    width: root.colW("stat")
+                                    height: parent.height
+                                    text: rowRoot.isGroup ? "--" : root.formatState(modelData.state)
+                                    color: rowRoot.isGroup ? root.overlayColor : root.stateColor(modelData.state)
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    font.family: "monospace"
+                                    verticalAlignment: Text.AlignVCenter
+                                    horizontalAlignment: Text.AlignHCenter
+                                    clip: true
+                                }
                             }
 
                             MouseArea {
@@ -1073,7 +1519,7 @@ Item {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: function(mouse) {
-                                    root.handleRowClick(modelData.pid, index, mouse)
+                                    root.handleDisplayRowClick(modelData, index, mouse)
                                 }
                             }
                         }
