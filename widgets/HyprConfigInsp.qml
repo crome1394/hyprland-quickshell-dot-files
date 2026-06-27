@@ -1005,6 +1005,39 @@ Item {
         }, 1200)
     }
 
+    function openDocumentationUrl(url) {
+        if (!url) return
+        Quickshell.execDetached(["xdg-open", url])
+    }
+
+    readonly property var systemDocLinks: [
+        {
+            label: "Hardware specifications",
+            url: "https://system76.com/tech-docs/models/thelio-mira-r4-n3/specs/",
+            note: "Thelio Mira R4 — CPU, GPU, storage, and port details"
+        },
+        {
+            label: "Repairs & maintenance",
+            url: "https://system76.com/tech-docs/models/thelio-mira-r4-n3/repairs/",
+            note: "Service manual and repair guides"
+        },
+        {
+            label: "Thelio Io board",
+            url: "https://github.com/system76/thelio-io",
+            note: "Daughterboard hardware documentation"
+        },
+        {
+            label: "Thelio Io firmware",
+            url: "https://github.com/system76/thelio-io-firmware",
+            note: "Open-source firmware source"
+        },
+        {
+            label: "System76 support",
+            url: "https://system76.com/support",
+            note: "Warranty, drivers, and customer support"
+        }
+    ]
+
     readonly property bool canCopyTab: {
         const view = currentTabInfo.view
         return view === "raw" || view === "runtime" || view === "configfiles" || view === "logs"
@@ -1978,6 +2011,88 @@ Item {
                                     Layout.preferredHeight: 120
                                     Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                                     fillMode: Image.PreserveAspectFit
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: root.inspWindowBorder
+                                opacity: 0.5
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: serviceDocInner.implicitHeight + 14
+                                radius: 6
+                                color: root.surface
+                                border.width: 1
+                                border.color: Qt.rgba(1, 1, 1, 0.08)
+
+                                ColumnLayout {
+                                    id: serviceDocInner
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    spacing: 4
+
+                                    Text {
+                                        text: "SERVICE DOCUMENTATION"
+                                        color: root.accent
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        font.family: root.fontMono
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "System76 Thelio Mira R4 reference docs for this desktop."
+                                        color: root.subtext
+                                        font.pixelSize: 11
+                                        font.family: root.fontMono
+                                        wrapMode: Text.Wrap
+                                    }
+
+                                    Repeater {
+                                        model: root.systemDocLinks
+                                        delegate: Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 22
+                                            radius: 4
+                                            color: docLinkMa.containsMouse ? root.inspRowHoverBg : "transparent"
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 4
+                                                anchors.rightMargin: 6
+                                                spacing: 10
+
+                                                Text {
+                                                    Layout.preferredWidth: 168
+                                                    text: modelData.label
+                                                    color: docLinkMa.containsMouse ? root.accent : root.text
+                                                    font.pixelSize: 12
+                                                    font.family: root.fontMono
+                                                    font.underline: docLinkMa.containsMouse
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData.note || modelData.url
+                                                    color: root.overlay
+                                                    font.pixelSize: 11
+                                                    font.family: root.fontMono
+                                                    elide: Text.ElideRight
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: docLinkMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.openDocumentationUrl(modelData.url)
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
