@@ -10,13 +10,40 @@ import Quickshell.Io as Io
 //
 // Floating overlay for browsing and editing split Hyprland configuration.
 //
+// Architecture (data flow):
+//   ┌─────────────────────────────────────────────────────────────────────┐
+//   │ FloatingWindow (inspectorWindow)                                    │
+//   │   ├─ Header: hyprctl version + os-release (headerProcess)           │
+//   │   ├─ Tab bar: `tabs` model → activateTab() → one visible viewer     │
+//   │   ├─ Global search: globalFilter → per-tab filter functions         │
+//   │   └─ Footer: statusText() + contextual actions (Edit/Reload/Copy)   │
+//   └─────────────────────────────────────────────────────────────────────┘
+//
+// Data sources (by tab view id — see `tabs` array):
+//   - binds/env/raw     → fileContents{} via Io.Process cat (batch or single)
+//   - configfiles       → configFileEntries + BatSyntaxView
+//   - runtime           → RuntimeOptionsView (hyprctl getoption)
+//   - cpu/gpu/memory/…  → SysMonService (scripts/sysmon-poller.sh, autoPoll when visible)
+//   - processes/audio/logs/services → dedicated *View components + shell pollers
+//   - system            → fastfetch (systemProcess, lazy until tab opened)
+//
+// Theming:
+//   - Theme { id: th } is the single visual source (see Theme.qml HYPR CONFIG INSPECTOR).
+//   - Short aliases below (accent, inspTabRadius, …) keep QML bindings readable.
+//   - `required property var bar` is passed from shell.qml for API consistency; visuals use `th`.
+//
+// How to extend:
+//   1. Add a tab entry to `tabs` (label, id, file, view).
+//   2. If file-backed, add to configFileEntries or give tab a `file` path.
+//   3. Add a *View component under the content Rectangle (visible bound to view id).
+//   4. Wire refresh/focus/scroll in: activateTab, refreshAll, refreshCurrentTab,
+//      focusActiveTabContent, resetTabScroll, pageContentScroll, statusText.
+//   5. Add theme tokens to Theme.qml if the new tab needs unique colors/sizes.
+//
 // Features:
-//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU/GPU/Memory/Temperature/Processes (sysmon), Audio, Logs, Services
-//   - Config Files tab (dropdown + bat) for ~/.config/hypr/config/*.lua and hypr*.conf
-//   - System info (fastfetch + clickable copy-to-clipboard values + logo)
+//   - Parsed tabs: Key Bindings, Environment, Runtime Options, Config Files, sysmon tabs, Audio, Logs, Services, System Info
 //   - Edit (kitty nano) and Reload per config file tab
-//   - Header: Hyprland version + distro; Refresh All; wrapping tab bar
-//   - Global search (Ctrl+F focus, Esc clear), tab scrollbar, PgUp/PgDown content scroll
+//   - Global search (Ctrl+F, Esc), Tab/Shift+Tab, PgUp/PgDown/arrow scroll
 //   - Resizable FloatingWindow (title: "Hyprland Config Inspector")
 // =============================================================================
 
@@ -26,15 +53,18 @@ import "../components"
 Item {
     id: root
 
+    // === Required API (shell passes bar; visuals come from local Theme instance) ===
     required property var bar
 
     Theme { id: th }
 
     SysMonService {
         id: sysMonService
-        autoPoll: inspectorWindow.visible
+        autoPoll: inspectorWindow.visible   // poll only while overlay is open (saves CPU)
     }
 
+    // === Theme aliases — short names for bindings (all values from Theme.qml) ===
+    // Base palette
     readonly property color glassPopupBg: th.glassPopupBg
     readonly property color glassPopupBorder: th.glassPopupBorder
     readonly property color glassPopupHighlight: th.glassPopupHighlight
@@ -43,12 +73,48 @@ Item {
     readonly property color overlay: th.overlay
     readonly property color accent: th.accent
     readonly property color surface: th.surface
+    readonly property color divider: th.divider
+    readonly property string fontMono: th.fontMono
 
-    readonly property int popupRadiusLarge: th.popupRadiusLarge || 16
-    readonly property int popupHelpWidth: th.popupHelpWidth || 1060
-    readonly property int popupHelpHeight: th.popupHelpHeight || 720
-    readonly property int tabBarMaxHeight: 102
+    // Window geometry
+    readonly property int popupRadiusLarge: th.popupRadiusLarge
+    readonly property int popupHelpWidth: th.popupHelpWidth
+    readonly property int popupHelpHeight: th.popupHelpHeight
+    readonly property int inspMinWidth: th.inspMinWidth
+    readonly property int inspMinHeight: th.inspMinHeight
+    readonly property int inspContentPadding: th.inspContentPadding
+    readonly property int inspSectionSpacing: th.inspSectionSpacing
 
+    // Tab bar + search
+    readonly property int tabBarMaxHeight: th.inspTabBarMaxHeight
+    readonly property int inspTabHeight: th.inspTabHeight
+    readonly property int inspTabRadius: th.inspTabRadius
+    readonly property int inspTabHPadding: th.inspTabHPadding
+    readonly property int inspTabSpacing: th.inspTabSpacing
+    readonly property int inspTabFontSize: th.inspTabFontSize
+    readonly property color inspTabActiveBg: th.inspTabActiveBg
+    readonly property color inspTabActiveBorder: th.inspTabActiveBorder
+    readonly property color inspTabHoverBg: th.inspTabHoverBg
+    readonly property int inspSearchWidth: th.inspSearchWidth
+    readonly property int inspSearchHeight: th.inspSearchHeight
+    readonly property int inspSearchRadius: th.inspSearchRadius
+    readonly property color inspSearchSelectionBg: th.inspSearchSelectionBg
+
+    // Header / footer / scrollbars / rows
+    readonly property int inspTitleFontSize: th.inspTitleFontSize
+    readonly property int inspSubtitleFontSize: th.inspSubtitleFontSize
+    readonly property int inspStatusFontSize: th.inspStatusFontSize
+    readonly property color inspRowHoverBg: th.inspRowHoverBg
+    readonly property color inspRowHoverBgStrong: th.inspRowHoverBgStrong
+    readonly property int inspScrollBarWidth: th.inspScrollBarWidth
+    readonly property int inspScrollBarRadius: th.inspScrollBarRadius
+    readonly property color inspScrollBarIdle: th.inspScrollBarIdle
+
+    // Env table layout (width helpers use these)
+    readonly property int envTableSideMargin: th.inspEnvTableSideMargin
+    readonly property int envTableColSpacing: th.inspEnvTableColSpacing
+
+    // === Static paths (edit here if your Hypr config lives elsewhere) ===
     readonly property string configDir: "/home/crome/.config/hypr/config"
     readonly property string hyprDir: "/home/crome/.config/hypr"
 
@@ -69,6 +135,7 @@ Item {
         { id: "hyprpaper", label: "Hyprpaper", file: "hyprpaper.conf", dir: hyprDir, batLanguage: "INI" }
     ]
 
+    // === Tab registry (order = tab bar order; `view` selects which content panel is visible) ===
     readonly property var tabs: [
         { label: "Key Bindings", id: "keybindings", file: "keybindings.lua", view: "binds" },
         { label: "Environment", id: "environment", file: "environment-variables.lua", view: "env" },
@@ -85,12 +152,34 @@ Item {
         { label: "System Info", id: "system", file: "", view: "system" }
     ]
 
+    // === View routing helpers (single place for "which tabs share behavior?") ===
+    // Used by refresh/scroll/focus handlers — add new view ids here when extending.
+    readonly property var _fileOnlyViews: ["binds", "env", "raw"]
+    readonly property var _sysmonMetricViews: ["cpu", "gpu", "memory", "temperature"]
+    readonly property var _footerRefreshViews: ["system", "runtime", "processes", "audio", "logs", "services"]
+    readonly property var _noFileTabViews: ["system", "runtime", "configfiles", "cpu", "gpu", "memory", "temperature", "processes", "audio", "logs", "services"]
+
+    function tabView() {
+        const tab = currentTabInfo
+        return tab ? tab.view : ""
+    }
+
+    function isSysmonMetricView(view) {
+        return _sysmonMetricViews.indexOf(view || "") !== -1
+    }
+
+    function isLiveDataView(view) {
+        const v = view || tabView()
+        return isSysmonMetricView(v) || v === "processes"
+    }
+
     readonly property var currentTabInfo: (currentTab >= 0 && currentTab < tabs.length) ? tabs[currentTab] : tabs[0]
     readonly property bool hasConfigFile: {
         const tab = currentTabInfo
         if (tab.view === "configfiles") return true
         return tab.file && tab.file.length > 0
     }
+    // === Per-tab file viewer state (bat / raw source for config tabs) ===
     property string rawSource: ""
     property string batFilePath: ""
     property string batLanguage: ""
@@ -112,9 +201,11 @@ Item {
         rawSource = (id && fileContents[id]) ? fileContents[id] : ""
     }
 
-    property int inspectorWidth: popupHelpWidth || 1060
-    property int inspectorHeight: popupHelpHeight || 720
+    // === Window size (user-resizable; defaults from Theme popupHelp*) ===
+    property int inspectorWidth: popupHelpWidth
+    property int inspectorHeight: popupHelpHeight
 
+    // === Public API (toggle from shell IPC: qs ipc call hyprConfigInsp toggle) ===
     property bool open: inspectorWindow.visible
     signal opened()
     signal closed()
@@ -124,10 +215,12 @@ Item {
         else show()
     }
 
+    // === Navigation + search ===
     property int currentTab: 0
     onCurrentTabChanged: syncRawSource()
     property string globalFilter: ""
 
+    // === File cache (immutable-style updates via setFileContent/setFileMtime) ===
     property var fileContents: ({})
     property int fileContentsVersion: 0
     property var fileMtimes: ({})
@@ -136,13 +229,16 @@ Item {
     property var _parsedBinds: []
     property var _parsedEnv: []
 
+    // === System Info tab (fastfetch; lazy-loaded via systemDirty flag) ===
     property string systemOutput: ""
     property bool systemDirty: true
     property var systemEntries: []
     property string copiedValue: ""
 
+    // === Header label (Hyprland version + distro from headerProcess) ===
     property string wmDistroLabel: ""
 
+    // === Internal file-load coordination (do not bind from UI) ===
     property bool _loading: false
     property bool _loadHandled: false
     property bool _singleLoadPending: false
@@ -192,7 +288,7 @@ Item {
         const entries = []
         for (let i = 0; i < tabs.length; i++) {
             const tab = tabs[i]
-            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature" || tab.view === "processes" || tab.view === "audio" || tab.view === "logs" || tab.view === "services") continue
+            if (_noFileTabViews.indexOf(tab.view) !== -1) continue
             if (tab.file) entries.push(tab)
         }
         for (let j = 0; j < configFileEntries.length; j++) {
@@ -355,7 +451,7 @@ Item {
         if (tab && tab.view === "runtime") {
             runtimeViewer.refresh()
         }
-        if (tab && (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature")) {
+        if (tab && isSysmonMetricView(tab.view)) {
             sysMonService.refresh()
         }
         processesViewer.refresh()
@@ -381,7 +477,7 @@ Item {
             runtimeViewer.refresh()
             return
         }
-        if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") {
+        if (isSysmonMetricView(tab.view)) {
             sysMonService.refresh()
             return
         }
@@ -597,7 +693,7 @@ Item {
             refreshSystemInfo()
         } else if (tab.view === "runtime") {
             runtimeViewer.ensureLoaded()
-        } else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") {
+        } else if (isSysmonMetricView(tab.view)) {
             sysMonService.refresh()
         } else if (tab.view === "processes") {
             processesViewer.refresh()
@@ -637,7 +733,7 @@ Item {
         if (!wmDistroLabel) refreshHeaderInfo()
         if (tab.view === "system" && systemDirty) refreshSystemInfo()
         else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
-        else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") sysMonService.refresh()
+        else if (isSysmonMetricView(tab.view)) sysMonService.refresh()
         else if (tab.view === "processes") processesViewer.refresh()
         else if (tab.view === "audio") audioViewer.refresh()
         else if (tab.view === "logs") logsViewer.refresh(false)
@@ -658,6 +754,7 @@ Item {
         inspectorWindow.visible = false
     }
 
+    // === Background I/O: batch/single config file reads (@@FILE:/@@MTIME: protocol) ===
     Io.Process {
         id: fileCat
         running: false
@@ -668,6 +765,7 @@ Item {
         onExited: finishFileLoad()
     }
 
+    // === Background I/O: per-file mtime for status line ("modified …" suffix) ===
     Io.Process {
         id: statProcess
         running: false
@@ -694,6 +792,7 @@ Item {
         syncRawSource()
     }
 
+    // === Background I/O: header subtitle (Hyprland version + distro pretty name) ===
     Io.Process {
         id: headerProcess
         command: ["sh", "-c", "hyprctl version 2>/dev/null | head -1; printf '\\n---OS---\\n'; rg '^PRETTY_NAME=' /etc/os-release 2>/dev/null || grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null || true"]
@@ -800,81 +899,28 @@ Item {
         return entries
     }
 
-    function keyPillColor(key) {
-        const k = (key || "").toUpperCase().trim()
-        if (k.includes("SUPER") || k.includes("WIN") || k.includes("META")) return "#89b4fa"
-        if (k.includes("SHIFT")) return "#fab387"
-        if (k.includes("CTRL") || k.includes("CONTROL")) return "#cba6f7"
-        if (k.includes("ALT")) return "#94e2d5"
-        return "#6c7086"
-    }
+    // Key/env semantic colors — delegated to Theme helpers (edit colors in Theme.qml)
+    function keyPillColor(key) { return th.inspKeyPillColor(key) }
+    function keyPillTextColor(key) { return th.inspKeyPillTextColor(key) }
+    function envKeyIsHighlight(key) { return th.inspEnvKeyIsHighlight(key) }
+    function envKeyColor(key) { return th.inspEnvKeyColor(key) }
+    function envValueColor(key, value) { return th.inspEnvValueColor(key, value) }
 
-    function keyPillTextColor(key) {
-        return keyPillColor(key) === "#6c7086" ? "#ffffff" : "#000000"
-    }
-
-    function envKeyIsHighlight(key) {
-        const k = (key || "").toUpperCase()
-        if (!k) return false
-        const prefixes = [
-            "__GL", "__NV", "__VK", "GBM_", "NVD_", "LIBVA_", "AQ_", "GDK_", "QT_",
-            "SDL_", "XDG_", "MOZ_", "ELECTRON_", "CLUTTER_", "HYPRCURSOR", "XCURSOR"
-        ]
-        for (let i = 0; i < prefixes.length; i++) {
-            if (k.indexOf(prefixes[i]) === 0) return true
-        }
-        return k.indexOf("WAYLAND") !== -1
-    }
-
-    function envKeyColor(key) {
-        return envKeyIsHighlight(key) ? "#94e2d5" : accent
-    }
-
-    function envValueColor(key, value) {
-        const v = (value || "").trim()
-        const lower = v.toLowerCase()
-        const k = (key || "").toUpperCase()
-
-        if (lower === "1" || lower === "true" || lower === "enabled") return "#a6e3a1"
-        if (lower === "0" || lower === "false" || lower === "disabled") return "#fab387"
-
-        if (envKeyIsHighlight(key) || lower.indexOf("nvidia") !== -1 || lower.indexOf("wayland") !== -1
-                || lower.indexOf("opengl") !== -1 || lower === "direct" || lower.indexOf("nvidia_only") !== -1) {
-            return "#89dceb"
-        }
-
-        if (v.indexOf("/") === 0 || v.indexOf("~") === 0 || v.indexOf("/dev/") !== -1) {
-            return "#a6adc8"
-        }
-
-        if (k.indexOf("THEME") !== -1 || k.indexOf("PLATFORMTHEME") !== -1
-                || lower.indexOf("bibata") !== -1 || lower === "qt6ct" || lower === "auto"
-                || lower === "arch-") {
-            return "#cba6f7"
-        }
-
-        if (k === "TERMINAL" || lower.indexOf("hyprland") !== -1) return "#89b4fa"
-
-        return text
-    }
-
-    readonly property int envTableSideMargin: 10
-    readonly property int envTableColSpacing: 12
-
+    // Environment table column widths (ratios from Theme.inspEnvVarCol*)
     function envTableContentWidth(totalWidth) {
         return Math.max(0, totalWidth - envTableSideMargin * 2)
     }
 
     function envVariableColumnWidth(totalWidth) {
         const usable = envTableContentWidth(totalWidth) - envTableColSpacing
-        const target = Math.round(usable * 0.34)
-        return Math.max(200, Math.min(target, 300))
+        const target = Math.round(usable * th.inspEnvVarColRatio)
+        return Math.max(th.inspEnvVarColMinWidth, Math.min(target, th.inspEnvVarColMaxWidth))
     }
 
     function envValueColumnWidth(totalWidth) {
         const usable = envTableContentWidth(totalWidth) - envTableColSpacing
         const remaining = usable - envVariableColumnWidth(totalWidth)
-        return Math.max(220, remaining)
+        return Math.max(th.inspEnvValueColMinWidth, remaining)
     }
 
     function refreshSystemInfo() {
@@ -926,6 +972,7 @@ Item {
         }
     }
 
+    // === Background I/O: System Info tab (fastfetch; only when tab activated) ===
     Io.Process {
         id: systemProcess
         command: ["fastfetch", "--logo", "none"]
@@ -1049,7 +1096,7 @@ Item {
         color: "transparent"
         implicitWidth: root.inspectorWidth
         implicitHeight: root.inspectorHeight
-        minimumSize: Qt.size(560, 400)
+        minimumSize: Qt.size(root.inspMinWidth, root.inspMinHeight)
 
         Shortcut {
             sequence: "Escape"
@@ -1108,7 +1155,7 @@ Item {
         Rectangle {
             id: contentPanel
             anchors.fill: parent
-            radius: root.popupRadiusLarge || 16
+            radius: root.popupRadiusLarge
             color: root.glassPopupBg
             border.width: 1
             border.color: root.glassPopupBorder
@@ -1163,8 +1210,8 @@ Item {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 18
-                spacing: 12
+                anchors.margins: root.inspContentPadding
+                spacing: root.inspSectionSpacing
 
                 Item {
                     id: titleBar
@@ -1180,17 +1227,17 @@ Item {
                             Layout.fillWidth: true
                             spacing: 10
 
-                            Text { text: "Hyprland Config Inspector"; color: root.text; font.pixelSize: 18; font.bold: true }
+                            Text { text: "Hyprland Config Inspector"; color: root.text; font.pixelSize: root.inspTitleFontSize; font.bold: true }
                             Item { Layout.fillWidth: true }
 
                             Rectangle {
-                                width: 78
-                                height: 28
-                                radius: 6
+                                width: th.inspRefreshButtonWidth
+                                height: th.inspHeaderButtonHeight
+                                radius: th.buttonRadius
                                 color: refreshAllMa.containsMouse ? root.surface : "transparent"
                                 border.width: 1
-                                border.color: Qt.rgba(1, 1, 1, 0.1)
-                                Text { anchors.centerIn: parent; text: "Refresh All"; color: root.accent; font.pixelSize: 12 }
+                                border.color: th.pillBorder
+                                Text { anchors.centerIn: parent; text: "Refresh All"; color: root.accent; font.pixelSize: root.inspStatusFontSize }
                                 MouseArea {
                                     id: refreshAllMa
                                     anchors.fill: parent
@@ -1201,9 +1248,9 @@ Item {
                             }
 
                             Rectangle {
-                                width: 28
-                                height: 28
-                                radius: 6
+                                width: th.inspCloseButtonSize
+                                height: th.inspCloseButtonSize
+                                radius: th.buttonRadius
                                 color: closeMa.containsMouse ? root.surface : "transparent"
                                 Text { anchors.centerIn: parent; text: "✕"; color: root.text; font.pixelSize: 14 }
                                 MouseArea {
@@ -1223,16 +1270,16 @@ Item {
                             Text {
                                 text: root.wmDistroLabel || "Hyprland"
                                 color: root.accent
-                                font.pixelSize: 13
+                                font.pixelSize: root.inspSubtitleFontSize
                                 font.bold: true
                             }
 
-                            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 14; color: Qt.rgba(1, 1, 1, 0.12) }
+                            Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 14; color: th.inspHeaderDivider }
 
                             Text {
                                 text: "SUPER + ?  ·  Tab / Shift+Tab  ·  PgUp / PgDown / ↑ / ↓"
                                 color: root.overlay
-                                font.pixelSize: 13
+                                font.pixelSize: root.inspSubtitleFontSize
                             }
 
                             Item { Layout.fillWidth: true }
@@ -1265,16 +1312,16 @@ Item {
                             id: tabBarScrollBar
                             policy: tabFlickable.contentHeight > tabFlickable.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                             contentItem: Rectangle {
-                                implicitWidth: 6
-                                radius: 3
-                                color: tabBarScrollBar.pressed ? root.accent : Qt.rgba(1, 1, 1, 0.2)
+                                implicitWidth: root.inspScrollBarWidth
+                                radius: root.inspScrollBarRadius
+                                color: tabBarScrollBar.pressed ? root.accent : root.inspScrollBarIdle
                             }
                         }
 
                         Flow {
                             id: tabFlow
                             width: parent.width
-                            spacing: 6
+                            spacing: root.inspTabSpacing
 
                             Repeater {
                                 model: root.tabs
@@ -1282,19 +1329,20 @@ Item {
                                     required property int index
                                     required property var modelData
 
-                                    height: 30
-                                    width: tabLabel.implicitWidth + 28
-                                    radius: 7
-                                    color: (root.currentTab === index) ? Qt.rgba(0.55, 0.70, 0.96, 0.18) : (tma.containsMouse ? root.surface : "transparent")
+                                    height: root.inspTabHeight
+                                    width: tabLabel.implicitWidth + root.inspTabHPadding
+                                    radius: root.inspTabRadius
+                                    color: (root.currentTab === index) ? root.inspTabActiveBg
+                                        : (tma.containsMouse ? root.inspTabHoverBg : "transparent")
                                     border.width: (root.currentTab === index) ? 1 : 0
-                                    border.color: root.accent
+                                    border.color: root.inspTabActiveBorder
 
                                     Text {
                                         id: tabLabel
                                         anchors.centerIn: parent
                                         text: modelData.label
                                         color: (root.currentTab === index) ? root.accent : root.text
-                                        font.pixelSize: 13
+                                        font.pixelSize: root.inspTabFontSize
                                         font.bold: (root.currentTab === index)
                                     }
 
@@ -1311,25 +1359,25 @@ Item {
                     }
 
                     Rectangle {
-                        Layout.preferredWidth: 220
-                        Layout.preferredHeight: 28
-                        radius: 6
+                        Layout.preferredWidth: root.inspSearchWidth
+                        Layout.preferredHeight: root.inspSearchHeight
+                        radius: root.inspSearchRadius
                         color: root.surface
                         border.width: 1
-                        border.color: Qt.rgba(1,1,1,0.08)
+                        border.color: th.pillBorder
 
                         TextField {
                             id: globalFilterField
                             anchors.fill: parent
-                            anchors.margins: 4
+                            anchors.margins: th.inspSearchPadding
                             z: 2
                             focusPolicy: Qt.StrongFocus
                             activeFocusOnPress: true
                             selectByMouse: true
                             verticalAlignment: TextInput.AlignVCenter
                             color: root.text
-                            font.pixelSize: 14
-                            selectionColor: Qt.rgba(0.55, 0.70, 0.96, 0.35)
+                            font.pixelSize: th.inspSearchFontSize
+                            selectionColor: root.inspSearchSelectionBg
                             selectedTextColor: root.text
                             placeholderText: "Search all tabs..."
                             placeholderTextColor: root.overlay
@@ -1391,9 +1439,9 @@ Item {
                             policy: bindsFlickable.contentHeight > bindsFlickable.height + 1
                                 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                             contentItem: Rectangle {
-                                implicitWidth: 6
-                                radius: 3
-                                color: bindsScrollBar.pressed ? root.accent : Qt.rgba(1, 1, 1, 0.2)
+                                implicitWidth: root.inspScrollBarWidth
+                                radius: root.inspScrollBarRadius
+                                color: bindsScrollBar.pressed ? root.accent : root.inspScrollBarIdle
                             }
                         }
 
@@ -1408,9 +1456,9 @@ Item {
                                 model: root.filteredBinds()
                                 delegate: Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 26
-                                    radius: 4
-                                    color: rma.containsMouse ? Qt.rgba(1,1,1,0.03) : "transparent"
+                                    Layout.preferredHeight: th.inspBindRowHeight
+                                    radius: th.inspRowRadius
+                                    color: rma.containsMouse ? root.inspRowHoverBg : "transparent"
 
                                     MouseArea { id: rma; anchors.fill: parent; hoverEnabled: true }
 
@@ -1425,9 +1473,9 @@ Item {
                                             Repeater {
                                                 model: modelData.key.split(/\s*\+\s*/)
                                                 delegate: Rectangle {
-                                                    height: 20
-                                                    width: keyText.implicitWidth + 12
-                                                    radius: 5
+                                                    height: th.inspKeyPillHeight
+                                                    width: keyText.implicitWidth + th.inspKeyPillHPadding
+                                                    radius: th.inspKeyPillRadius
                                                     color: keyPillColor(modelData)
 
                                                     Text {
@@ -1435,8 +1483,8 @@ Item {
                                                         anchors.centerIn: parent
                                                         text: modelData
                                                         color: keyPillTextColor(modelData)
-                                                        font.pixelSize: 11
-                                                        font.family: "monospace"
+                                                        font.pixelSize: th.inspKeyPillFontSize
+                                                        font.family: root.fontMono
                                                         font.bold: true
                                                     }
                                                 }
@@ -1520,9 +1568,9 @@ Item {
                             policy: envFlickable.contentHeight > envFlickable.height + 1
                                 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                             contentItem: Rectangle {
-                                implicitWidth: 6
-                                radius: 3
-                                color: envScrollBar.pressed ? root.accent : Qt.rgba(1, 1, 1, 0.2)
+                                implicitWidth: root.inspScrollBarWidth
+                                radius: root.inspScrollBarRadius
+                                color: envScrollBar.pressed ? root.accent : root.inspScrollBarIdle
                             }
                         }
 
@@ -1533,9 +1581,9 @@ Item {
 
                             Rectangle {
                                 width: parent.width
-                                height: 28
-                                radius: 4
-                                color: Qt.rgba(1, 1, 1, 0.03)
+                                height: th.inspEnvHeaderHeight
+                                radius: th.inspRowRadius
+                                color: root.inspRowHoverBg
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -1551,7 +1599,7 @@ Item {
                                         color: root.accent
                                         font.pixelSize: 12
                                         font.bold: true
-                                        font.family: "monospace"
+                                        font.family: root.fontMono
                                     }
                                     Text {
                                         Layout.preferredWidth: root.envValueColumnWidth(parent.width)
@@ -1561,7 +1609,7 @@ Item {
                                         color: root.accent
                                         font.pixelSize: 12
                                         font.bold: true
-                                        font.family: "monospace"
+                                        font.family: root.fontMono
                                         horizontalAlignment: Text.AlignRight
                                     }
                                 }
@@ -1575,10 +1623,10 @@ Item {
                                     model: root.filteredEnv()
                                     delegate: Rectangle {
                                         width: envCol.width
-                                        height: Math.max(28, envComment.visible ? 40 : 28)
-                                        radius: 4
+                                        height: Math.max(th.inspEnvRowHeight, envComment.visible ? 40 : th.inspEnvRowHeight)
+                                        radius: th.inspRowRadius
                                         color: keyMa.containsMouse || valueMa.containsMouse
-                                            ? Qt.rgba(1, 1, 1, 0.03) : "transparent"
+                                            ? root.inspRowHoverBg : "transparent"
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -1597,7 +1645,7 @@ Item {
                                                     text: modelData.key
                                                     color: root.envKeyColor(modelData.key)
                                                     font.pixelSize: 13
-                                                    font.family: "monospace"
+                                                    font.family: root.fontMono
                                                     font.bold: root.envKeyIsHighlight(modelData.key)
                                                     elide: Text.ElideRight
 
@@ -1633,7 +1681,7 @@ Item {
                                                     text: modelData.value
                                                     color: root.envValueColor(modelData.key, modelData.value)
                                                     font.pixelSize: 13
-                                                    font.family: "monospace"
+                                                    font.family: root.fontMono
                                                     verticalAlignment: Text.AlignVCenter
                                                     horizontalAlignment: Text.AlignRight
                                                     elide: Text.ElideLeft
@@ -1855,9 +1903,9 @@ Item {
                                         policy: systemFlickable.contentHeight > systemFlickable.height + 1
                                             ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                                         contentItem: Rectangle {
-                                            implicitWidth: 6
-                                            radius: 3
-                                            color: systemScrollBar.pressed ? root.accent : Qt.rgba(1, 1, 1, 0.2)
+                                            implicitWidth: root.inspScrollBarWidth
+                                            radius: root.inspScrollBarRadius
+                                            color: systemScrollBar.pressed ? root.accent : root.inspScrollBarIdle
                                         }
                                     }
 
@@ -1871,7 +1919,7 @@ Item {
                                             delegate: Rectangle {
                                                 width: parent.width
                                                 height: 24
-                                                color: valueMa.containsMouse ? Qt.rgba(1,1,1,0.06) : "transparent"
+                                                color: valueMa.containsMouse ? root.inspRowHoverBgStrong : "transparent"
 
                                                 RowLayout {
                                                     anchors.fill: parent
@@ -1884,14 +1932,14 @@ Item {
                                                         text: modelData.label + ":"
                                                         color: root.accent
                                                         font.pixelSize: 13
-                                                        font.family: "monospace"
+                                                        font.family: root.fontMono
                                                     }
                                                     Text {
                                                         Layout.fillWidth: true
                                                         text: modelData.value
                                                         color: root.text
                                                         font.pixelSize: 13
-                                                        font.family: "monospace"
+                                                        font.family: root.fontMono
 
                                                         MouseArea {
                                                             id: valueMa
@@ -1917,7 +1965,7 @@ Item {
                     Text {
                         text: root.statusText()
                         color: root.overlay
-                        font.pixelSize: 12
+                        font.pixelSize: root.inspStatusFontSize
                         property int _mtimeTick: root.fileMtimesVersion
                         property string _filterTick: root.globalFilter
                         property int _fileTick: root.fileContentsVersion
@@ -1944,12 +1992,12 @@ Item {
                     Rectangle {
                         visible: root.canCopyTab
                         width: 44
-                        height: 22
-                        radius: 5
+                        height: th.inspFooterButtonHeight
+                        radius: th.inspFooterButtonRadius
                         color: copyTabMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
-                        border.color: Qt.rgba(1,1,1,0.1)
-                        Text { anchors.centerIn: parent; text: "Copy"; color: root.accent; font.pixelSize: 12 }
+                        border.color: th.pillBorder
+                        Text { anchors.centerIn: parent; text: "Copy"; color: root.accent; font.pixelSize: root.inspStatusFontSize }
                         MouseArea {
                             id: copyTabMa
                             anchors.fill: parent
@@ -1962,13 +2010,13 @@ Item {
                     Rectangle {
                         visible: root.currentTabInfo.view === "processes"
                         width: 58
-                        height: 22
-                        radius: 5
+                        height: th.inspFooterButtonHeight
+                        radius: th.inspFooterButtonRadius
                         color: copyAllProcMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
-                        border.color: Qt.rgba(1,1,1,0.1)
+                        border.color: th.pillBorder
                         opacity: processesViewer.filteredProcesses().length > 0 ? 1 : 0.35
-                        Text { anchors.centerIn: parent; text: "Copy All"; color: root.accent; font.pixelSize: 12 }
+                        Text { anchors.centerIn: parent; text: "Copy All"; color: root.accent; font.pixelSize: root.inspStatusFontSize }
                         MouseArea {
                             id: copyAllProcMa
                             anchors.fill: parent
@@ -1980,14 +2028,14 @@ Item {
                     }
 
                     Rectangle {
-                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "temperature" || root.currentTabInfo.view === "processes" || root.currentTabInfo.view === "audio" || root.currentTabInfo.view === "logs" || root.currentTabInfo.view === "services"
+                        visible: root._footerRefreshViews.indexOf(root.tabView()) !== -1 || isSysmonMetricView(root.tabView())
                         width: 68
-                        height: 22
-                        radius: 5
+                        height: th.inspFooterButtonHeight
+                        radius: th.inspFooterButtonRadius
                         color: refSysMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
-                        border.color: Qt.rgba(1,1,1,0.1)
-                        Text { anchors.centerIn: parent; text: "Refresh"; color: root.accent; font.pixelSize: 12 }
+                        border.color: th.pillBorder
+                        Text { anchors.centerIn: parent; text: "Refresh"; color: root.accent; font.pixelSize: root.inspStatusFontSize }
                         MouseArea {
                             id: refSysMa
                             anchors.fill: parent
@@ -1995,7 +2043,7 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (root.currentTabInfo.view === "runtime") runtimeViewer.refreshCategory()
-                                else if (root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "temperature") sysMonService.refresh()
+                                else if (isSysmonMetricView(root.currentTabInfo.view)) sysMonService.refresh()
                                 else if (root.currentTabInfo.view === "processes") processesViewer.refresh()
                                 else if (root.currentTabInfo.view === "audio") audioViewer.refresh()
                                 else if (root.currentTabInfo.view === "logs") logsViewer.refresh(true)
@@ -2008,12 +2056,12 @@ Item {
                     Rectangle {
                         visible: root.hasConfigFile
                         width: 40
-                        height: 22
-                        radius: 5
+                        height: th.inspFooterButtonHeight
+                        radius: th.inspFooterButtonRadius
                         color: editLuaMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
-                        border.color: Qt.rgba(1,1,1,0.1)
-                        Text { anchors.centerIn: parent; text: "Edit"; color: root.accent; font.pixelSize: 12 }
+                        border.color: th.pillBorder
+                        Text { anchors.centerIn: parent; text: "Edit"; color: root.accent; font.pixelSize: root.inspStatusFontSize }
                         MouseArea {
                             id: editLuaMa
                             anchors.fill: parent
@@ -2027,12 +2075,12 @@ Item {
                         visible: root.hasConfigFile
                         Layout.leftMargin: 6
                         width: 68
-                        height: 22
-                        radius: 5
+                        height: th.inspFooterButtonHeight
+                        radius: th.inspFooterButtonRadius
                         color: refLuaMa.containsMouse ? root.surface : "transparent"
                         border.width: 1
-                        border.color: Qt.rgba(1,1,1,0.1)
-                        Text { anchors.centerIn: parent; text: "Reload"; color: root.accent; font.pixelSize: 12 }
+                        border.color: th.pillBorder
+                        Text { anchors.centerIn: parent; text: "Reload"; color: root.accent; font.pixelSize: root.inspStatusFontSize }
                         MouseArea {
                             id: refLuaMa
                             anchors.fill: parent
@@ -2084,8 +2132,8 @@ Item {
                         if (!pressed) return
                         const dx = mouse.scenePosition.x - pressSceneX
                         const dy = mouse.scenePosition.y - pressSceneY
-                        root.inspectorWidth = Math.max(560, Math.round(startWidth + dx))
-                        root.inspectorHeight = Math.max(400, Math.round(startHeight + dy))
+                        root.inspectorWidth = Math.max(root.inspMinWidth, Math.round(startWidth + dx))
+                        root.inspectorHeight = Math.max(root.inspMinHeight, Math.round(startHeight + dy))
                     }
                 }
             }

@@ -16,7 +16,7 @@ import "../Theme.qml" as ThemeModule
 //     with theme defaults for lineColor if desired in future.
 //
 // Dependencies:
-//   - Used by SysmonPanel.qml (bound to service.*History arrays)
+//   - Used by *MonitorView.qml in HyprConfigInsp (bound to SysMonService.*History)
 //   - Can be used standalone.
 //
 // Notes:
@@ -37,7 +37,7 @@ Item {
     property color fillColor: Qt.rgba(0.53, 0.71, 0.98, 0.18)
     property real lineWidth: 1.5
 
-    // Advanced options for system-monitor style charts (used in SysmonPanel history pills)
+    // Advanced options for system-monitor style charts (HyprConfigInsp metric tabs)
     property bool fixedRange: false
     property real minValue: 0
     property real maxValue: 100

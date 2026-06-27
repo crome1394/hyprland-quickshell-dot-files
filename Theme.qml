@@ -39,7 +39,8 @@
 //   - Workspaces
 //   - System stats (CPU/GPU bars + temp thresholds)
 //   - Cava visualizer
-//   - Sysmon Panel (side panel geometry, radii, poll options, colors)
+//   - System monitoring (gauges, poll default, shared tab-chip colors)
+//   - Hypr Config Inspector (overlay window, tabs, tables, key/env semantic colors)
 //   - Dividers & borders
 //   - Popups (generic metrics + internal layout tokens)
 //   - Animation & Interaction (durations, easings, tooltip delays)
@@ -367,84 +368,190 @@ QtObject {
     readonly property int  cavaAnimSlow:    420   // ms when idle (saves CPU)
 
     // =========================================================================
-    // SYSMON PANEL (side-mounted System Monitor / System Info panel for Hyprland)
+    // SYSTEM MONITORING (SysMonService + HyprConfigInsp sysmon tabs)
     // =========================================================================
-    // Everything visual for SysmonPanel.qml and its cards must come from here.
-    // PanelWindow is positioned via anchors driven by panelPosition (edit here or extend
-    // for runtime switch). Rounded corners ONLY on inner (non-border) edges.
+    // Shared tokens for live metrics in HyprConfigInsp (CPU/GPU/Memory/Temperature tabs)
+    // and reusable gauge/sparkline components.
     //
     // Consumed by:
-    //   - widgets/SysmonPanel.qml (size, radius, position, margins, colors, poll options)
-    //   - widgets/SysMonService.qml (reads default poll interval)
+    //   - widgets/SysMonService.qml (pollInterval default kept in sync by convention)
+    //   - widgets/HyprConfigInsp.qml + components/*MonitorView.qml
+    //   - components/CircularGauge.qml, Sparkline.qml
     //
     // Notes:
-    //   - panelPosition affects adaptive margins + which radii are zeroed (flat on monitor edge).
-    //   - pollInterval is owned by the *service* at runtime; these are only defaults + UI options.
-    //   - Keep additions here organized; extend this section for any new panel visuals.
+    //   - pollInterval is owned by SysMonService at runtime (default 1500 ms).
+    //   - panelTabActive* is reused by HyprConfigInsp tab chips (inspTabActive* aliases).
     // =========================================================================
 
-    // --- Panel geometry (width/height for the side panel; height may be constrained by screen + margins)
-    readonly property int panelWidth:  560   // total window width for right/left panels 460
-    readonly property int panelHeight: 720   // preferred; actual may use screen height - margins 720
-
-    // Corner radius applied only to the "inner" corners (e.g. left corners for a right panel)
-    readonly property int panelRadius: 12
-
-    // Supported positions (string). "right" is the primary for this rice.
-    // The panel code adapts anchors + radii + margins based on this value.
-    readonly property string panelPosition: "right"   // "left" | "right" | "bottom"
-
-    // Generous breathing-room from screen edges. Applied as PanelWindow margins
-    // (top/bottom for vertical side panels; left/right for bottom panels).
-    readonly property int panelMargin:        8
-    readonly property int panelMarginTop:    300    //36
-    readonly property int panelMarginBottom: 36   //36
-    readonly property int panelMarginSide:   12   // extra side inset if desired for bottom pos
-
-    // Poll rate (ms). Default 1500. SysMonService owns the live value (hardcoded to match
-    // this default for simplicity; UI only reads + assigns on user change). The service
-    // does not read this at runtime to keep its imports self-contained.
+    // Poll rate default (ms). SysMonService hardcodes 1500 to match; change both if tuning.
     readonly property int sysmonDefaultPollInterval: 1500
 
-    // Discrete poll speed options shown in the Monitor view control (kept small & simple).
-    // Order is as presented in the UI chips.
-    readonly property var sysmonPollOptions: [500, 1000, 1500, 2000, 3000, 5000]
-
-    // --- Panel colors (reuse glass tokens where possible; add panel-specific here for isolation)
-    readonly property color panelBg:        glassPopupBg          // main panel container background
-    readonly property color panelBorder:    glassPopupBorder
-    readonly property color panelHighlight: glassPopupHighlight   // top light edge
-
-    // Inner cards (CPU/GPU/Memory/etc boxes) - slightly different from popup glass for density
-    readonly property color panelCardBg:     Qt.rgba(0.10, 0.10, 0.12, 0.92)
-    readonly property color panelCardBorder: Qt.rgba(1, 1, 1, 0.06)
-
-    // Tab / header controls inside panel
+    // Shared active-tab chip style (HyprConfigInsp tab bar)
     readonly property color panelTabActiveBg:   Qt.rgba(0.55, 0.70, 0.96, 0.18)
     readonly property color panelTabActiveBorder: accent
 
-    // Status text colors (errors vs normal)
-    readonly property color panelStatusText: text
-    readonly property color panelErrorText:  muted
+    // Gauge color ramp for CircularGauge (CPU/GPU/memory/temp). <65% / 65–85% / >85%
+    readonly property color gaugeLow:  "#a6e3a1"
+    readonly property color gaugeMid:  "#f9e2af"
+    readonly property color gaugeHigh: "#f38ba8"
 
-    // Gauge color ramp for CircularGauge (CPU/GPU/disk etc). Centralized here so
-    // all dashboards and future gauges stay consistent. (Used as defaults in component.)
-    readonly property color gaugeLow:  "#a6e3a1"   // <65%
-    readonly property color gaugeMid:  "#f9e2af"   // 65-85%
-    readonly property color gaugeHigh: "#f38ba8"   // >85%
+    // =========================================================================
+    // HYPR CONFIG INSPECTOR (HyprConfigInsp.qml floating overlay)
+    // =========================================================================
+    // Visual tokens for the tabbed Hyprland config / sysmon inspector window.
+    // Reuses popupHelpWidth/Height for default size; panelTabActive* for tab chips.
+    //
+    // Consumed by:
+    //   - widgets/HyprConfigInsp.qml (primary)
+    //
+    // How to extend:
+    //   - Add a property here, alias it in HyprConfigInsp via `th.xxx`, use in UI.
+    //   - Semantic color helpers (envValueColor) live in Theme so other tools can reuse.
+    // =========================================================================
 
-    // Sysmon tab content area (fixed to prevent layout shift when switching tabs)
-    readonly property int sysmonTabContentHeight: 650
-    readonly property int sysmonPillMargin: 8
-    readonly property int sysmonPillRadius: 8
+    // --- Window geometry (FloatingWindow defaults + resize limits)
+    // popupHelpWidth/Height are the default inspector size (1060×720).
+    readonly property int inspMinWidth:  560
+    readonly property int inspMinHeight: 400
+    readonly property int inspContentPadding: 18      // inner margin around the whole layout
+    readonly property int inspSectionSpacing: 12      // vertical gap between header/tabs/content/footer
 
-    // --- Panel card / inner element sizing (kept modest to avoid over-theming a first cut)
-    readonly property int panelCardRadius: 8
-    readonly property int panelCardHeaderSize: 12
-    readonly property int panelCardBodySize: 18
-    readonly property int panelCardSmallSize: 10
-    readonly property int panelCardTinySize: 8
-    readonly property int panelCardLabelSize: 9
+    // --- Tab bar (wrapping Flow of chips + vertical scrollbar when many tabs)
+    readonly property int inspTabBarMaxHeight: 102
+    readonly property int inspTabHeight:       30
+    readonly property int inspTabRadius:        7
+    readonly property int inspTabHPadding:     28    // added to label width for chip width
+    readonly property int inspTabSpacing:         6
+    readonly property int inspTabFontSize:     13
+    // Active tab reuses panelTabActive* tokens (shared tab-chip style)
+    readonly property color inspTabActiveBg:      panelTabActiveBg
+    readonly property color inspTabActiveBorder:  panelTabActiveBorder
+    readonly property color inspTabHoverBg:       surface
+
+    // --- Global search field (right of tab bar)
+    readonly property int inspSearchWidth:   220
+    readonly property int inspSearchHeight:   28
+    readonly property int inspSearchRadius:    6
+    readonly property int inspSearchPadding:   4
+    readonly property int inspSearchFontSize:   14
+    readonly property color inspSearchSelectionBg: Qt.rgba(0.55, 0.70, 0.96, 0.35)
+
+    // --- Header (title row, version/distro, keyboard hints)
+    readonly property int inspTitleFontSize:    18
+    readonly property int inspSubtitleFontSize: 13
+    readonly property int inspHeaderButtonHeight: 28
+    readonly property int inspRefreshButtonWidth: 78
+    readonly property int inspCloseButtonSize:    28
+    readonly property color inspHeaderDivider: divider
+
+    // --- Footer (status line + action chips: Copy, Refresh, Edit, Reload)
+    readonly property int inspStatusFontSize: 12
+    readonly property int inspFooterButtonHeight: 22
+    readonly property int inspFooterButtonRadius:  5
+    readonly property int inspFooterButtonSpacing: 6
+
+    // --- Scrollbars (tab bar + content Flickables)
+    readonly property int inspScrollBarWidth:  6
+    readonly property int inspScrollBarRadius: 3
+    readonly property color inspScrollBarIdle: Qt.rgba(1, 1, 1, 0.2)
+
+    // --- List/table row interaction (binds, env, system info rows)
+    readonly property color inspRowHoverBg:       Qt.rgba(1, 1, 1, 0.03)
+    readonly property color inspRowHoverBgStrong: Qt.rgba(1, 1, 1, 0.06)  // system info values
+    readonly property int inspRowRadius: 4
+    readonly property int inspBindRowHeight: 26
+    readonly property int inspEnvRowHeight:  28
+    readonly property int inspEnvHeaderHeight: 28
+
+    // --- Environment variable table layout
+    readonly property int inspEnvTableSideMargin: 10
+    readonly property int inspEnvTableColSpacing: 12
+    readonly property int inspEnvVarColMinWidth:  200
+    readonly property int inspEnvVarColMaxWidth:  300
+    readonly property real inspEnvVarColRatio:    0.34   // fraction of usable width for Variable column
+    readonly property int inspEnvValueColMinWidth: 220
+
+    // --- Key binding modifier pills (Catppuccin semantic colors)
+    readonly property color inspKeyPillSuper:   "#89b4fa"
+    readonly property color inspKeyPillShift:   "#fab387"
+    readonly property color inspKeyPillCtrl:    "#cba6f7"
+    readonly property color inspKeyPillAlt:    "#94e2d5"
+    readonly property color inspKeyPillDefault: overlay
+    readonly property color inspKeyPillTextOnDark:  "#ffffff"
+    readonly property color inspKeyPillTextOnLight: "#000000"
+    readonly property int inspKeyPillHeight: 20
+    readonly property int inspKeyPillRadius:  5
+    readonly property int inspKeyPillHPadding: 12
+    readonly property int inspKeyPillFontSize: 11
+
+    // --- Environment variable semantic colors (keys + values)
+    readonly property color inspEnvKeyHighlight: "#94e2d5"   // graphics/wayland-related keys
+    readonly property color inspEnvValueTrue:      "#a6e3a1"   // 1, true, enabled
+    readonly property color inspEnvValueFalse:     "#fab387"   // 0, false, disabled
+    readonly property color inspEnvValueTech:      "#89dceb"   // nvidia, wayland, opengl, direct
+    readonly property color inspEnvValuePath:      subtext      // filesystem paths
+    readonly property color inspEnvValueTheme:     "#cba6f7"   // theme/platform strings
+    readonly property color inspEnvValueTerminal:  "#89b4fa"   // TERMINAL, hyprland refs
+
+    // Prefixes that mark an env *key* as graphics/wayland-related (highlighted in Variable column)
+    readonly property var inspEnvHighlightPrefixes: [
+        "__GL", "__NV", "__VK", "GBM_", "NVD_", "LIBVA_", "AQ_", "GDK_", "QT_",
+        "SDL_", "XDG_", "MOZ_", "ELECTRON_", "CLUTTER_", "HYPRCURSOR", "XCURSOR"
+    ]
+
+    function inspKeyPillColor(key) {
+        var k = (key || "").toUpperCase().trim()
+        if (k.indexOf("SUPER") !== -1 || k.indexOf("WIN") !== -1 || k.indexOf("META") !== -1) return inspKeyPillSuper
+        if (k.indexOf("SHIFT") !== -1) return inspKeyPillShift
+        if (k.indexOf("CTRL") !== -1 || k.indexOf("CONTROL") !== -1) return inspKeyPillCtrl
+        if (k.indexOf("ALT") !== -1) return inspKeyPillAlt
+        return inspKeyPillDefault
+    }
+
+    function inspKeyPillTextColor(key) {
+        return inspKeyPillColor(key) === inspKeyPillDefault ? inspKeyPillTextOnDark : inspKeyPillTextOnLight
+    }
+
+    function inspEnvKeyIsHighlight(key) {
+        var k = (key || "").toUpperCase()
+        if (!k) return false
+        for (var i = 0; i < inspEnvHighlightPrefixes.length; i++) {
+            if (k.indexOf(inspEnvHighlightPrefixes[i]) === 0) return true
+        }
+        return k.indexOf("WAYLAND") !== -1
+    }
+
+    function inspEnvKeyColor(key) {
+        return inspEnvKeyIsHighlight(key) ? inspEnvKeyHighlight : accent
+    }
+
+    function inspEnvValueColor(key, value) {
+        var v = (value || "").trim()
+        var lower = v.toLowerCase()
+        var k = (key || "").toUpperCase()
+
+        if (lower === "1" || lower === "true" || lower === "enabled") return inspEnvValueTrue
+        if (lower === "0" || lower === "false" || lower === "disabled") return inspEnvValueFalse
+
+        if (inspEnvKeyIsHighlight(key) || lower.indexOf("nvidia") !== -1 || lower.indexOf("wayland") !== -1
+                || lower.indexOf("opengl") !== -1 || lower === "direct" || lower.indexOf("nvidia_only") !== -1) {
+            return inspEnvValueTech
+        }
+
+        if (v.indexOf("/") === 0 || v.indexOf("~") === 0 || v.indexOf("/dev/") !== -1) {
+            return inspEnvValuePath
+        }
+
+        if (k.indexOf("THEME") !== -1 || k.indexOf("PLATFORMTHEME") !== -1
+                || lower.indexOf("bibata") !== -1 || lower === "qt6ct" || lower === "auto"
+                || lower === "arch-") {
+            return inspEnvValueTheme
+        }
+
+        if (k === "TERMINAL" || lower.indexOf("hyprland") !== -1) return inspEnvValueTerminal
+
+        return text
+    }
 
     // =========================================================================
     // DIVIDERS & SUBTLE LINES

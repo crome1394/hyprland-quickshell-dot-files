@@ -9,8 +9,7 @@ import "../Theme.qml" as ThemeModule
 //
 // Purpose:
 //   Dashboard-style circular gauge (270° bottom-open arc) with threshold-based
-//   3-stop color ramp. Used for CPU, GPU, disk usage in SysmonPanel (and
-//   potentially other places).
+//   3-stop color ramp. Used by HyprConfigInsp *MonitorView tabs (CPU/GPU/memory/temp).
 //
 // Theme Properties Consumed (via fallback):
 //   - Theme.gaugeLow / Theme.gaugeMid / Theme.gaugeHigh  (color ramp)

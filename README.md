@@ -8,7 +8,7 @@ Personal status bar configuration for Hyprland using Quickshell.
 - `widgets/` — Self-contained, reusable UI components (pills, popups, menus).
 - `components/` — Low-level reusable pieces (VolumeBar, CavaVisualizer, etc.).
 - `Theme.qml` — Single source of truth for all colors, glassmorphic tokens, spacing, and metrics.
-- `widgets/HelpMenu.qml` — Rich centered overlay showing keybindings (parsed from `hyprland.lua`), environment variables, and system info.
+- `widgets/HyprConfigInsp.qml` — Hyprland Config Inspector overlay (keybindings, env, runtime options, config files, sysmon tabs, logs, services).
 
 ## Design Goals
 
@@ -23,7 +23,7 @@ Personal status bar configuration for Hyprland using Quickshell.
 | Workspaces       | Click / Scroll wheel               | Shows only active + occupied |
 | Media            | Left click (toggle), Scroll, Right click (popup) | MPRIS + live Cava visualizer |
 | Audio            | Left (cycle view), Middle (mute), Right (device menu) | Speaker + Mic controls |
-| Help Menu        | `qs ipc call help toggle`          | Parsed live from your Hyprland config |
+| Config Inspector | `qs ipc call hyprConfigInsp toggle` | Parsed live from your Hyprland config + sysmon |
 
 ## Theming (Fully Centralized)
 
@@ -47,7 +47,7 @@ For questions about a specific component, look inside the corresponding file und
 
 The full project is now wrapped up:
 
-- Per-widget refactoring (all 10 widgets + 3 components) completed and verified following the recommended order (with special stability handling for HelpMenu.qml).
+- Per-widget refactoring completed and verified incrementally (see `QUICKSHELL_REFACTOR_STATUS.md` for history).
 - Conservative Global Consistency Pass (STAGE Final) completed: outer borders (`controlBorderWidth`), dividers (`divider*` tokens), colors (raw `Qt.rgba`/hex centralized), fonts (`bar.fontFamily`/`bar.fontMono` on headers/labels), sizes (`bar.pillHeight`), and spacing in outer/simple elements only.
 - `shell.qml` outer bar structure cleaned (launcher area, vertical dividers, shadows/highlights where tokens applied).
 - All work followed the strict gated process (audit → user approval → backup commit → apply → clean-load verification). Scope remained conservative (outer pill/card + simple text/labels; no dense inners touched).
