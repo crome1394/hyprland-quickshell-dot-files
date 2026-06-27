@@ -177,7 +177,6 @@ Item {
     }
 
     // Restart timer promptly when user changes poll rate via the panel control.
-    // This is the only place pollInterval is "written to" from outside (via direct assign).
     onPollIntervalChanged: {
         if (autoPoll && pollTimer.running) {
             pollTimer.stop()

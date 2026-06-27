@@ -11,7 +11,7 @@ import Quickshell.Io as Io
 // Floating overlay for browsing and editing split Hyprland configuration.
 //
 // Features:
-//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU/GPU/Memory/Temperature (sysmon), Audio, Logs, Services
+//   - Parsed tabs: Key Bindings, Environment, Runtime Options (hyprctl getoption), CPU/GPU/Memory/Temperature/Processes (sysmon), Audio, Logs, Services
 //   - Config Files tab (dropdown + bat) for ~/.config/hypr/config/*.lua and hypr*.conf
 //   - System info (fastfetch + clickable copy-to-clipboard values + logo)
 //   - Edit (kitty nano) and Reload per config file tab
@@ -78,6 +78,7 @@ Item {
         { label: "GPU", id: "gpu", file: "", view: "gpu" },
         { label: "Memory", id: "memory", file: "", view: "memory" },
         { label: "Temperature", id: "temperature", file: "", view: "temperature" },
+        { label: "Processes", id: "processes", file: "", view: "processes" },
         { label: "Audio", id: "audio", file: "", view: "audio" },
         { label: "Logs", id: "logs", file: "", view: "logs" },
         { label: "Services", id: "services", file: "", view: "services" },
@@ -191,7 +192,7 @@ Item {
         const entries = []
         for (let i = 0; i < tabs.length; i++) {
             const tab = tabs[i]
-            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature" || tab.view === "audio" || tab.view === "logs" || tab.view === "services") continue
+            if (tab.view === "system" || tab.view === "runtime" || tab.view === "configfiles" || tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature" || tab.view === "processes" || tab.view === "audio" || tab.view === "logs" || tab.view === "services") continue
             if (tab.file) entries.push(tab)
         }
         for (let j = 0; j < configFileEntries.length; j++) {
@@ -357,6 +358,9 @@ Item {
         if (tab && (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature")) {
             sysMonService.refresh()
         }
+        if (tab && tab.view === "processes") {
+            processesViewer.refresh()
+        }
         if (tab && tab.view === "audio") {
             audioViewer.refresh()
         }
@@ -381,6 +385,10 @@ Item {
         }
         if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") {
             sysMonService.refresh()
+            return
+        }
+        if (tab.view === "processes") {
+            processesViewer.refresh()
             return
         }
         if (tab.view === "audio") {
@@ -468,6 +476,18 @@ Item {
             const gpuT = sysMonService.data.gpu ? (sysMonService.data.gpu.temp || 0).toFixed(0) : "0"
             return "CPU " + cpuT + "°C  ·  GPU " + gpuT + "°C  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
         }
+        if (tab.view === "processes") {
+            const stats = sysMonService.data.process_stats || {}
+            const load = sysMonService.data.load || []
+            const running = stats.running || 0
+            const total = stats.total || 0
+            const loadStr = load.length ? Number(load[0] || 0).toFixed(2) : "--"
+            const rows = processesViewer.filteredProcesses().length
+            const sel = processesViewer.selectedPid
+            const selNote = sel ? "  ·  PID " + sel : ""
+            return rows + " shown  ·  " + total + " total  ·  " + running + " running  ·  load " + loadStr + selNote
+                + "  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
+        }
         if (tab.view === "audio") {
             const out = audioViewer.defaultSinkDevice()
             const inp = audioViewer.defaultSourceDevice()
@@ -525,6 +545,7 @@ Item {
         else if (tab.view === "audio") audioViewer.focusScroll()
         else if (tab.view === "logs") logsViewer.focusScroll()
         else if (tab.view === "services") servicesViewer.focusScroll()
+        else if (tab.view === "processes") processesViewer.focusScroll()
         else contentPanel.forceActiveFocus()
     }
 
@@ -537,6 +558,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.resetScroll()
         else if (tab.view === "memory") memoryViewer.resetScroll()
         else if (tab.view === "temperature") tempViewer.resetScroll()
+        else if (tab.view === "processes") processesViewer.resetScroll()
         else if (tab.view === "audio") audioViewer.resetScroll()
         else if (tab.view === "logs") logsViewer.resetScroll()
         else if (tab.view === "services") servicesViewer.resetScroll()
@@ -558,6 +580,8 @@ Item {
             runtimeViewer.ensureLoaded()
         } else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") {
             sysMonService.refresh()
+        } else if (tab.view === "processes") {
+            processesViewer.refresh()
         } else if (tab.view === "audio") {
             audioViewer.refresh()
         } else if (tab.view === "logs") {
@@ -595,6 +619,7 @@ Item {
         if (tab.view === "system" && systemDirty) refreshSystemInfo()
         else if (tab.view === "runtime") runtimeViewer.ensureLoaded()
         else if (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature") sysMonService.refresh()
+        else if (tab.view === "processes") processesViewer.refresh()
         else if (tab.view === "audio") audioViewer.refresh()
         else if (tab.view === "logs") logsViewer.refresh(false)
         else if (tab.view === "services") servicesViewer.refresh()
@@ -972,6 +997,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.pageScroll(direction)
         else if (tab.view === "memory") memoryViewer.pageScroll(direction)
         else if (tab.view === "temperature") tempViewer.pageScroll(direction)
+        else if (tab.view === "processes") processesViewer.pageScroll(direction)
         else if (tab.view === "audio") audioViewer.pageScroll(direction)
         else if (tab.view === "logs") logsViewer.pageScroll(direction)
         else if (tab.view === "services") servicesViewer.pageScroll(direction)
@@ -990,6 +1016,7 @@ Item {
         else if (tab.view === "gpu") gpuViewer.lineScroll(direction)
         else if (tab.view === "memory") memoryViewer.lineScroll(direction)
         else if (tab.view === "temperature") tempViewer.lineScroll(direction)
+        else if (tab.view === "processes") processesViewer.lineScroll(direction)
         else if (tab.view === "audio") audioViewer.lineScroll(direction)
         else if (tab.view === "logs") logsViewer.lineScroll(direction)
         else if (tab.view === "services") servicesViewer.lineScroll(direction)
@@ -1659,6 +1686,24 @@ Item {
                         gaugeHighColor: th.gaugeHigh
                     }
 
+                    ProcessMonitorView {
+                        id: processesViewer
+                        visible: root.currentTabInfo.view === "processes"
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        active: inspectorWindow.visible && root.currentTabInfo.view === "processes"
+                        globalFilter: root.globalFilter
+                        service: sysMonService
+                        textColor: root.text
+                        subtextColor: root.subtext
+                        accentColor: root.accent
+                        surfaceColor: root.surface
+                        overlayColor: root.overlay
+                        okColor: th.gaugeLow
+                        warnColor: th.gaugeMid
+                        errorColor: th.gaugeHigh
+                    }
+
                     AudioMonitorView {
                         id: audioViewer
                         visible: root.currentTabInfo.view === "audio"
@@ -1843,6 +1888,8 @@ Item {
                         property int _cpuTempTick: sysMonService.cpuTempHistory.length
                         property int _gpuTempTick: sysMonService.gpuTempHistory.length
                         property var _cpuData: sysMonService.data
+                        property int _procTick: processesViewer.dataVersion
+                        property int _procSel: processesViewer.selectedPid
                         property int _logsTick: logsViewer.contentVersion
                         property string _logsSource: logsViewer.selectedSourceId
                         property bool _logsLive: logsViewer.liveTail
@@ -1872,7 +1919,27 @@ Item {
                     }
 
                     Rectangle {
-                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "temperature" || root.currentTabInfo.view === "audio" || root.currentTabInfo.view === "logs" || root.currentTabInfo.view === "services"
+                        visible: root.currentTabInfo.view === "processes"
+                        width: 58
+                        height: 22
+                        radius: 5
+                        color: copyAllProcMa.containsMouse ? root.surface : "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(1,1,1,0.1)
+                        opacity: processesViewer.filteredProcesses().length > 0 ? 1 : 0.35
+                        Text { anchors.centerIn: parent; text: "Copy All"; color: root.accent; font.pixelSize: 12 }
+                        MouseArea {
+                            id: copyAllProcMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: processesViewer.filteredProcesses().length > 0
+                            onClicked: processesViewer.copyAll()
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.currentTabInfo.view === "system" || root.currentTabInfo.view === "runtime" || root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "temperature" || root.currentTabInfo.view === "processes" || root.currentTabInfo.view === "audio" || root.currentTabInfo.view === "logs" || root.currentTabInfo.view === "services"
                         width: 68
                         height: 22
                         radius: 5
@@ -1888,6 +1955,7 @@ Item {
                             onClicked: {
                                 if (root.currentTabInfo.view === "runtime") runtimeViewer.refreshCategory()
                                 else if (root.currentTabInfo.view === "cpu" || root.currentTabInfo.view === "gpu" || root.currentTabInfo.view === "memory" || root.currentTabInfo.view === "temperature") sysMonService.refresh()
+                                else if (root.currentTabInfo.view === "processes") processesViewer.refresh()
                                 else if (root.currentTabInfo.view === "audio") audioViewer.refresh()
                                 else if (root.currentTabInfo.view === "logs") logsViewer.refresh(true)
                                 else if (root.currentTabInfo.view === "services") servicesViewer.refresh()

@@ -69,8 +69,10 @@ swap_used_mib=$(( swap_used / 1024 ))
 ram_pct=$(awk "BEGIN { printf \"%.1f\", ($ram_used_mib * 100.0) / $ram_total_mib }")
 swap_pct=$(awk "BEGIN { if ($swap_total_mib > 0) printf \"%.1f\", ($swap_used_mib * 100.0) / $swap_total_mib; else print \"0.0\" }")
 
-# ---------- Load Average + Uptime ----------
+# ---------- Load Average + Uptime + Process counts (lightweight, for Processes tab summary) ----------
 load_avg=$(awk '{print $1","$2","$3}' /proc/loadavg)
+proc_running=$(awk '{split($4,a,"/"); print a[1]+0}' /proc/loadavg 2>/dev/null || echo 0)
+proc_total=$(awk '{split($4,a,"/"); print a[2]+0}' /proc/loadavg 2>/dev/null || echo 0)
 uptime_s=$(awk '{print int($1)}' /proc/uptime)
 
 # ---------- NVIDIA GPU (RTX 5080) ----------
@@ -483,6 +485,8 @@ jq -cn \
   --argjson swap_total_mib "$swap_total_mib" \
   --argjson swap_pct "$swap_pct" \
   --arg load_str "$load_avg" \
+  --argjson proc_running "$proc_running" \
+  --argjson proc_total "$proc_total" \
   --argjson uptime "$uptime_s" \
   --arg net_iface "${net_iface:-unknown}" \
   --argjson net_rx_rate "$net_rx_rate" \
@@ -526,6 +530,7 @@ jq -cn \
       swap_used: $swap_used_mib, swap_total: $swap_total_mib, swap_pct: $swap_pct
     },
     load: ($load_str | split(",") | map(tonumber)),
+    process_stats: { running: $proc_running, total: $proc_total },
     uptime: $uptime,
     network: { iface: $net_iface, rx_rate: $net_rx_rate, tx_rate: $net_tx_rate },
     disk: {
