@@ -16,7 +16,7 @@ import Quickshell.Io as Io
 //   │   ├─ Header: hyprctl version + os-release (headerProcess)           │
 //   │   ├─ Tab bar: `tabs` model → activateTab() → one visible viewer     │
 //   │   ├─ Global search: globalFilter → per-tab filter functions         │
-//   │   └─ Footer: statusText() + contextual actions (Edit/Reload/Copy)   │
+//   │   └─ Footer: statusText() + contextual actions (Copy / Refresh / Edit)   │
 //   └─────────────────────────────────────────────────────────────────────┘
 //
 // Data sources (by tab view id — see `tabs` array):
@@ -43,7 +43,7 @@ import Quickshell.Io as Io
 //
 // Features:
 //   - Parsed tabs: Key Bindings, Environment, Runtime Options, Config Files, sysmon tabs, Audio, Logs, Services, System Info
-//   - Edit (kitty nano) and Reload per config file tab
+//   - Edit (kitty nano, Ctrl+E) per config file tab; Refresh All reloads everything
 //   - Global search (Ctrl+F, Esc), edit file (Ctrl+E on tabs with Edit), Tab/Shift+Tab, PgUp/PgDown/arrow scroll
 //   - Resizable FloatingWindow (title: "Hyprland Config Inspector")
 // =============================================================================
@@ -2095,24 +2095,6 @@ Item {
                         }
                     }
 
-                    Rectangle {
-                        visible: root.hasConfigFile
-                        Layout.leftMargin: 6
-                        width: 68
-                        height: th.inspFooterButtonHeight
-                        radius: th.inspFooterButtonRadius
-                        color: refLuaMa.containsMouse ? root.surface : "transparent"
-                        border.width: 1
-                        border.color: th.pillBorder
-                        Text { anchors.centerIn: parent; text: "Reload"; color: root.accent; font.pixelSize: root.inspStatusFontSize }
-                        MouseArea {
-                            id: refLuaMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.refreshCurrentTab()
-                        }
-                    }
                 }
             }
 

@@ -465,7 +465,7 @@ QtObject {
     readonly property int inspCloseButtonSize:    28
     readonly property color inspHeaderDivider: divider
 
-    // --- Footer (status line + action chips: Copy, Refresh, Edit, Reload)
+    // --- Footer (status line + action chips: Copy, Refresh, Edit)
     readonly property int inspStatusFontSize: 12
     readonly property int inspFooterButtonHeight: 22
     readonly property int inspFooterButtonRadius:  5
