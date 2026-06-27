@@ -10,6 +10,53 @@ Personal Hyprland status bar built with [Quickshell](https://quickshell.org), pl
 | `components/` | Inspector tab views and reusable UI pieces |
 | `scripts/` | Shell pollers and control helpers |
 | `Theme.qml` | Global colors, spacing, and inspector tokens |
+| `widgets/*.qml` | Status bar pills and popups |
+
+---
+
+## Status bar
+
+The top (or bottom) Hyprland panel is a glassmorphic Quickshell `PanelWindow` defined in `shell.qml`. Widgets are grouped into **left**, **center**, and **right** zones. Each pill is a self-contained file under `widgets/` and reads colors, spacing, and fonts from `Theme.qml` via the shared `bar` object.
+
+Bar position and edge gap are set in `Theme.qml` (`barPosition`: `"top"` or `"bottom"`, `barHeight`, `barEdgeMargin`). To rearrange widgets, cut and paste the marked blocks in `shell.qml` between the left, center, and right zones — no changes inside the widget files are required.
+
+### Layout (default)
+
+| Zone | Widgets (left → right) |
+|------|-------------------------|
+| **Left** | App Launcher, Quick Launch, Media Player |
+| **Center** | Workspaces |
+| **Right** | System Stats, System Tray, Audio, Clock, Notifications, Power |
+
+### Bar widgets
+
+| Widget | File | Description |
+|--------|------|-------------|
+| **App Launcher** | `shell.qml` (inline) | Opens the Rofi app drawer (`~/.local/bin/rofi-app-drawer`) |
+| **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps (VSCodium, Firefox, Logseq, LM Studio) |
+| **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
+| **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills; click to switch, scroll wheel to move between workspaces |
+| **System Stats** | `SysStatsPill.qml` | CPU and GPU utilization + temperature gauges. Left-click CPU opens `btop` in a terminal; left-click GPU opens `nvtop`. Hides automatically while media is playing |
+| **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
+| **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel adjustment, and device selection popup (PipeWire) |
+| **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup |
+| **Notifications** | `NotificationBell.qml` | SwayNC notification bell with unread badge. Left-click toggles the notification center; right-click toggles Do Not Disturb |
+| **Power** | `PowerMenu.qml` | Session menu — lock, logout, reboot, shutdown, and enter BIOS |
+
+The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
+
+### Bar widget visibility (IPC)
+
+Some widgets can be shown or hidden at runtime:
+
+```bash
+qs ipc call shell setShowMediaWidget true
+qs ipc call shell setShowStatsWidget false
+qs ipc call shell toggleShowMediaWidget
+qs ipc call shell toggleShowStatsWidget
+```
+
+By default, **Media Player** is off and **System Stats** is on. Run `qs ipc show` for the full IPC list.
 
 ---
 
