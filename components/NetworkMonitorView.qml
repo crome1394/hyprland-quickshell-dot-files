@@ -12,8 +12,6 @@ Item {
 
     property bool active: false
     property string globalFilter: ""
-    property bool showGraphs: false
-
     property color textColor: "#cdd6f4"
     property color subtextColor: "#a6adc8"
     property color accentColor: "#89b4fa"
@@ -42,6 +40,7 @@ Item {
     readonly property int dnsListMinHeight: 36
     readonly property int firewallScrollHeight: 28
     readonly property int fwRowHeight: root.cardMargin * 2 + 18 + 11 + root.firewallScrollHeight + root.panelTailPad
+    readonly property int activeConnTileWidth: narrowLayout ? 136 : 164
     readonly property int connTableViewportHeight: maxTableRows * connRowHeight + Math.max(0, maxTableRows - 1) * 2
     readonly property int procTableViewportHeight: maxTableRows * rowHeight + Math.max(0, maxTableRows - 1) * 2
     readonly property int connPanelHeight: root.cardMargin * 2 + 18 + 10 + root.headerHeight + connTableViewportHeight + root.panelTailPad
@@ -67,7 +66,7 @@ Item {
         right += sectionSpacing + connPanelHeight
         return Math.max(left, right)
     }
-    readonly property int staticBlockMinHeight: staticColumnsMinHeight + sectionSpacing + fwRowHeight
+    readonly property int staticBlockMinHeight: staticColumnsMinHeight
     readonly property int graphsSectionPreferred: Math.max(56, Math.round(height * 0.18))
 
     readonly property var netData: service && service.data && service.data.network ? service.data.network : ({})
@@ -357,6 +356,13 @@ Item {
         Qt.callLater(function() {
             if (root.copyHint === "Copied") root.copyHint = ""
         }, 1200)
+    }
+
+    function openTerminal() {
+        Quickshell.execDetached([
+            "sh", "-c",
+            'exec "${TERMINAL:-kitty}"'
+        ])
     }
 
     function copySummaryText() {
@@ -681,107 +687,121 @@ Item {
             property int _netTick: service ? service.netRxHistory.length : 0
             property var _dataBind: service ? service.data : ({})
 
-            // --- Summary ---
-            Rectangle {
+            // --- Summary + Firewall (left) | Active Connections (right rail) ---
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: summaryInner.implicitHeight + root.cardMargin * 2
-                radius: root.cardRadius
-                color: root.surfaceColor
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.08)
+                spacing: root.sectionSpacing
 
                 ColumnLayout {
-                    id: summaryInner
-                    anchors.fill: parent
-                    anchors.margins: root.cardMargin
-                    spacing: root.panelSpacing
+                    Layout.fillWidth: true
+                    spacing: root.sectionSpacing
 
-                    SectionBar {
-                        title: "NETWORK SUMMARY"
-                        copyPayload: root.copySummaryText()
-                    }
-
-                    RowLayout {
+                    Rectangle {
                         Layout.fillWidth: true
-                        spacing: 8
+                        Layout.preferredHeight: summaryInner.implicitHeight + root.cardMargin * 2
+                        radius: root.cardRadius
+                        color: root.surfaceColor
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.08)
 
                         ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 1
-                            Text {
-                                text: (netData.iface || "—") + "  ·  Gateway " + (netData.gateway || "—")
-                                    + "  ·  " + (connStats.tcp_established || 0) + " TCP est"
-                                color: root.subtextColor
-                                font.pixelSize: 10
-                                font.family: "monospace"
-                                wrapMode: Text.Wrap
-                                Layout.fillWidth: true
-                            }
-                            Text {
-                                text: "Local IP: " + localIpLabel() + "  ·  Public IP: " + publicIpLabel()
-                                color: root.subtextColor
-                                font.pixelSize: 10
-                                font.family: "monospace"
-                                wrapMode: Text.Wrap
-                                Layout.fillWidth: true
-                            }
-                        }
+                            id: summaryInner
+                            anchors.fill: parent
+                            anchors.margins: root.cardMargin
+                            spacing: root.panelSpacing
 
-                        ColumnLayout {
-                            spacing: 1
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                            Text {
-                                text: "↓ " + formatRate(netData.rx_rate)
-                                color: root.okColor
-                                font.pixelSize: 12
-                                font.bold: true
-                                font.family: "monospace"
+                            SectionBar {
+                                title: "NETWORK SUMMARY"
+                                copyPayload: root.copySummaryText()
                             }
-                            Text {
-                                text: "↑ " + formatRate(netData.tx_rate)
-                                color: root.accentColor
-                                font.pixelSize: 12
-                                font.bold: true
-                                font.family: "monospace"
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 1
+                                    Text {
+                                        text: (netData.iface || "—") + "  ·  Gateway " + (netData.gateway || "—")
+                                            + "  ·  " + (connStats.tcp_established || 0) + " TCP est"
+                                        color: root.subtextColor
+                                        font.pixelSize: 10
+                                        font.family: "monospace"
+                                        wrapMode: Text.Wrap
+                                        Layout.fillWidth: true
+                                    }
+                                    Text {
+                                        text: "Local IP: " + localIpLabel() + "  ·  Public IP: " + publicIpLabel()
+                                        color: root.subtextColor
+                                        font.pixelSize: 10
+                                        font.family: "monospace"
+                                        wrapMode: Text.Wrap
+                                        Layout.fillWidth: true
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    spacing: 1
+                                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                                    Text {
+                                        text: "↓ " + formatRate(netData.rx_rate)
+                                        color: root.okColor
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: "monospace"
+                                    }
+                                    Text {
+                                        text: "↑ " + formatRate(netData.tx_rate)
+                                        color: root.accentColor
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: "monospace"
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                Rectangle {
+                                    width: openTermMa.containsMouse ? 102 : 98
+                                    height: 22
+                                    radius: 4
+                                    color: openTermMa.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                                    border.width: 1
+                                    border.color: Qt.rgba(1, 1, 1, 0.14)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "Open Terminal"
+                                        color: root.accentColor
+                                        font.pixelSize: 9
+                                        font.family: "monospace"
+                                    }
+                                    MouseArea {
+                                        id: openTermMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.openTerminal()
+                                    }
+                                }
+                                Text {
+                                    visible: copyHint.length > 0
+                                    text: copyHint
+                                    color: root.okColor
+                                    font.pixelSize: 9
+                                    font.family: "monospace"
+                                }
+                                Item { Layout.fillWidth: true }
                             }
                         }
                     }
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        Rectangle {
-                            width: graphsToggleMa.containsMouse ? 96 : 92
-                            height: 22
-                            radius: 4
-                            color: graphsToggleMa.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
-                            border.width: 1
-                            border.color: Qt.rgba(1, 1, 1, 0.14)
-                            Text {
-                                anchors.centerIn: parent
-                                text: root.showGraphs ? "Hide Graphs" : "Show Graphs"
-                                color: root.accentColor
-                                font.pixelSize: 9
-                                font.family: "monospace"
-                            }
-                            MouseArea {
-                                id: graphsToggleMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.showGraphs = !root.showGraphs
-                            }
-                        }
-                        Text {
-                            visible: copyHint.length > 0
-                            text: copyHint
-                            color: root.okColor
-                            font.pixelSize: 9
-                            font.family: "monospace"
-                        }
-                        Item { Layout.fillWidth: true }
-                    }
+                    FirewallCard {}
                 }
+
+                ActiveConnCard {}
             }
 
             // --- VPN ---
@@ -841,8 +861,6 @@ Item {
                     width: contentCol.width
                     spacing: root.sectionSpacing
 
-                    FwConnRow {}
-
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -873,7 +891,6 @@ Item {
                     width: contentCol.width
                     spacing: root.sectionSpacing
 
-                    FwConnRow {}
                     StaticLeftPanels {}
                     StaticRightPanels {}
                     ConnTableCard {}
@@ -881,13 +898,11 @@ Item {
                 }
             }
 
-            // --- Bandwidth graphs (bottom, optional) ---
+            // --- Bandwidth graphs (bottom, always visible) ---
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.showGraphs ? root.graphsSectionPreferred : 0
-                Layout.maximumHeight: root.showGraphs ? root.graphsSectionPreferred : 0
-                Layout.minimumHeight: root.showGraphs ? root.graphsMinHeight : 0
-                visible: root.showGraphs
+                Layout.preferredHeight: root.graphsSectionPreferred
+                Layout.minimumHeight: root.graphsMinHeight
                 spacing: root.sectionSpacing
 
                 Rectangle {
@@ -984,38 +999,32 @@ Item {
         }
     }
 
-    component FwConnRow: RowLayout {
+    component FirewallCard: Rectangle {
         Layout.fillWidth: true
         Layout.preferredHeight: root.fwRowHeight
         Layout.maximumHeight: root.fwRowHeight
-        spacing: root.sectionSpacing
+        radius: root.cardRadius
+        color: root.surfaceColor
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            radius: root.cardRadius
-            color: root.surfaceColor
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.08)
-
-            FirewallPanel {
-                anchors.fill: parent
-                anchors.margins: root.cardMargin
-            }
+        FirewallPanel {
+            anchors.fill: parent
+            anchors.margins: root.cardMargin
         }
+    }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            radius: root.cardRadius
-            color: root.surfaceColor
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.08)
+    component ActiveConnCard: Rectangle {
+        Layout.preferredWidth: root.activeConnTileWidth
+        Layout.fillHeight: true
+        radius: root.cardRadius
+        color: root.surfaceColor
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.08)
 
-            ActiveConnectionsTile {
-                anchors.fill: parent
-                anchors.margins: root.cardMargin
-            }
+        ActiveConnectionsTile {
+            anchors.fill: parent
+            anchors.margins: root.cardMargin
         }
     }
 
@@ -1503,90 +1512,102 @@ Item {
             copyPayload: root.copyConnStatsText()
         }
 
-        RowLayout {
+        Item {
             Layout.fillWidth: true
-            spacing: 6
+            Layout.fillHeight: true
 
             ColumnLayout {
-                Layout.preferredWidth: 44
-                spacing: 0
+                anchors.centerIn: parent
+                width: parent.width
+                spacing: root.panelSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    ColumnLayout {
+                        Layout.preferredWidth: 44
+                        spacing: 0
+
+                        Text {
+                            text: String(connStats.tcp_established || 0)
+                            color: root.okColor
+                            font.pixelSize: 18
+                            font.bold: true
+                            font.family: "monospace"
+                        }
+                        Text {
+                            text: "estab"
+                            color: root.overlayColor
+                            font.pixelSize: 7
+                            font.family: "monospace"
+                        }
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 2
+                        columnSpacing: 4
+                        rowSpacing: 1
+
+                        Text {
+                            text: "TCP"
+                            color: root.overlayColor
+                            font.pixelSize: 8
+                            font.family: "monospace"
+                        }
+                        Text {
+                            text: String(connStats.tcp_total || 0)
+                            color: root.subtextColor
+                            font.pixelSize: 9
+                            font.family: "monospace"
+                            horizontalAlignment: Text.AlignRight
+                            Layout.fillWidth: true
+                        }
+                        Text {
+                            text: "UDP"
+                            color: root.overlayColor
+                            font.pixelSize: 8
+                            font.family: "monospace"
+                        }
+                        Text {
+                            text: String(connStats.udp || 0)
+                            color: root.subtextColor
+                            font.pixelSize: 9
+                            font.family: "monospace"
+                            horizontalAlignment: Text.AlignRight
+                            Layout.fillWidth: true
+                        }
+                        Text {
+                            text: "Total"
+                            color: root.overlayColor
+                            font.pixelSize: 8
+                            font.family: "monospace"
+                        }
+                        Text {
+                            text: String(connStats.total || 0)
+                            color: root.textColor
+                            font.pixelSize: 9
+                            font.bold: true
+                            font.family: "monospace"
+                            horizontalAlignment: Text.AlignRight
+                            Layout.fillWidth: true
+                        }
+                    }
+                }
 
                 Text {
-                    text: String(connStats.tcp_established || 0)
-                    color: root.okColor
-                    font.pixelSize: 18
-                    font.bold: true
-                    font.family: "monospace"
-                }
-                Text {
-                    text: "estab"
+                    Layout.fillWidth: true
+                    visible: root._privilegedFetched
+                    text: "in table: " + root.privilegedConnCount
                     color: root.overlayColor
-                    font.pixelSize: 7
+                    font.pixelSize: 8
                     font.family: "monospace"
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
                 }
             }
-
-            GridLayout {
-                Layout.fillWidth: true
-                columns: 2
-                columnSpacing: 4
-                rowSpacing: 1
-
-                Text {
-                    text: "TCP"
-                    color: root.overlayColor
-                    font.pixelSize: 8
-                    font.family: "monospace"
-                }
-                Text {
-                    text: String(connStats.tcp_total || 0)
-                    color: root.subtextColor
-                    font.pixelSize: 9
-                    font.family: "monospace"
-                    horizontalAlignment: Text.AlignRight
-                    Layout.fillWidth: true
-                }
-                Text {
-                    text: "UDP"
-                    color: root.overlayColor
-                    font.pixelSize: 8
-                    font.family: "monospace"
-                }
-                Text {
-                    text: String(connStats.udp || 0)
-                    color: root.subtextColor
-                    font.pixelSize: 9
-                    font.family: "monospace"
-                    horizontalAlignment: Text.AlignRight
-                    Layout.fillWidth: true
-                }
-                Text {
-                    text: "Total"
-                    color: root.overlayColor
-                    font.pixelSize: 8
-                    font.family: "monospace"
-                }
-                Text {
-                    text: String(connStats.total || 0)
-                    color: root.textColor
-                    font.pixelSize: 9
-                    font.bold: true
-                    font.family: "monospace"
-                    horizontalAlignment: Text.AlignRight
-                    Layout.fillWidth: true
-                }
-            }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            visible: root._privilegedFetched
-            text: "in table: " + root.privilegedConnCount
-            color: root.overlayColor
-            font.pixelSize: 8
-            font.family: "monospace"
-            elide: Text.ElideRight
-            maximumLineCount: 1
         }
     }
 
