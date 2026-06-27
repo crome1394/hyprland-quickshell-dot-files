@@ -70,9 +70,12 @@ Item {
     property int _actionIndex: 0
     property string _pendingAction: ""
     property bool killConfirmVisible: false
-    property int lastUpdatedMs: 0
+    property string lastUpdatedLabel: ""
+    property int lastUpdatedVersion: 0
     property var expandedGroups: ({})
     property int groupStateVersion: 0
+    property bool groupedView: true
+    property int viewModeVersion: 0
 
     readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
     readonly property int groupIndent: 14
@@ -148,7 +151,7 @@ Item {
     }
 
     function toggleGroup(key) {
-        if (!key) return
+        if (!key || !groupedView) return
         const next = Object.assign({}, expandedGroups)
         if (next[key])
             delete next[key]
@@ -156,6 +159,12 @@ Item {
             next[key] = true
         expandedGroups = next
         groupStateVersion++
+        Qt.callLater(function() { root.refreshColumnLayout(procFlickable.width) })
+    }
+
+    function toggleGroupedView() {
+        groupedView = !groupedView
+        viewModeVersion++
         Qt.callLater(function() { root.refreshColumnLayout(procFlickable.width) })
     }
 
@@ -233,12 +242,20 @@ Item {
 
     function displayRows() {
         const tick = dataVersion + "|" + sortKey + "|" + (highUsageOnly ? "1" : "0")
-            + "|" + globalFilter + "|" + groupStateVersion
+            + "|" + globalFilter + "|" + groupStateVersion + "|" + viewModeVersion
+            + "|" + (groupedView ? "1" : "0")
         void tick
 
         const procs = filteredProcesses()
         if (!procs.length)
             return []
+
+        if (!groupedView) {
+            const flat = []
+            for (let f = 0; f < procs.length; f++)
+                flat.push(processDisplayRow(procs[f], "process", 0))
+            return flat
+        }
 
         const metric = sortKey === "mem" ? "mem" : "cpu"
         const groups = {}
@@ -642,10 +659,9 @@ Item {
         return String(value)
     }
 
-    function formatLastUpdated() {
-        if (!lastUpdatedMs) return "—"
-        const d = new Date(lastUpdatedMs)
-        return Qt.formatDateTime(d, "MMM d, hh:mm:ss")
+    function stampLastUpdated() {
+        lastUpdatedLabel = Qt.formatDateTime(new Date(), "MMM d yyyy, h:mm:ss ap")
+        lastUpdatedVersion++
     }
 
     function summaryStats() {
@@ -694,6 +710,7 @@ Item {
 
     function refresh() {
         if (pollProcess.running || acting) return
+        stampLastUpdated()
         loading = true
         lastError = ""
         _loadHandled = false
@@ -703,14 +720,13 @@ Item {
 
     function finishPoll() {
         if (_loadHandled) return
-        _loadHandled = true
-        loading = false
 
         const raw = (pollStdout.text || "").trim()
-        if (!raw) {
-            lastError = "Empty response from process poller"
+        if (!raw)
             return
-        }
+
+        _loadHandled = true
+        loading = false
 
         try {
             const parsed = JSON.parse(raw)
@@ -721,7 +737,7 @@ Item {
             }
             processes = copy
             dataVersion++
-            lastUpdatedMs = parsed.timestamp ? Number(parsed.timestamp) : Date.now()
+            stampLastUpdated()
             pruneSelection()
             pruneExpandedGroups()
             lastError = ""
@@ -857,7 +873,15 @@ Item {
             id: pollStdout
             onStreamFinished: root.finishPoll()
         }
-        onExited: root.finishPoll()
+        onExited: Qt.callLater(function() {
+            root.finishPoll()
+            if (!root._loadHandled) {
+                root._loadHandled = true
+                root.loading = false
+                if (!(pollStdout.text || "").trim())
+                    root.lastError = "Empty response from process poller"
+            }
+        })
     }
 
     Io.Process {
@@ -927,9 +951,10 @@ Item {
                             property int _rows: root.dataVersion
                             property int _sel: root.selectionVersion
                             property int _grp: root.groupStateVersion
+                            property int _view: root.viewModeVersion
                             text: root.loading ? "Loading process list…"
                                 : ("Showing " + root.filteredProcesses().length + " processes"
-                                    + (root.groupedAppCount() > 0 ? ("  ·  " + root.groupedAppCount() + " groups") : "")
+                                    + (root.groupedView && root.groupedAppCount() > 0 ? ("  ·  " + root.groupedAppCount() + " groups") : "")
                                     + (root.hasSelection ? "  ·  " + root.selectionLabel() : ""))
                             color: root.overlayColor
                             font.pixelSize: 11
@@ -1025,6 +1050,30 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.highUsageOnly = !root.highUsageOnly
+                }
+            }
+
+            Rectangle {
+                width: groupViewLabel.implicitWidth + 16
+                height: 24
+                radius: 4
+                color: groupViewMa.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                border.width: 1
+                border.color: root.groupedView ? root.accentColor : Qt.rgba(1, 1, 1, 0.1)
+                Text {
+                    id: groupViewLabel
+                    anchors.centerIn: parent
+                    text: root.groupedView ? "Grouped" : "Ungrouped"
+                    color: root.groupedView ? root.accentColor : root.textColor
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                }
+                MouseArea {
+                    id: groupViewMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleGroupedView()
                 }
             }
 
@@ -1156,7 +1205,8 @@ Item {
 
                 property int _dataTick: root.dataVersion
                 property int _colTick: root.colLayoutVersion
-                property string _filterTick: root.globalFilter + "|" + root.sortKey + "|" + (root.highUsageOnly ? "1" : "0") + "|" + root.groupStateVersion
+                property string _filterTick: root.globalFilter + "|" + root.sortKey + "|" + (root.highUsageOnly ? "1" : "0")
+                    + "|" + root.groupStateVersion + "|" + root.viewModeVersion + "|" + (root.groupedView ? "1" : "0")
 
                 focus: true
 
@@ -1260,6 +1310,7 @@ Item {
                     }
 
                     Repeater {
+                        property int _viewTick: root.viewModeVersion
                         model: root.displayRows()
                         delegate: Item {
                             id: rowRoot
@@ -1532,8 +1583,10 @@ Item {
             Layout.fillWidth: true
             Layout.topMargin: 2
             horizontalAlignment: Text.AlignRight
-            visible: root.lastUpdatedMs > 0
-            text: root.loading ? "Refreshing…" : ("Last updated: " + root.formatLastUpdated())
+            property int _updatedVer: root.lastUpdatedVersion
+            property bool _loading: root.loading
+            visible: root.lastUpdatedLabel.length > 0
+            text: _loading ? "Refreshing…" : ("Last updated: " + root.lastUpdatedLabel)
             color: root.overlayColor
             font.pixelSize: 10
             font.family: "monospace"

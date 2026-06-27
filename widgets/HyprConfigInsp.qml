@@ -358,9 +358,7 @@ Item {
         if (tab && (tab.view === "cpu" || tab.view === "gpu" || tab.view === "memory" || tab.view === "temperature")) {
             sysMonService.refresh()
         }
-        if (tab && tab.view === "processes") {
-            processesViewer.refresh()
-        }
+        processesViewer.refresh()
         if (tab && tab.view === "audio") {
             audioViewer.refresh()
         }
