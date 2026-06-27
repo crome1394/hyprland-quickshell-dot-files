@@ -16,7 +16,7 @@ import Quickshell.Io as Io
 //   - System info (fastfetch + clickable copy-to-clipboard values + logo)
 //   - Edit (kitty nano) and Reload per config file tab
 //   - Header: Hyprland version + distro; Refresh All; wrapping tab bar
-//   - Global search, tab scrollbar, PgUp/PgDown content scroll
+//   - Global search (Ctrl+F focus, Esc clear), tab scrollbar, PgUp/PgDown content scroll
 //   - Resizable FloatingWindow (title: "Hyprland Config Inspector")
 // =============================================================================
 
@@ -546,6 +546,28 @@ Item {
         else contentPanel.forceActiveFocus()
     }
 
+    function focusGlobalSearch() {
+        globalFilterField.forceActiveFocus()
+        globalFilterField.selectAll()
+    }
+
+    function clearGlobalSearch() {
+        globalFilterField.text = ""
+        globalFilter = ""
+    }
+
+    function handleEscapeKey() {
+        if (globalFilterField.activeFocus || (globalFilter && globalFilter.trim().length > 0)) {
+            clearGlobalSearch()
+            if (globalFilterField.activeFocus)
+                globalFilterField.forceActiveFocus()
+            else
+                focusActiveTabContent()
+            return
+        }
+        hide()
+    }
+
     function resetTabScroll(tab) {
         if (!tab) return
         if (tab.view === "binds") bindsFlickable.contentY = 0
@@ -1032,7 +1054,13 @@ Item {
         Shortcut {
             sequence: "Escape"
             enabled: inspectorWindow.visible
-            onActivated: root.hide()
+            onActivated: root.handleEscapeKey()
+        }
+
+        Shortcut {
+            sequence: "Ctrl+F"
+            enabled: inspectorWindow.visible
+            onActivated: root.focusGlobalSearch()
         }
 
         Shortcut {
@@ -1306,6 +1334,16 @@ Item {
                             placeholderText: "Search all tabs..."
                             placeholderTextColor: root.overlay
                             onTextChanged: root.globalFilter = text
+                            Keys.onPressed: (event) => {
+                                if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_F) {
+                                    selectAll()
+                                    event.accepted = true
+                                } else if (event.key === Qt.Key_Escape) {
+                                    root.clearGlobalSearch()
+                                    event.accepted = true
+                                    root.focusActiveTabContent()
+                                }
+                            }
                             Keys.onTabPressed: (event) => {
                                 event.accepted = true
                                 root.nextTab()
