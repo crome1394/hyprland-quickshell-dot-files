@@ -32,6 +32,8 @@ Item {
     property var bar
     property real value: 0.0
     property var onSet: function(v){}
+    property bool dragging: false
+    property real localValue: value
 
     // === SLIDER STYLING FROM THEME (hybrid access) ===
     // Primary path: values from bar (preferred for consistency with the rest of the UI).
@@ -54,10 +56,17 @@ Item {
     height: implicitHeight
 
     onValueChanged: {
-        // Intentionally empty — presence of the handler forces observation for bindings.
+        if (!dragging)
+            localValue = value
     }
 
-    readonly property real effectiveValue: Math.max(0, Math.min(1, value))
+    readonly property real effectiveValue: Math.max(0, Math.min(1, localValue))
+
+    function applyFromMouse(mouse) {
+        var f = Math.max(0, Math.min(1, mouse.x / width))
+        localValue = f
+        root.onSet(f)
+    }
 
     // === Appearance ===
     // Track (background)
@@ -91,9 +100,17 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: (m) => {
-            var f = Math.max(0, Math.min(1, m.x / width));
-            root.onSet(f);
+        preventStealing: true
+        onPressed: (m) => {
+            root.dragging = true
+            root.applyFromMouse(m)
         }
+        onPositionChanged: (m) => {
+            if (pressed)
+                root.applyFromMouse(m)
+        }
+        onReleased: root.dragging = false
+        onCanceled: root.dragging = false
+        onClicked: (m) => root.applyFromMouse(m)
     }
 }

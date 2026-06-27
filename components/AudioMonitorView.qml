@@ -3,10 +3,13 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell.Io as Io
+import ".."
 
 // PulseAudio/PipeWire audio devices via pactl (sinks, sources, ports, defaults).
 Item {
     id: root
+
+    Theme { id: theme }
 
     property string globalFilter: ""
     property bool active: false
@@ -45,7 +48,7 @@ Item {
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10
     readonly property int sectionSpacing: 8
-    readonly property int deviceRowHeight: 58
+    readonly property int deviceRowHeight: 66
     readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
 
     function filterQuery() {
@@ -124,12 +127,34 @@ Item {
         return root.subtextColor
     }
 
-    function volumeBarColor(pct, mute) {
-        if (mute) return root.overlayColor
-        const v = Number(pct) || 0
-        if (v > 85) return root.errorColor
-        if (v > 65) return root.warnColor
-        return root.okColor
+    function scheduleVolumeRefresh() {
+        volumeRefreshTimer.restart()
+    }
+
+    function setSinkVolume(name, percent) {
+        if (!name) return
+        const pct = Math.max(0, Math.min(150, Math.round(percent)))
+        Quickshell.execDetached([root.controlScript, "set-volume", "sink", name, String(pct)])
+        scheduleVolumeRefresh()
+    }
+
+    function setSourceVolume(name, percent) {
+        if (!name) return
+        const pct = Math.max(0, Math.min(150, Math.round(percent)))
+        Quickshell.execDetached([root.controlScript, "set-volume", "source", name, String(pct)])
+        scheduleVolumeRefresh()
+    }
+
+    function toggleSinkMute(name) {
+        if (!name) return
+        Quickshell.execDetached([root.controlScript, "toggle-mute", "sink", name])
+        scheduleVolumeRefresh()
+    }
+
+    function toggleSourceMute(name) {
+        if (!name) return
+        Quickshell.execDetached([root.controlScript, "toggle-mute", "source", name])
+        scheduleVolumeRefresh()
     }
 
     function refresh() {
@@ -238,6 +263,13 @@ Item {
 
     onActiveChanged: {
         if (active && !(audioData.sinks && audioData.sinks.length)) refresh()
+    }
+
+    Timer {
+        id: volumeRefreshTimer
+        interval: 350
+        repeat: false
+        onTriggered: root.refresh()
     }
 
     Io.Process {
@@ -363,6 +395,13 @@ Item {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        spacing: 6
+                        Text {
+                            text: theme.iconSpeaker
+                            color: theme.audioSpeakerIcon
+                            font.pixelSize: 13
+                            font.family: theme.fontFamily
+                        }
                         Text {
                             text: "Output Devices"
                             color: root.accentColor
@@ -454,6 +493,7 @@ Item {
                                         : Qt.rgba(1, 1, 1, 0.05)
 
                                     MouseArea {
+                                        z: -1
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         onClicked: root.selectedSinkName = dev.name
@@ -480,7 +520,7 @@ Item {
 
                                             Text {
                                                 text: dev.mute ? "MUTED" : (Number(dev.volume_pct || 0).toFixed(0) + "%")
-                                                color: dev.mute ? root.warnColor : root.accentColor
+                                                color: dev.mute ? root.warnColor : theme.audioSpeakerUtilColor(Number(dev.volume_pct || 0))
                                                 font.pixelSize: 10
                                                 font.family: "monospace"
                                             }
@@ -518,17 +558,64 @@ Item {
                                             Layout.fillWidth: true
                                             spacing: 6
 
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 5
-                                                radius: 3
-                                                color: Qt.rgba(0, 0, 0, 0.25)
+                                            Text {
+                                                text: dev.mute ? theme.iconSpeakerMuted : theme.iconSpeaker
+                                                color: dev.mute ? theme.audioSpeakerIconMuted : theme.audioSpeakerIcon
+                                                font.pixelSize: 12
+                                                font.family: theme.fontFamily
+                                            }
 
-                                                Rectangle {
-                                                    width: parent.width * Math.min(1, Number(dev.volume_pct || 0) / 100)
-                                                    height: parent.height
-                                                    radius: 3
-                                                    color: root.volumeBarColor(dev.volume_pct, dev.mute)
+                                            Item {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 14
+
+                                                VolumeBar {
+                                                    id: sinkVolBar
+                                                    anchors.fill: parent
+                                                    value: Math.min(1, Number(dev.volume_pct || 0) / 100)
+                                                    onSet: function(v) {
+                                                        root.setSinkVolume(dev.name, Math.round(v * 100))
+                                                    }
+                                                }
+
+                                                Binding {
+                                                    target: sinkVolBar
+                                                    property: "fill"
+                                                    value: dev.mute
+                                                        ? theme.sliderFillMuted
+                                                        : theme.audioSpeakerUtilColor(
+                                                            sinkVolBar.dragging
+                                                                ? Math.round(sinkVolBar.localValue * 100)
+                                                                : Number(dev.volume_pct || 0))
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                Layout.preferredWidth: 44
+                                                Layout.preferredHeight: 18
+                                                radius: 4
+                                                color: sinkMuteMa.containsMouse
+                                                    ? (dev.mute ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.55, 0.70, 0.96, 0.22))
+                                                    : Qt.rgba(1, 1, 1, 0.04)
+                                                border.width: 1
+                                                border.color: dev.mute
+                                                    ? Qt.rgba(0.96, 0.89, 0.69, 0.35)
+                                                    : Qt.rgba(1, 1, 1, 0.1)
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: dev.mute ? "Unmute" : "Mute"
+                                                    color: dev.mute ? root.warnColor : root.subtextColor
+                                                    font.pixelSize: 8
+                                                    font.family: "monospace"
+                                                }
+
+                                                MouseArea {
+                                                    id: sinkMuteMa
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.toggleSinkMute(dev.name)
                                                 }
                                             }
 
@@ -614,6 +701,13 @@ Item {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        spacing: 6
+                        Text {
+                            text: theme.iconMic
+                            color: theme.audioMicIcon
+                            font.pixelSize: 13
+                            font.family: theme.fontFamily
+                        }
                         Text {
                             text: "Input Devices"
                             color: root.accentColor
@@ -694,6 +788,7 @@ Item {
                                         : Qt.rgba(1, 1, 1, 0.05)
 
                                     MouseArea {
+                                        z: -1
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         onClicked: root.selectedSourceName = dev.name
@@ -720,7 +815,7 @@ Item {
 
                                             Text {
                                                 text: dev.mute ? "MUTED" : (Number(dev.volume_pct || 0).toFixed(0) + "%")
-                                                color: dev.mute ? root.warnColor : root.accentColor
+                                                color: dev.mute ? root.warnColor : theme.audioMicUtilColor(Number(dev.volume_pct || 0))
                                                 font.pixelSize: 10
                                                 font.family: "monospace"
                                             }
@@ -758,17 +853,64 @@ Item {
                                             Layout.fillWidth: true
                                             spacing: 6
 
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 5
-                                                radius: 3
-                                                color: Qt.rgba(0, 0, 0, 0.25)
+                                            Text {
+                                                text: dev.mute ? theme.iconMicMuted : theme.iconMic
+                                                color: dev.mute ? theme.audioMicIconMuted : theme.audioMicIcon
+                                                font.pixelSize: 12
+                                                font.family: theme.fontFamily
+                                            }
 
-                                                Rectangle {
-                                                    width: parent.width * Math.min(1, Number(dev.volume_pct || 0) / 100)
-                                                    height: parent.height
-                                                    radius: 3
-                                                    color: root.volumeBarColor(dev.volume_pct, dev.mute)
+                                            Item {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 14
+
+                                                VolumeBar {
+                                                    id: srcVolBar
+                                                    anchors.fill: parent
+                                                    value: Math.min(1, Number(dev.volume_pct || 0) / 100)
+                                                    onSet: function(v) {
+                                                        root.setSourceVolume(dev.name, Math.round(v * 100))
+                                                    }
+                                                }
+
+                                                Binding {
+                                                    target: srcVolBar
+                                                    property: "fill"
+                                                    value: dev.mute
+                                                        ? theme.sliderFillMuted
+                                                        : theme.audioMicUtilColor(
+                                                            srcVolBar.dragging
+                                                                ? Math.round(srcVolBar.localValue * 100)
+                                                                : Number(dev.volume_pct || 0))
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                Layout.preferredWidth: 44
+                                                Layout.preferredHeight: 18
+                                                radius: 4
+                                                color: srcMuteMa.containsMouse
+                                                    ? (dev.mute ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.55, 0.70, 0.96, 0.22))
+                                                    : Qt.rgba(1, 1, 1, 0.04)
+                                                border.width: 1
+                                                border.color: dev.mute
+                                                    ? Qt.rgba(0.96, 0.89, 0.69, 0.35)
+                                                    : Qt.rgba(1, 1, 1, 0.1)
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: dev.mute ? "Unmute" : "Mute"
+                                                    color: dev.mute ? root.warnColor : root.subtextColor
+                                                    font.pixelSize: 8
+                                                    font.family: "monospace"
+                                                }
+
+                                                MouseArea {
+                                                    id: srcMuteMa
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.toggleSourceMute(dev.name)
                                                 }
                                             }
 
