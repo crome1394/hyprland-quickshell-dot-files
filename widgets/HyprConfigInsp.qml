@@ -968,21 +968,39 @@ Item {
     function envKeyColor(key) { return th.inspEnvKeyColor(key) }
     function envValueColor(key, value) { return th.inspEnvValueColor(key, value) }
 
-    // Environment table column widths (ratios from Theme.inspEnvVarCol*)
+    // Environment table column widths (ratios from Theme.inspEnv*)
     function envTableContentWidth(totalWidth) {
         return Math.max(0, totalWidth - envTableSideMargin * 2)
     }
 
+    function envUsableInnerWidth(totalWidth) {
+        return Math.max(0, envTableContentWidth(totalWidth) - envTableColSpacing * 2)
+    }
+
     function envVariableColumnWidth(totalWidth) {
-        const usable = envTableContentWidth(totalWidth) - envTableColSpacing
+        const usable = envUsableInnerWidth(totalWidth)
         const target = Math.round(usable * th.inspEnvVarColRatio)
         return Math.max(th.inspEnvVarColMinWidth, Math.min(target, th.inspEnvVarColMaxWidth))
     }
 
     function envValueColumnWidth(totalWidth) {
-        const usable = envTableContentWidth(totalWidth) - envTableColSpacing
-        const remaining = usable - envVariableColumnWidth(totalWidth)
-        return Math.max(th.inspEnvValueColMinWidth, remaining)
+        const usable = envUsableInnerWidth(totalWidth)
+        const target = Math.round(usable * th.inspEnvValueColRatio)
+        return Math.max(th.inspEnvValueColMinWidth, Math.min(target, th.inspEnvValueColMaxWidth))
+    }
+
+    function envDescriptionColumnWidth(totalWidth) {
+        const usable = envUsableInnerWidth(totalWidth)
+        return Math.max(th.inspEnvDescColMinWidth,
+            usable - envVariableColumnWidth(totalWidth) - envValueColumnWidth(totalWidth))
+    }
+
+    function envTableWidth(viewportWidth) {
+        return envTableSideMargin * 2
+            + envVariableColumnWidth(viewportWidth)
+            + envValueColumnWidth(viewportWidth)
+            + envDescriptionColumnWidth(viewportWidth)
+            + envTableColSpacing * 2
     }
 
     function refreshSystemInfo() {
@@ -1670,6 +1688,8 @@ Item {
                         anchors.margins: 10
                         property int _envTick: root.fileContentsVersion
                         property string _filterTick: root.globalFilter
+                        flickableDirection: Flickable.VerticalFlick | Flickable.HorizontalFlick
+                        contentWidth: root.envTableWidth(width)
                         contentHeight: Math.max(envCol.implicitHeight, 1)
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
@@ -1677,9 +1697,18 @@ Item {
 
                         WheelHandler {
                             onWheel: function(event) {
-                                const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
-                                if (delta === 0) return
-                                root.flickableWheelScroll(envFlickable, delta)
+                                const deltaY = event.angleDelta.y
+                                const deltaX = event.angleDelta.x
+                                if (deltaY !== 0) {
+                                    root.flickableWheelScroll(envFlickable, deltaY)
+                                } else if (deltaX !== 0) {
+                                    const maxX = Math.max(0, envFlickable.contentWidth - envFlickable.width)
+                                    if (maxX > 0) {
+                                        const ticks = deltaX / 120
+                                        envFlickable.contentX = Math.max(0, Math.min(maxX,
+                                            envFlickable.contentX - ticks * 42))
+                                    }
+                                }
                                 event.accepted = true
                             }
                         }
@@ -1695,9 +1724,20 @@ Item {
                             }
                         }
 
+                        ScrollBar.horizontal: ScrollBar {
+                            id: envHScrollBar
+                            policy: envFlickable.contentWidth > envFlickable.width + 1
+                                ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                            contentItem: Rectangle {
+                                implicitHeight: root.inspScrollBarWidth
+                                radius: root.inspScrollBarRadius
+                                color: envHScrollBar.pressed ? root.accent : root.inspScrollBarIdle
+                            }
+                        }
+
                         Column {
                             id: envCol
-                            width: parent.width
+                            width: root.envTableWidth(envFlickable.width)
                             spacing: 8
 
                             Rectangle {
@@ -1713,9 +1753,9 @@ Item {
                                     spacing: root.envTableColSpacing
 
                                     Text {
-                                        Layout.preferredWidth: root.envVariableColumnWidth(parent.width)
-                                        Layout.minimumWidth: root.envVariableColumnWidth(parent.width)
-                                        Layout.maximumWidth: root.envVariableColumnWidth(parent.width)
+                                        Layout.preferredWidth: root.envVariableColumnWidth(envFlickable.width)
+                                        Layout.minimumWidth: root.envVariableColumnWidth(envFlickable.width)
+                                        Layout.maximumWidth: root.envVariableColumnWidth(envFlickable.width)
                                         text: "Variable"
                                         color: root.accent
                                         font.pixelSize: 12
@@ -1723,15 +1763,24 @@ Item {
                                         font.family: root.fontMono
                                     }
                                     Text {
-                                        Layout.preferredWidth: root.envValueColumnWidth(parent.width)
-                                        Layout.minimumWidth: root.envValueColumnWidth(parent.width)
-                                        Layout.maximumWidth: root.envValueColumnWidth(parent.width)
+                                        Layout.preferredWidth: root.envValueColumnWidth(envFlickable.width)
+                                        Layout.minimumWidth: root.envValueColumnWidth(envFlickable.width)
+                                        Layout.maximumWidth: root.envValueColumnWidth(envFlickable.width)
                                         text: "Value"
                                         color: root.accent
                                         font.pixelSize: 12
                                         font.bold: true
                                         font.family: root.fontMono
                                         horizontalAlignment: Text.AlignRight
+                                    }
+                                    Text {
+                                        Layout.preferredWidth: root.envDescriptionColumnWidth(envFlickable.width)
+                                        Layout.minimumWidth: root.envDescriptionColumnWidth(envFlickable.width)
+                                        text: "Description"
+                                        color: root.accent
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: root.fontMono
                                     }
                                 }
                             }
@@ -1744,69 +1793,54 @@ Item {
                                     model: root.filteredEnv()
                                     delegate: Rectangle {
                                         width: envCol.width
-                                        height: Math.max(th.inspEnvRowHeight, envComment.visible ? 40 : th.inspEnvRowHeight)
+                                        implicitHeight: envRowLayout.implicitHeight + 8
+                                        height: implicitHeight
                                         radius: th.inspRowRadius
                                         color: keyMa.containsMouse || valueMa.containsMouse
+                                                || (commentMa.containsMouse && envComment.text.length > 0)
                                             ? root.inspRowHoverBg : "transparent"
 
                                         RowLayout {
+                                            id: envRowLayout
                                             anchors.fill: parent
+                                            anchors.topMargin: 4
+                                            anchors.bottomMargin: 4
                                             anchors.leftMargin: root.envTableSideMargin
                                             anchors.rightMargin: root.envTableSideMargin
                                             spacing: root.envTableColSpacing
 
-                                            ColumnLayout {
-                                                Layout.preferredWidth: root.envVariableColumnWidth(envCol.width)
-                                                Layout.minimumWidth: root.envVariableColumnWidth(envCol.width)
-                                                Layout.maximumWidth: root.envVariableColumnWidth(envCol.width)
-                                                spacing: 0
+                                            Text {
+                                                Layout.preferredWidth: root.envVariableColumnWidth(envFlickable.width)
+                                                Layout.minimumWidth: root.envVariableColumnWidth(envFlickable.width)
+                                                Layout.maximumWidth: root.envVariableColumnWidth(envFlickable.width)
+                                                Layout.alignment: Qt.AlignTop
+                                                text: modelData.key
+                                                color: root.envKeyColor(modelData.key)
+                                                font.pixelSize: 13
+                                                font.family: root.fontMono
+                                                font.bold: root.envKeyIsHighlight(modelData.key)
+                                                wrapMode: Text.Wrap
 
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.key
-                                                    color: root.envKeyColor(modelData.key)
-                                                    font.pixelSize: 13
-                                                    font.family: root.fontMono
-                                                    font.bold: root.envKeyIsHighlight(modelData.key)
-                                                    elide: Text.ElideRight
-
-                                                    MouseArea {
-                                                        id: keyMa
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: root.copyToClipboard(modelData.key)
-                                                    }
-                                                }
-
-                                                Text {
-                                                    id: envComment
-                                                    visible: modelData.comment && modelData.comment.length > 0
-                                                    text: modelData.comment
-                                                    color: root.overlay
-                                                    font.pixelSize: 11
-                                                    elide: Text.ElideRight
-                                                    Layout.fillWidth: true
+                                                MouseArea {
+                                                    id: keyMa
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.copyToClipboard(modelData.key)
                                                 }
                                             }
 
-                                            Item {
-                                                Layout.preferredWidth: root.envValueColumnWidth(envCol.width)
-                                                Layout.minimumWidth: root.envValueColumnWidth(envCol.width)
-                                                Layout.maximumWidth: root.envValueColumnWidth(envCol.width)
-                                                Layout.preferredHeight: envComment.visible ? 40 : 28
-                                                clip: true
-
-                                                Text {
-                                                    anchors.fill: parent
-                                                    text: modelData.value
-                                                    color: root.envValueColor(modelData.key, modelData.value)
-                                                    font.pixelSize: 13
-                                                    font.family: root.fontMono
-                                                    verticalAlignment: Text.AlignVCenter
-                                                    horizontalAlignment: Text.AlignRight
-                                                    elide: Text.ElideLeft
-                                                }
+                                            Text {
+                                                Layout.preferredWidth: root.envValueColumnWidth(envFlickable.width)
+                                                Layout.minimumWidth: root.envValueColumnWidth(envFlickable.width)
+                                                Layout.maximumWidth: root.envValueColumnWidth(envFlickable.width)
+                                                Layout.alignment: Qt.AlignTop
+                                                text: modelData.value
+                                                color: root.envValueColor(modelData.key, modelData.value)
+                                                font.pixelSize: 13
+                                                font.family: root.fontMono
+                                                horizontalAlignment: Text.AlignRight
+                                                wrapMode: Text.Wrap
 
                                                 MouseArea {
                                                     id: valueMa
@@ -1814,6 +1848,30 @@ Item {
                                                     hoverEnabled: true
                                                     cursorShape: Qt.PointingHandCursor
                                                     onClicked: root.copyToClipboard(modelData.value)
+                                                }
+                                            }
+
+                                            Text {
+                                                id: envComment
+                                                Layout.preferredWidth: root.envDescriptionColumnWidth(envFlickable.width)
+                                                Layout.minimumWidth: root.envDescriptionColumnWidth(envFlickable.width)
+                                                Layout.alignment: Qt.AlignTop
+                                                text: modelData.comment || ""
+                                                color: root.overlay
+                                                font.pixelSize: 11
+                                                font.family: root.fontMono
+                                                wrapMode: Text.Wrap
+
+                                                MouseArea {
+                                                    id: commentMa
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: envComment.text.length > 0
+                                                        ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: {
+                                                        if (modelData.comment && modelData.comment.length > 0)
+                                                            root.copyToClipboard(modelData.comment)
+                                                    }
                                                 }
                                             }
                                         }

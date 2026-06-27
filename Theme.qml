@@ -487,10 +487,13 @@ QtObject {
     // --- Environment variable table layout
     readonly property int inspEnvTableSideMargin: 10
     readonly property int inspEnvTableColSpacing: 12
-    readonly property int inspEnvVarColMinWidth:  200
-    readonly property int inspEnvVarColMaxWidth:  300
-    readonly property real inspEnvVarColRatio:    0.34   // fraction of usable width for Variable column
-    readonly property int inspEnvValueColMinWidth: 220
+    readonly property int inspEnvVarColMinWidth:  180
+    readonly property int inspEnvVarColMaxWidth:  260
+    readonly property real inspEnvVarColRatio:    0.22   // fraction of usable width for Variable column
+    readonly property int inspEnvValueColMinWidth: 180
+    readonly property int inspEnvValueColMaxWidth: 340
+    readonly property real inspEnvValueColRatio:   0.28   // fraction of usable width for Value column
+    readonly property int inspEnvDescColMinWidth:  320    // minimum width for Description column
 
     // --- Key binding modifier pills (Catppuccin semantic colors)
     readonly property color inspKeyPillSuper:   "#89b4fa"
