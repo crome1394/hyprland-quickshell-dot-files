@@ -34,19 +34,19 @@ Item {
     readonly property int sectionSpacing: 8
     readonly property int tblSpacing: 4
 
-    readonly property int colPidW: 44
-    readonly property int colUserW: 52
-    readonly property int colCpuW: 40
-    readonly property int colMemW: 40
-    readonly property int colTimeW: 54
-    readonly property int colThreadsW: 30
-    readonly property int colRssW: 42
-    readonly property int colVszW: 40
-    readonly property int colStartW: 50
-    readonly property int colPriW: 28
-    readonly property int colShrW: 38
-    readonly property int colStatW: 32
-    readonly property int colCmdMinW: 96
+    readonly property var colMinW: ({
+        pid: 40, user: 36, cpu: 38, mem: 38, time: 42, start: 46,
+        threads: 26, rss: 38, vsz: 42, pri: 24, shr: 36, stat: 28, cmd: 120
+    })
+    readonly property var colMaxW: ({
+        user: 92, time: 68, start: 60, cmd: 420
+    })
+    property var colLayout: ({
+        pid: 40, user: 36, cpu: 38, mem: 38, time: 42, start: 46,
+        threads: 26, rss: 38, vsz: 42, pri: 24, shr: 36, stat: 28, cmd: 120,
+        fixed: 0, total: 640
+    })
+    property int colLayoutVersion: 0
 
     property var processes: []
     property int dataVersion: 0
@@ -283,18 +283,88 @@ Item {
         if (text) copyToClipboard(text)
     }
 
-    function fixedTableWidth() {
-        return colPidW + colUserW + colCpuW + colMemW + colTimeW + colStartW
-            + colThreadsW + colRssW + colVszW + colPriW + colShrW + colStatW
-            + tblSpacing * 12 + 8
+    function measureCell(text, bold) {
+        colMetrics.font.pixelSize = 10
+        colMetrics.font.family = "monospace"
+        colMetrics.font.bold = !!bold
+        colMetrics.text = text ? String(text) : ""
+        return Math.ceil(colMetrics.advanceWidth) + 8
+    }
+
+    function fitCol(key, value, bold) {
+        const min = colMinW[key] || 32
+        const max = colMaxW[key] || 9999
+        return Math.min(max, Math.max(min, measureCell(value, bold)))
+    }
+
+    function colW(name) {
+        const tick = colLayoutVersion
+        void tick
+        return colLayout[name] || colMinW[name] || 36
+    }
+
+    function refreshColumnLayout(viewportWidth) {
+        const vw = Math.max(0, Math.round(viewportWidth || 0))
+        const fixedKeys = ["pid", "user", "cpu", "mem", "time", "start", "threads", "rss", "vsz", "pri", "shr", "stat"]
+        const w = {}
+
+        for (let i = 0; i < fixedKeys.length; i++)
+            w[fixedKeys[i]] = colMinW[fixedKeys[i]] || 32
+
+        w.pid = Math.max(w.pid, fitCol("pid", "PID", true))
+        w.user = Math.max(w.user, fitCol("user", "User", true))
+        w.cpu = Math.max(w.cpu, fitCol("cpu", "CPU%", true))
+        w.mem = Math.max(w.mem, fitCol("mem", "Mem%", true))
+        w.time = Math.max(w.time, fitCol("time", "Time", true))
+        w.start = Math.max(w.start, fitCol("start", "Start", true))
+        w.threads = Math.max(w.threads, fitCol("threads", "Thr", true))
+        w.rss = Math.max(w.rss, fitCol("rss", "RSS", true))
+        w.vsz = Math.max(w.vsz, fitCol("vsz", "VSZ", true))
+        w.pri = Math.max(w.pri, fitCol("pri", "PR", true))
+        w.shr = Math.max(w.shr, fitCol("shr", "SHR", true))
+        w.stat = Math.max(w.stat, fitCol("stat", "Stat", true))
+
+        let cmdContentMin = colMinW.cmd
+        const rows = filteredProcesses()
+        for (let r = 0; r < rows.length; r++) {
+            const p = rows[r]
+            w.pid = Math.max(w.pid, fitCol("pid", String(p.pid), false))
+            w.user = Math.max(w.user, fitCol("user", p.user || "--", false))
+            w.cpu = Math.max(w.cpu, fitCol("cpu", p.cpu.toFixed(1), false))
+            w.mem = Math.max(w.mem, fitCol("mem", p.mem.toFixed(1), false))
+            w.time = Math.max(w.time, fitCol("time", formatTime(p.time), false))
+            w.start = Math.max(w.start, fitCol("start", formatStart(p.start), false))
+            w.threads = Math.max(w.threads, fitCol("threads", p.threads !== undefined ? String(p.threads) : "--", false))
+            w.rss = Math.max(w.rss, fitCol("rss", formatKiB(p.rss), false))
+            w.vsz = Math.max(w.vsz, fitCol("vsz", formatKiB(p.vsz), false))
+            w.pri = Math.max(w.pri, fitCol("pri", p.pri !== undefined ? String(p.pri) : "--", false))
+            w.shr = Math.max(w.shr, fitCol("shr", formatKiB(p.shr), false))
+            w.stat = Math.max(w.stat, fitCol("stat", formatState(p.state), false))
+            const cmd = p.cmd || p.name || "--"
+            cmdContentMin = Math.max(cmdContentMin, fitCol("cmd", cmd, false))
+        }
+
+        let fixed = 8
+        for (let f = 0; f < fixedKeys.length; f++)
+            fixed += w[fixedKeys[f]]
+        fixed += tblSpacing * 12
+
+        const minTotal = fixed + colMinW.cmd
+        const neededTotal = fixed + cmdContentMin
+        let total = Math.max(neededTotal, minTotal)
+        if (vw > 0)
+            total = Math.max(total, vw)
+        w.cmd = Math.max(colMinW.cmd, total - fixed)
+        w.fixed = fixed
+        w.total = fixed + w.cmd
+        colLayout = w
+        colLayoutVersion++
     }
 
     function tableContentWidth(viewportWidth) {
-        return Math.max(viewportWidth, fixedTableWidth() + colCmdMinW)
-    }
-
-    function cmdColWidth(totalWidth) {
-        return Math.max(colCmdMinW, totalWidth - fixedTableWidth())
+        const tick = colLayoutVersion
+        void tick
+        return colLayout.total || Math.max(viewportWidth || 0, 640)
     }
 
     function formatLoad(load) {
@@ -416,6 +486,7 @@ Item {
             lastUpdatedMs = parsed.timestamp ? Number(parsed.timestamp) : Date.now()
             pruneSelection()
             lastError = ""
+            Qt.callLater(function() { root.refreshColumnLayout(procFlickable.width) })
         } catch (e) {
             lastError = "Failed to parse process JSON"
         }
@@ -517,9 +588,18 @@ Item {
         if (active) refresh()
     }
 
-    onSortKeyChanged: pruneSelection()
-    onHighUsageOnlyChanged: pruneSelection()
-    onGlobalFilterChanged: pruneSelection()
+    onSortKeyChanged: {
+        pruneSelection()
+        Qt.callLater(function() { root.refreshColumnLayout(procFlickable.width) })
+    }
+    onHighUsageOnlyChanged: {
+        pruneSelection()
+        Qt.callLater(function() { root.refreshColumnLayout(procFlickable.width) })
+    }
+    onGlobalFilterChanged: {
+        pruneSelection()
+        Qt.callLater(function() { root.refreshColumnLayout(procFlickable.width) })
+    }
 
     onSelectionVersionChanged: {
         if (killConfirmVisible)
@@ -550,6 +630,12 @@ Item {
             root._lastActionExitCode = code
             root.finishAction(code)
         }
+    }
+
+    TextMetrics {
+        id: colMetrics
+        font.pixelSize: 10
+        font.family: "monospace"
     }
 
     ColumnLayout {
@@ -828,9 +914,13 @@ Item {
                 contentHeight: Math.max(height, procTable.implicitHeight)
 
                 property int _dataTick: root.dataVersion
+                property int _colTick: root.colLayoutVersion
                 property string _filterTick: root.globalFilter + "|" + root.sortKey + "|" + (root.highUsageOnly ? "1" : "0")
 
                 focus: true
+
+                Component.onCompleted: root.refreshColumnLayout(width)
+                onWidthChanged: Qt.callLater(function() { root.refreshColumnLayout(width) })
 
                 WheelHandler {
                     onWheel: function(event) {
@@ -879,20 +969,21 @@ Item {
                             anchors.leftMargin: 4
                             anchors.rightMargin: 4
                             spacing: root.tblSpacing
+                            clip: true
 
-                            Text { width: root.colPidW; height: parent.height; text: "PID"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colUserW; height: parent.height; text: "User"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            Text { width: root.colCpuW; height: parent.height; text: "CPU%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colMemW; height: parent.height; text: "Mem%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colTimeW; height: parent.height; text: "Time"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colStartW; height: parent.height; text: "Start"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colThreadsW; height: parent.height; text: "Thr"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colRssW; height: parent.height; text: "RSS"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colVszW; height: parent.height; text: "VSZ"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colPriW; height: parent.height; text: "PR"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.colShrW; height: parent.height; text: "SHR"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                            Text { width: root.cmdColWidth(parent.width); height: parent.height; text: "Command"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                            Text { width: root.colStatW; height: parent.height; text: "Stat"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("pid"); height: parent.height; text: "PID"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("user"); height: parent.height; text: "User"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("cpu"); height: parent.height; text: "CPU%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("mem"); height: parent.height; text: "Mem%"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("time"); height: parent.height; text: "Time"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("start"); height: parent.height; text: "Start"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("threads"); height: parent.height; text: "Thr"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("rss"); height: parent.height; text: "RSS"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("vsz"); height: parent.height; text: "VSZ"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("pri"); height: parent.height; text: "PR"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("shr"); height: parent.height; text: "SHR"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("cmd"); height: parent.height; text: "Command"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; clip: true }
+                            Text { property int _cw: root.colLayoutVersion; width: root.colW("stat"); height: parent.height; text: "Stat"; color: root.textColor; font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter; clip: true }
                         }
                     }
 
@@ -959,20 +1050,21 @@ Item {
                                 anchors.leftMargin: 4
                                 anchors.rightMargin: 4
                                 spacing: root.tblSpacing
+                                clip: true
 
-                                Text { width: root.colPidW; height: parent.height; text: modelData.pid; color: parent.isSelected ? root.accentColor : root.textColor; font.pixelSize: 10; font.family: "monospace"; font.bold: parent.isSelected; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.colUserW; height: parent.height; text: modelData.user || "--"; color: root.overlayColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                                Text { width: root.colCpuW; height: parent.height; text: modelData.cpu.toFixed(1); color: root.accentColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.colMemW; height: parent.height; text: modelData.mem.toFixed(1); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.colTimeW; height: parent.height; text: root.formatTime(modelData.time); color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.colStartW; height: parent.height; text: root.formatStart(modelData.start); color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight }
-                                Text { width: root.colThreadsW; height: parent.height; text: modelData.threads !== undefined ? modelData.threads : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.colRssW; height: parent.height; text: root.formatKiB(modelData.rss); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.colVszW; height: parent.height; text: root.formatKiB(modelData.vsz); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.colPriW; height: parent.height; text: modelData.pri !== undefined ? modelData.pri : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.colShrW; height: parent.height; text: root.formatKiB(modelData.shr); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight }
-                                Text { width: root.cmdColWidth(parent.width); height: parent.height; text: modelData.cmd || modelData.name || "--"; color: parent.isSelected ? root.textColor : root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                                Text { width: root.colStatW; height: parent.height; text: root.formatState(modelData.state); color: root.stateColor(modelData.state); font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("pid"); height: parent.height; text: modelData.pid; color: parent.isSelected ? root.accentColor : root.textColor; font.pixelSize: 10; font.family: "monospace"; font.bold: parent.isSelected; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("user"); height: parent.height; text: modelData.user || "--"; color: root.overlayColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("cpu"); height: parent.height; text: modelData.cpu.toFixed(1); color: root.accentColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("mem"); height: parent.height; text: modelData.mem.toFixed(1); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("time"); height: parent.height; text: root.formatTime(modelData.time); color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("start"); height: parent.height; text: root.formatStart(modelData.start); color: root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("threads"); height: parent.height; text: modelData.threads !== undefined ? modelData.threads : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("rss"); height: parent.height; text: root.formatKiB(modelData.rss); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("vsz"); height: parent.height; text: root.formatKiB(modelData.vsz); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("pri"); height: parent.height; text: modelData.pri !== undefined ? modelData.pri : "--"; color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("shr"); height: parent.height; text: root.formatKiB(modelData.shr); color: root.textColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("cmd"); height: parent.height; text: modelData.cmd || modelData.name || "--"; color: parent.isSelected ? root.textColor : root.subtextColor; font.pixelSize: 10; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; clip: true }
+                                Text { property int _cw: root.colLayoutVersion; width: root.colW("stat"); height: parent.height; text: root.formatState(modelData.state); color: root.stateColor(modelData.state); font.pixelSize: 10; font.bold: true; font.family: "monospace"; verticalAlignment: Text.AlignVCenter; horizontalAlignment: Text.AlignHCenter; clip: true }
                             }
 
                             MouseArea {
