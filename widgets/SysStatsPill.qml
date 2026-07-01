@@ -24,7 +24,7 @@ import "../components"
 //   - bar.statTempCool, bar.statTempWarm, bar.statTempHot, bar.statTempWarmAt,
 //     bar.statTempHotAt, bar.statTempColor(), bar.statValueSeparator
 //   - bar.divider, bar.fontFamily, bar.tooltipDelay, bar.popupAnchorY()
-//   - bar.popupStatsCpu/Gpu Width/Height, bar.popupStatsLiveUpdates
+//   - bar.popupStatsCpu/Gpu Width/Height, bar.popupStatsLiveUpdates, bar.popupStatsPersistPause
 //   - bar.surface, bar.overlay, bar.gaugeLow/Mid/High (metrics popup views)
 //
 // Dependencies:
@@ -115,10 +115,57 @@ Rectangle {
     }
 
     // ===== Rich metrics (right-click popups only) =====
+    Io.FileView {
+        id: statsPauseState
+        path: bar.popupStatsPersistPause
+              ? "/home/crome/.config/quickshell/state/popup-stats.json"
+              : ""
+        watchChanges: bar.popupStatsPersistPause
+        onFileChanged: if (bar.popupStatsPersistPause) reload()
+        onAdapterUpdated: if (bar.popupStatsPersistPause) writeAdapter()
+        onLoaded: if (bar.popupStatsPersistPause) root.syncLiveUpdatesFromPersisted()
+        onLoadFailed: if (bar.popupStatsPersistPause) root.seedPauseStateFromConfig()
+
+        Io.JsonAdapter {
+            id: pauseAdapter
+            property bool cpuLiveUpdates: bar.popupStatsLiveUpdates
+            property bool gpuLiveUpdates: bar.popupStatsLiveUpdates
+        }
+    }
+
     SysMonService {
         id: sysMonService
         autoPoll: (cpuMetricsPopup.visible && cpuLiveUpdates)
                || (gpuMetricsPopup.visible && gpuLiveUpdates)
+    }
+
+    function seedPauseStateFromConfig() {
+        pauseAdapter.cpuLiveUpdates = bar.popupStatsLiveUpdates
+        pauseAdapter.gpuLiveUpdates = bar.popupStatsLiveUpdates
+        syncLiveUpdatesFromPersisted()
+    }
+
+    function syncLiveUpdatesFromPersisted() {
+        cpuLiveUpdates = pauseAdapter.cpuLiveUpdates
+        gpuLiveUpdates = pauseAdapter.gpuLiveUpdates
+    }
+
+    function liveUpdatesForOpen(isCpu) {
+        if (bar.popupStatsPersistPause)
+            return isCpu ? pauseAdapter.cpuLiveUpdates : pauseAdapter.gpuLiveUpdates
+        return bar.popupStatsLiveUpdates
+    }
+
+    function setLiveUpdates(isCpu, enabled) {
+        if (isCpu) {
+            cpuLiveUpdates = enabled
+            if (bar.popupStatsPersistPause)
+                pauseAdapter.cpuLiveUpdates = enabled
+        } else {
+            gpuLiveUpdates = enabled
+            if (bar.popupStatsPersistPause)
+                pauseAdapter.gpuLiveUpdates = enabled
+        }
     }
 
     function hideMetricsPopups() {
@@ -133,9 +180,9 @@ Rectangle {
         }
         otherPopup.visible = false
         if (isCpu)
-            cpuLiveUpdates = bar.popupStatsLiveUpdates
+            cpuLiveUpdates = liveUpdatesForOpen(true)
         else
-            gpuLiveUpdates = bar.popupStatsLiveUpdates
+            gpuLiveUpdates = liveUpdatesForOpen(false)
 
         var pos = anchorItem.mapToItem(barBg, anchorItem.width / 2, 0)
         var popupW = popup.implicitWidth
@@ -429,8 +476,9 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                cpuLiveUpdates = !cpuLiveUpdates
-                                if (cpuLiveUpdates)
+                                const next = !cpuLiveUpdates
+                                setLiveUpdates(true, next)
+                                if (next)
                                     sysMonService.refresh()
                             }
                         }
@@ -533,8 +581,9 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                gpuLiveUpdates = !gpuLiveUpdates
-                                if (gpuLiveUpdates)
+                                const next = !gpuLiveUpdates
+                                setLiveUpdates(false, next)
+                                if (next)
                                     sysMonService.refresh()
                             }
                         }
