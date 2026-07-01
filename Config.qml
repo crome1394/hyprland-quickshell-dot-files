@@ -353,10 +353,10 @@ QtObject {
     //   wsStartupWorkspace N → focus workspace N (after optional magic close)
 
     readonly property bool wsShowSpecialPill: true    // Magic pill default (toggle via qs ipc call shell setShowMagicWorkspacePill)
-    readonly property int  wsMinimumShown: 3           // Numbered pills 1..N always visible when wsShowOnlyActive is false
-    readonly property bool wsShowOnlyActive: false    // true = hide empty numbered pills; only show occupied/active
-    readonly property int  wsStartupWorkspace: 1       // Focus this workspace on qs start (0 = leave workspace unchanged)
-    readonly property bool wsStartupCloseMagic: true   // Close magic overlay on qs start before focusing wsStartupWorkspace
+    readonly property int  wsMinimumShown: 3           // Default pills 1..N (IPC: qs ipc call shell setWsMinimumShown)
+    readonly property bool wsShowOnlyActive: false    // IPC: qs ipc call shell setWsShowOnlyActive
+    readonly property int  wsStartupWorkspace: 1       // qs-start focus (0 = unchanged). IPC: setWsStartupWorkspace
+    readonly property bool wsStartupCloseMagic: true   // Close magic on qs start. IPC: setWsStartupCloseMagic
 
     readonly property color wsHoverYellow: "#fdf9db"           // Hover from original eww migration
     readonly property color wsActiveBg:    Qt.rgba(0.53, 0.69, 0.96, 0.22)  // Active workspace glass

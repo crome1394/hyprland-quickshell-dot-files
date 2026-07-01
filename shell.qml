@@ -22,7 +22,11 @@
 //   - qs ipc call sysStatsPill setMetricsLiveUpdates false
 //   - qs ipc call sysStatsPill setCpuLiveUpdates false
 //   - qs ipc call sysStatsPill toggleGpuLiveUpdates
-//   (Run `qs ipc show` for the full list of shell visibility commands.)
+//   - qs ipc call shell setWsMinimumShown 7
+//   - qs ipc call shell setWsShowOnlyActive true
+//   - qs ipc call shell setWsStartupWorkspace 1
+//   - qs ipc call shell setWsStartupCloseMagic false
+//   (Run `qs ipc show` for the full list of shell commands.)
 //
 // Bar position (Config.qml):
 //   - barPosition: "top" or "bottom"
@@ -88,6 +92,12 @@ ShellRoot {
     property bool showPowerPill: true
     property bool showMagicWorkspacePill: true   // Magic pill inside WorkspacesPill (wsShowSpecialPill)
 
+    // Workspace behavior (config defaults in Config.qml; IPC overrides until qs restart)
+    property int  wsMinimumShown: 3
+    property bool wsShowOnlyActive: false
+    property int  wsStartupWorkspace: 1
+    property bool wsStartupCloseMagic: true
+
     // On qs start, optionally close magic and focus wsStartupWorkspace (see Config.qml).
     // Polls a few times so Hyprland.activeToplevel is ready (Hyprland 0.55+ lua).
     property int _startupWsAttempts: 0
@@ -143,6 +153,10 @@ ShellRoot {
             root.showNotificationPill = cfg.showNotificationPill
             root.showPowerPill = cfg.showPowerPill
             root.showMagicWorkspacePill = cfg.wsShowSpecialPill
+            root.wsMinimumShown = cfg.wsMinimumShown
+            root.wsShowOnlyActive = cfg.wsShowOnlyActive
+            root.wsStartupWorkspace = cfg.wsStartupWorkspace
+            root.wsStartupCloseMagic = cfg.wsStartupCloseMagic
         }
 
         // --- Base palette
@@ -337,10 +351,10 @@ ShellRoot {
         readonly property alias wsSpecialName: cfg.wsSpecialName
         readonly property alias wsIconSpecial: cfg.wsIconSpecial
         readonly property alias wsShowSpecialPill: cfg.wsShowSpecialPill
-        readonly property alias wsMinimumShown: cfg.wsMinimumShown
-        readonly property alias wsShowOnlyActive: cfg.wsShowOnlyActive
-        readonly property alias wsStartupWorkspace: cfg.wsStartupWorkspace
-        readonly property alias wsStartupCloseMagic: cfg.wsStartupCloseMagic
+        property int wsMinimumShown: root.wsMinimumShown
+        property bool wsShowOnlyActive: root.wsShowOnlyActive
+        property int wsStartupWorkspace: root.wsStartupWorkspace
+        property bool wsStartupCloseMagic: root.wsStartupCloseMagic
         property bool showMagicWorkspacePill: root.showMagicWorkspacePill
         function wsIconForId(id) { return cfg.wsIconForId(id) }
         function wsIsSpecialName(name) { return cfg.wsIsSpecialName(name) }
@@ -766,6 +780,18 @@ ShellRoot {
         }
         function toggleShowMagicWorkspacePill(): void {
             root.showMagicWorkspacePill = !root.showMagicWorkspacePill
+        }
+        function setWsMinimumShown(count: int): void {
+            root.wsMinimumShown = Math.max(1, Math.min(10, count))
+        }
+        function setWsShowOnlyActive(enabled: bool): void {
+            root.wsShowOnlyActive = enabled
+        }
+        function setWsStartupWorkspace(workspace: int): void {
+            root.wsStartupWorkspace = Math.max(0, Math.min(10, workspace))
+        }
+        function setWsStartupCloseMagic(enabled: bool): void {
+            root.wsStartupCloseMagic = enabled
         }
     }
 }
