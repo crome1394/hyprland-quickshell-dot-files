@@ -164,6 +164,43 @@ ShellRoot {
             root.wsStartupCloseMagic = cfg.wsStartupCloseMagic
         }
 
+        readonly property alias notificationPreset: cfg.notificationPreset
+        readonly property alias notificationPollIntervalMs: cfg.notificationPollIntervalMs
+
+        function notificationCommand(action) {
+            return cfg.notificationCommand(action)
+        }
+
+        function execNotificationCommand(action) {
+            const cmd = cfg.notificationCommand(action)
+            if (!cmd || cmd.length === undefined || cmd.length <= 0)
+                return
+            const args = []
+            for (let i = 0; i < cmd.length; i++)
+                args.push(cmd[i])
+            Quickshell.execDetached(args)
+        }
+
+        function notificationUsesLiveSubscribe() {
+            return cfg.notificationUsesLiveSubscribe()
+        }
+
+        function notificationSupportsPanel() {
+            return cfg.notificationSupportsPanel()
+        }
+
+        function notificationSupportsDnd() {
+            return cfg.notificationSupportsDnd()
+        }
+
+        function notificationSupportsClearAll() {
+            return cfg.notificationSupportsClearAll()
+        }
+
+        function notificationPollEnabled() {
+            return cfg.notificationPollEnabled()
+        }
+
         // --- Base palette
         property alias bg: cfg.bg
         property alias surface: cfg.surface
@@ -686,24 +723,64 @@ ShellRoot {
         }
 
         // --- Background services (do not move to zones) ---
+        function applyNotificationState(j) {
+            if (typeof j.count === "number") notif.count = j.count
+            if (typeof j.dnd === "boolean") notif.dnd = j.dnd
+            if (typeof j.inhibited === "boolean") notif.inhibited = j.inhibited
+        }
+
         Io.Process {
-            id: swayncSub
-            running: true
-            command: ["swaync-client", "-s", "-sw"]
+            id: notifSubscribe
+            property var subscribeCmd: bar.notificationCommand("subscribe")
+            running: bar.notificationUsesLiveSubscribe()
+            command: (subscribeCmd && subscribeCmd.length > 0) ? subscribeCmd : ["sleep", "infinity"]
             stdout: Io.SplitParser {
                 splitMarker: "\n"
                 onRead: (data) => {
                     const line = data.trim()
                     if (!line) return
                     try {
-                        const j = JSON.parse(line)
-                        if (typeof j.count === "number") notif.count = j.count
-                        if (typeof j.dnd === "boolean") notif.dnd = j.dnd
-                        if (typeof j.inhibited === "boolean") notif.inhibited = j.inhibited
+                        applyNotificationState(JSON.parse(line))
                     } catch (e) {}
                 }
             }
-            onExited: (code) => console.log("swaync subscribe exited with code", code)
+            onExited: (code) => {
+                console.log("notification subscribe exited with code", code, "preset:", bar.notificationPreset)
+                if (bar.notificationUsesLiveSubscribe())
+                    Qt.callLater(function() { notifSubscribe.running = true })
+            }
+        }
+
+        Timer {
+            id: notifPollTimer
+            interval: bar.notificationPollIntervalMs
+            running: bar.notificationPollEnabled()
+            repeat: true
+            triggeredOnStart: true
+            onTriggered: {
+                if (!notifPollProcess.running)
+                    notifPollProcess.running = true
+            }
+        }
+
+        Io.Process {
+            id: notifPollProcess
+            property var pollCmd: bar.notificationCommand("poll")
+            command: (pollCmd && pollCmd.length > 0) ? pollCmd : ["true"]
+            stdout: Io.SplitParser {
+                splitMarker: "\n"
+                onRead: (data) => {
+                    const line = data.trim()
+                    if (!line.startsWith("{")) return
+                    try {
+                        applyNotificationState(JSON.parse(line))
+                    } catch (e) {}
+                }
+            }
+            onExited: () => {
+                if (bar.notificationPollEnabled() && notifPollTimer.running)
+                    Qt.callLater(function() { notifPollProcess.running = true })
+            }
         }
 
         HyprConfigInsp { id: hyprConfigInsp; bar: bar }

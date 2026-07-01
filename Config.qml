@@ -37,6 +37,7 @@
 //   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
 //   - Widget visibility (bar pill defaults)
 //   - QUICK LAUNCH (pinned app icons and launch commands)
+//   - NOTIFICATION BELL (swaync, mako, or custom client commands)
 //   - KILL TARGET PILL (click-to-kill window picker)
 //   - Workspaces (pill behavior, colors, icons, special workspace name)
 //   - SYS STATS PILL (CPU | Memory | GPU bar pill size, gauges, temp colors)
@@ -316,6 +317,43 @@ QtObject {
     readonly property bool showNotificationPill:     true   // NotificationBell.qml
     readonly property bool showPowerPill:           true   // PowerMenu.qml
     readonly property bool showKillTargetPill:    false  // KillTargetPill.qml (click-to-kill picker)
+
+    // =========================================================================
+    // NOTIFICATION BELL (widgets/NotificationBell.qml)
+    // =========================================================================
+    // Which notification daemon the bell controls. Change ONE line to switch:
+    //   "swaync" — SwayNC (default): panel, live badge, DND via swaync-client
+    //   "mako"   — Mako: no panel; polls count/DND; DND + dismiss via makoctl
+    //   "custom" — edit notificationCustom* command lists below
+    //
+    // Commands are argv lists passed to Quickshell.execDetached (same as Quick Launch).
+    // Leave a list empty [] to disable that action in the bell UI.
+
+    readonly property string notificationPreset: "swaync"
+
+    // How often to refresh badge/DND when preset is "mako" (no live subscribe stream).
+    readonly property int notificationPollIntervalMs: 2000
+
+    // --- swaync (swaync-client)
+    readonly property var notificationSwayncSubscribe:    ["swaync-client", "-s", "-sw"]
+    readonly property var notificationSwayncTogglePanel: ["swaync-client", "-t", "-sw"]
+    readonly property var notificationSwayncToggleDnd:   ["swaync-client", "-d", "-sw"]
+    readonly property var notificationSwayncClearAll:    ["swaync-client", "-C", "-sw"]
+
+    // --- mako (makoctl) — no notification center panel; left-click does nothing
+    readonly property var notificationMakoToggleDnd: ["makoctl", "mode", "-t"]
+    readonly property var notificationMakoClearAll:  ["makoctl", "dismiss", "-a"]
+    readonly property var notificationMakoPoll: [
+        "/home/crome/.config/quickshell/scripts/notification-state.sh",
+        "mako"
+    ]
+
+    // --- custom (notificationPreset: "custom") — fill in your client's CLI
+    readonly property var notificationCustomSubscribe:    []
+    readonly property var notificationCustomTogglePanel:  []
+    readonly property var notificationCustomToggleDnd:    []
+    readonly property var notificationCustomClearAll:     []
+    readonly property var notificationCustomPoll:         []
 
     // =========================================================================
     // KILL TARGET PILL (widgets/KillTargetPill.qml — xkill-style window picker)
@@ -847,4 +885,56 @@ QtObject {
     // CONVENIENCE / DERIVED (rarely need editing)
     // =========================================================================
     readonly property int popupY: barHeight + 2   // Standard y offset under the bar for popups
+
+    // --- NotificationBell command resolver (used by shell.qml + NotificationBell.qml)
+    function notificationCommand(action) {
+        var preset = (notificationPreset || "swaync").toLowerCase()
+        if (preset === "mako") {
+            if (action === "subscribe") return []
+            if (action === "togglePanel") return []
+            if (action === "toggleDnd") return notificationMakoToggleDnd
+            if (action === "clearAll") return notificationMakoClearAll
+            if (action === "poll") return notificationMakoPoll
+            return []
+        }
+        if (preset === "custom") {
+            if (action === "subscribe") return notificationCustomSubscribe
+            if (action === "togglePanel") return notificationCustomTogglePanel
+            if (action === "toggleDnd") return notificationCustomToggleDnd
+            if (action === "clearAll") return notificationCustomClearAll
+            if (action === "poll") return notificationCustomPoll
+            return []
+        }
+        // swaync (default)
+        if (action === "subscribe") return notificationSwayncSubscribe
+        if (action === "togglePanel") return notificationSwayncTogglePanel
+        if (action === "toggleDnd") return notificationSwayncToggleDnd
+        if (action === "clearAll") return notificationSwayncClearAll
+        return []
+    }
+
+    function notificationUsesLiveSubscribe() {
+        var cmd = notificationCommand("subscribe")
+        return cmd && cmd.length !== undefined && cmd.length > 0
+    }
+
+    function notificationSupportsPanel() {
+        var cmd = notificationCommand("togglePanel")
+        return cmd && cmd.length !== undefined && cmd.length > 0
+    }
+
+    function notificationSupportsDnd() {
+        var cmd = notificationCommand("toggleDnd")
+        return cmd && cmd.length !== undefined && cmd.length > 0
+    }
+
+    function notificationSupportsClearAll() {
+        var cmd = notificationCommand("clearAll")
+        return cmd && cmd.length !== undefined && cmd.length > 0
+    }
+
+    function notificationPollEnabled() {
+        var cmd = notificationCommand("poll")
+        return cmd && cmd.length !== undefined && cmd.length > 0
+    }
 }

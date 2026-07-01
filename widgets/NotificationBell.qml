@@ -4,12 +4,12 @@ import QtQuick.Controls
 import Quickshell
 
 // =============================================================================
-// NotificationBell.qml — Swaync-backed notification indicator
+// NotificationBell.qml — Configurable notification daemon bell
 // =============================================================================
 //
 // Purpose:
-//   Shows a bell icon with optional count badge. Left-click toggles the
-//   notification center. Right-click opens a compact menu (DND, clear all).
+//   Bell icon with optional count badge. Backend is set in Config.qml
+//   (search NOTIFICATION BELL — notificationPreset: swaync | mako | custom).
 //
 // Theme Properties Consumed:
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
@@ -19,6 +19,8 @@ import Quickshell
 //   - bar.iconSizePillLarge, bar.fontFamily, bar.fontMono, bar.fontTiny
 //   - bar.muted, bar.text, bar.subtext, bar.overlay, bar.controlBorderWidth
 //   - bar.buttonRadius, bar.dividerStrong, bar.tooltipDelay, bar.popupAnchorY()
+//   - bar.execNotificationCommand, bar.notificationSupportsPanel/Dnd/ClearAll
+//   - bar.notificationPreset
 //
 // Dependencies:
 //   - required property var bar (from shell.qml)
@@ -75,11 +77,11 @@ Rectangle {
     }
 
     function toggleDoNotDisturb() {
-        Quickshell.execDetached(["swaync-client", "-d", "-sw"])
+        bar.execNotificationCommand("toggleDnd")
     }
 
     function clearAllNotifications() {
-        Quickshell.execDetached(["swaync-client", "-C", "-sw"])
+        bar.execNotificationCommand("clearAll")
     }
 
     function hideNotifMenu() {
@@ -114,7 +116,9 @@ Rectangle {
         ToolTip.text: {
             if (notif.dnd) return notif.count + " notifications (DND on) · Right-click: menu"
             if (notif.count > 0) return notif.count + " notifications · Right-click: menu"
-            return "No notifications · Right-click: menu"
+            if (bar.notificationSupportsPanel())
+                return "Toggle notification panel · Right-click: menu"
+            return "Notifications (" + bar.notificationPreset + ") · Right-click: menu"
         }
         ToolTip.visible: containsMouse
         ToolTip.delay: bar.tooltipDelay
@@ -124,7 +128,8 @@ Rectangle {
                 showNotifMenu()
             } else {
                 hideNotifMenu()
-                Quickshell.execDetached(["swaync-client", "-t", "-sw"])
+                if (bar.notificationSupportsPanel())
+                    bar.execNotificationCommand("togglePanel")
             }
         }
     }
@@ -169,6 +174,7 @@ Rectangle {
                 }
 
                 Rectangle {
+                    visible: bar.notificationSupportsDnd()
                     Layout.fillWidth: true
                     Layout.preferredHeight: bar.popupContextMenuRowHeight
                     radius: bar.buttonRadius
@@ -199,6 +205,7 @@ Rectangle {
                 }
 
                 Rectangle {
+                    visible: bar.notificationSupportsClearAll()
                     Layout.fillWidth: true
                     Layout.preferredHeight: bar.popupContextMenuRowHeight
                     radius: bar.buttonRadius
