@@ -372,7 +372,7 @@ Search for **QUICK LAUNCH**. Edit the `quickLaunchApps` list — one object per 
 |-------|---------|
 | `icon` | Path to PNG/SVG image |
 | `glyph` | Optional nerd-font character (use instead of `icon` if `icon` is empty) |
-| `command` | Launch command as a list `["gtk-launch", "firefox"]` or shell string `"gtk-launch firefox"` |
+| `command` | Launch command as a **list** `["gtk-launch", "firefox"]` (preferred) or shell string `"gtk-launch firefox"`. Use the list form for `gtk-launch` and full paths. |
 | `tooltip` | Hover label |
 
 Also tune `quickLaunchIcon` (size), `quickLaunchSpacing`, and `quickLaunchPaddingH`.
