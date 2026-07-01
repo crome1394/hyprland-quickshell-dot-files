@@ -34,13 +34,24 @@ Rectangle {
     function launchEntry(entry) {
         if (!entry || entry.command === undefined || entry.command === null)
             return
-        if (Array.isArray(entry.command)) {
-            if (entry.command.length > 0)
-                Quickshell.execDetached(entry.command)
+
+        const cmd = entry.command
+        // String form: "gtk-launch firefox" (runs through shell)
+        if (typeof cmd === "string") {
+            if (cmd.length > 0)
+                Quickshell.execDetached(["sh", "-c", cmd])
             return
         }
-        if (typeof entry.command === "string" && entry.command.length > 0)
-            Quickshell.execDetached(["sh", "-c", entry.command])
+
+        // List form from Config.qml — QML lists are not JS arrays (Array.isArray is false).
+        const args = []
+        const len = cmd.length
+        if (len === undefined || len <= 0)
+            return
+        for (let i = 0; i < len; i++)
+            args.push(cmd[i])
+        if (args.length > 0)
+            Quickshell.execDetached(args)
     }
 
     function entryUsesGlyph(entry) {
@@ -50,7 +61,9 @@ Rectangle {
     MouseArea {
         id: appsHover
         anchors.fill: parent
+        z: -1
         hoverEnabled: true
+        acceptedButtons: Qt.NoButton
     }
 
     Row {

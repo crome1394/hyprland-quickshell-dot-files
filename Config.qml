@@ -187,8 +187,9 @@ QtObject {
     //   icon    — path to a PNG/SVG image file shown on the bar
     //   glyph   — optional nerd-font character instead of icon (leave icon "" to use)
     //   command — how to start the app when clicked:
-    //               • list: ["gtk-launch", "firefox"] or ["/path/to/AppImage"]
+    //               • list (recommended): ["gtk-launch", "firefox"] or ["/path/to/AppImage"]
     //               • string: "gtk-launch firefox" (runs through the shell)
+    //             Note: Config list commands are QML lists, not JavaScript arrays.
     //   tooltip — hover label (optional)
 
     readonly property var quickLaunchApps: [
