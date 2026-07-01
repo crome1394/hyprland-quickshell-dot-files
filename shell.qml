@@ -162,8 +162,6 @@ ShellRoot {
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
             root.wsStartupWorkspace = cfg.wsStartupWorkspace
             root.wsStartupCloseMagic = cfg.wsStartupCloseMagic
-            bar.startNotifSync()
-            bar.startNotifSubscribe()
         }
 
         readonly property alias notificationSubscribe: cfg.notificationSubscribe
@@ -191,26 +189,6 @@ ShellRoot {
             Quickshell.execDetached(args)
         }
 
-        function startNotifSync() {
-            if (!bar.notificationSyncEnabled() || notifSyncProcess.running)
-                return
-            const args = bar.notificationCmdArray("sync")
-            if (args.length <= 0)
-                return
-            notifSyncProcess.command = args
-            notifSyncProcess.running = true
-        }
-
-        function startNotifSubscribe() {
-            if (!bar.notificationUsesLiveSubscribe() || notifSubscribe.running)
-                return
-            const args = bar.notificationCmdArray("subscribe")
-            if (args.length <= 0)
-                return
-            notifSubscribe.command = args
-            notifSubscribe.running = true
-        }
-
         function notificationUsesLiveSubscribe() {
             return cfg.notificationUsesLiveSubscribe()
         }
@@ -232,7 +210,8 @@ ShellRoot {
         }
 
         function refreshNotificationState() {
-            bar.startNotifSync()
+            if (notificationBell && notificationBell.refreshState)
+                notificationBell.refreshState()
         }
 
         // --- Base palette
@@ -506,18 +485,6 @@ ShellRoot {
         readonly property alias zMediaPill: cfg.zMediaPill
         readonly property alias zSysStats: cfg.zSysStats
 
-        // --- Notification state (shared with NotificationBell)
-        QtObject {
-            id: notif
-            property int count: 0
-            property bool dnd: false
-            property bool inhibited: false
-            readonly property string icon: {
-                if (dnd) return count > 0 ? "󰂠" : "󰪓"
-                return count > 0 ? "󱅫" : "󰂜"
-            }
-        }
-
         Rectangle {
             id: barBg
             anchors.fill: parent
@@ -704,7 +671,6 @@ ShellRoot {
                         visible: root.showNotificationPill
                         bar: bar
                         barBg: barBg
-                        notif: notif
                     }
 
                     // ── divider ──
@@ -757,74 +723,6 @@ ShellRoot {
         }
 
         // --- Background services (do not move to zones) ---
-        function applyNotificationState(j) {
-            if (j === undefined || j === null) return
-            if (j.count !== undefined && j.count !== null)
-                notif.count = Math.max(0, Number(j.count) || 0)
-            if (j.dnd !== undefined && j.dnd !== null) {
-                if (typeof j.dnd === "boolean")
-                    notif.dnd = j.dnd
-                else
-                    notif.dnd = String(j.dnd).toLowerCase() === "true"
-            }
-            if (j.inhibited !== undefined && j.inhibited !== null) {
-                if (typeof j.inhibited === "boolean")
-                    notif.inhibited = j.inhibited
-                else
-                    notif.inhibited = String(j.inhibited).toLowerCase() === "true"
-            }
-        }
-
-        Io.Process {
-            id: notifSubscribe
-            running: false
-            stdout: Io.SplitParser {
-                splitMarker: "\n"
-                onRead: (data) => {
-                    const line = data.trim()
-                    if (!line) return
-                    try {
-                        applyNotificationState(JSON.parse(line))
-                    } catch (e) {}
-                }
-            }
-            onExited: (code) => {
-                if (!bar.notificationUsesLiveSubscribe())
-                    return
-                notifSubscribeRestartTimer.restart()
-            }
-        }
-
-        Timer {
-            id: notifSubscribeRestartTimer
-            interval: 2000
-            onTriggered: bar.startNotifSubscribe()
-        }
-
-        Timer {
-            id: notifSyncTimer
-            interval: bar.notificationSyncIntervalMs
-            running: bar.notificationSyncEnabled()
-            repeat: true
-            triggeredOnStart: true
-            onTriggered: bar.startNotifSync()
-        }
-
-        Io.Process {
-            id: notifSyncProcess
-            running: false
-            stdout: Io.SplitParser {
-                splitMarker: "\n"
-                onRead: (data) => {
-                    const line = data.trim()
-                    if (!line.startsWith("{")) return
-                    try {
-                        applyNotificationState(JSON.parse(line))
-                    } catch (e) {}
-                }
-            }
-        }
-
         HyprConfigInsp { id: hyprConfigInsp; bar: bar }
 
         Io.IpcHandler {

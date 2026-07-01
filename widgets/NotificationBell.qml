@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
+import Quickshell.Io as Io
 
 // =============================================================================
 // NotificationBell.qml — Configurable notification daemon bell
@@ -19,13 +20,13 @@ import Quickshell
 //   - bar.iconSizePillLarge, bar.fontFamily, bar.fontMono, bar.fontTiny
 //   - bar.muted, bar.text, bar.subtext, bar.overlay, bar.controlBorderWidth
 //   - bar.buttonRadius, bar.dividerStrong, bar.tooltipDelay, bar.popupAnchorY()
-//   - bar.execNotificationCommand, bar.notificationSupportsPanel/Dnd/ClearAll
-
+//   - bar.notificationCmdArray, bar.notificationSyncEnabled, bar.notificationUsesLiveSubscribe
+//   - bar.notificationSyncIntervalMs, bar.execNotificationCommand
+//   - bar.notificationSupportsPanel/Dnd/ClearAll, bar.notificationDndAccent
 //
 // Dependencies:
 //   - required property var bar (from shell.qml)
 //   - required property Item barBg (popup positioning)
-//   - required property QtObject notif (shared state from shell.qml)
 //
 // =============================================================================
 
@@ -34,39 +35,146 @@ Rectangle {
 
     required property var bar
     required property Item barBg
-    required property QtObject notif
+
+    property int count: 0
+    property bool dnd: false
+    property bool inhibited: false
+
+    readonly property string bellGlyph: {
+        if (dnd) return count > 0 ? "󰂠" : "󰪓"
+        return count > 0 ? "󱅫" : "󰂜"
+    }
 
     Layout.preferredWidth: 42
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 
     radius: bar.pillRadius
-    color: notif.dnd
+    color: dnd
            ? (bellMouse.containsMouse ? Qt.rgba(0.55, 0.14, 0.14, 0.45) : Qt.rgba(0.40, 0.10, 0.10, 0.32))
            : (bellMouse.containsMouse ? bar.glassHover : bar.pillBg)
     border.width: bar.controlBorderWidth
-    border.color: notif.dnd
+    border.color: dnd
                   ? bar.notificationDndAccent
                   : (bellMouse.containsMouse ? bar.accent : bar.pillBorder)
+
+    function applyState(j) {
+        if (j === undefined || j === null) return
+        if (j.count !== undefined && j.count !== null)
+            root.count = Math.max(0, Number(j.count) || 0)
+        if (j.dnd !== undefined && j.dnd !== null) {
+            if (typeof j.dnd === "boolean")
+                root.dnd = j.dnd
+            else
+                root.dnd = String(j.dnd).toLowerCase() === "true"
+        }
+        if (j.inhibited !== undefined && j.inhibited !== null) {
+            if (typeof j.inhibited === "boolean")
+                root.inhibited = j.inhibited
+            else
+                root.inhibited = String(j.inhibited).toLowerCase() === "true"
+        }
+    }
+
+    function finishSyncPoll() {
+        const line = (syncStdout.text || "").trim()
+        if (!line.startsWith("{")) return
+        try {
+            root.applyState(JSON.parse(line))
+        } catch (e) {}
+    }
+
+    function startSyncPoll() {
+        if (!bar.notificationSyncEnabled() || syncProcess.running)
+            return
+        const args = bar.notificationCmdArray("sync")
+        if (args.length <= 0)
+            return
+        syncProcess.exec(args)
+    }
+
+    function startSubscribe() {
+        if (!bar.notificationUsesLiveSubscribe() || subscribeProcess.running)
+            return
+        const args = bar.notificationCmdArray("subscribe")
+        if (args.length <= 0)
+            return
+        subscribeProcess.exec(args)
+    }
+
+    function refreshState() {
+        root.startSyncPoll()
+    }
+
+    Io.Process {
+        id: syncProcess
+        running: false
+        stdout: Io.StdioCollector {
+            id: syncStdout
+            onStreamFinished: root.finishSyncPoll()
+        }
+        onExited: Qt.callLater(root.finishSyncPoll)
+    }
+
+    Timer {
+        id: syncTimer
+        interval: bar.notificationSyncIntervalMs
+        running: bar.notificationSyncEnabled()
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.startSyncPoll()
+    }
+
+    Io.Process {
+        id: subscribeProcess
+        running: false
+        stdout: Io.SplitParser {
+            splitMarker: "\n"
+            onRead: (data) => {
+                const line = data.trim()
+                if (!line) return
+                try {
+                    root.applyState(JSON.parse(line))
+                } catch (e) {}
+            }
+        }
+        onExited: {
+            if (bar.notificationUsesLiveSubscribe())
+                subscribeRestartTimer.restart()
+        }
+    }
+
+    Timer {
+        id: subscribeRestartTimer
+        interval: 2000
+        onTriggered: root.startSubscribe()
+    }
+
+    Component.onCompleted: {
+        Qt.callLater(function() {
+            root.startSyncPoll()
+            root.startSubscribe()
+        })
+    }
 
     Text {
         id: bellIcon
         anchors.centerIn: parent
-        text: notif.icon
+        text: root.bellGlyph
         font.pixelSize: bar.iconSizePillLarge
         font.family: bar.fontFamily
-        color: notif.dnd
+        color: dnd
                ? bar.notificationDndAccent
-               : (notif.count > 0 ? bar.accent : bar.subtext)
+               : (count > 0 ? bar.accent : bar.subtext)
     }
 
     Rectangle {
-        visible: notif.count > 0
+        visible: count > 0
         z: 1
         width: Math.max(16, countLabel.implicitWidth + 6)
         height: 16
         radius: 8
-        color: notif.dnd ? Qt.rgba(0.75, 0.18, 0.18, 0.95) : bar.accent
+        color: dnd ? Qt.rgba(0.75, 0.18, 0.18, 0.95) : bar.accent
         anchors.top: bellIcon.top
         anchors.right: bellIcon.right
         anchors.topMargin: -5
@@ -75,7 +183,7 @@ Rectangle {
         Text {
             id: countLabel
             anchors.centerIn: parent
-            text: notif.count > 99 ? "99+" : notif.count
+            text: count > 99 ? "99+" : count
             color: "#111111"
             font.pixelSize: bar.fontTiny
             font.bold: true
@@ -85,12 +193,12 @@ Rectangle {
 
     function toggleDoNotDisturb() {
         bar.execNotificationCommand("toggleDnd")
-        Qt.callLater(function() { bar.refreshNotificationState() })
+        Qt.callLater(function() { root.refreshState() })
     }
 
     function clearAllNotifications() {
         bar.execNotificationCommand("clearAll")
-        Qt.callLater(function() { bar.refreshNotificationState() })
+        Qt.callLater(function() { root.refreshState() })
     }
 
     function hideNotifMenu() {
@@ -123,8 +231,8 @@ Rectangle {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         ToolTip.text: {
-            if (notif.dnd) return notif.count + " notifications (DND on) · Right-click: menu"
-            if (notif.count > 0) return notif.count + " notifications · Right-click: menu"
+            if (dnd) return count + " notifications (DND on) · Right-click: menu"
+            if (count > 0) return count + " notifications · Right-click: menu"
             if (bar.notificationSupportsPanel())
                 return "Toggle notification panel · Right-click: menu"
             return "Notifications · Right-click: menu"
@@ -195,8 +303,8 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left
                         anchors.leftMargin: 10
-                        text: notif.dnd ? "Turn off Do Not Disturb" : "Turn on Do Not Disturb"
-                        color: notif.dnd ? bar.notificationDndAccent : bar.text
+                        text: dnd ? "Turn off Do Not Disturb" : "Turn on Do Not Disturb"
+                        color: dnd ? bar.notificationDndAccent : bar.text
                         font.pixelSize: 12
                         font.family: bar.fontFamily
                     }
