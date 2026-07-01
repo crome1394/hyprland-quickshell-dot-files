@@ -9,7 +9,7 @@ import Quickshell
 //
 // Purpose:
 //   Bell icon with optional count badge. Backend is set in Config.qml
-//   (search NOTIFICATION BELL — notificationPreset: swaync | mako | custom).
+//   (search NOTIFICATION BELL — edit notification* command lists).
 //
 // Theme Properties Consumed:
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
@@ -20,7 +20,7 @@ import Quickshell
 //   - bar.muted, bar.text, bar.subtext, bar.overlay, bar.controlBorderWidth
 //   - bar.buttonRadius, bar.dividerStrong, bar.tooltipDelay, bar.popupAnchorY()
 //   - bar.execNotificationCommand, bar.notificationSupportsPanel/Dnd/ClearAll
-//   - bar.notificationPreset
+
 //
 // Dependencies:
 //   - required property var bar (from shell.qml)
@@ -118,7 +118,7 @@ Rectangle {
             if (notif.count > 0) return notif.count + " notifications · Right-click: menu"
             if (bar.notificationSupportsPanel())
                 return "Toggle notification panel · Right-click: menu"
-            return "Notifications (" + bar.notificationPreset + ") · Right-click: menu"
+            return "Notifications · Right-click: menu"
         }
         ToolTip.visible: containsMouse
         ToolTip.delay: bar.tooltipDelay

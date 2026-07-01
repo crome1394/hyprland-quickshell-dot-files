@@ -40,7 +40,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel adjustment, and device selection popup (PipeWire) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
-| **Notifications** | `NotificationBell.qml` | Notification bell (backend set in `Config.qml` — `notificationPreset`: `swaync`, `mako`, or `custom`). Left-click toggles the panel when supported (SwayNC); right-click opens DND / clear-all menu. IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
+| **Notifications** | `NotificationBell.qml` | Notification bell wired to your daemon's CLI in `Config.qml` (defaults: SwayNC / `swaync-client`). Left-click toggles panel; right-click DND / clear-all. IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
 | **Kill Target** | `KillTargetPill.qml` | xkill-style window picker (hidden by default). Click the pill to arm pick mode (crosshair on all monitors), then click a window to send **SIGTERM** to its process. Escape, right-click, empty click, or a second pill click cancels. Uses `window-at-point.sh` + `process-control.sh` (user-owned processes only). IPC: `qs ipc call killTargetPill activatePickMode` |
 | **Power** | `PowerMenu.qml` | Left-click opens the full session menu (lock, logout, reboot, shutdown, BIOS); right-click opens a compact quick menu with the same actions |
 
@@ -366,19 +366,18 @@ Search for **SYS STATS PILL** for the compact bar widget (CPU | Memory | GPU), a
 
 ### Notification bell (`Config.qml`)
 
-Search for **NOTIFICATION BELL**. Switch daemons by changing one line:
+Search for **NOTIFICATION BELL**. Defaults are SwayNC (`swaync-client`). To use another daemon, replace the command lists:
 
-```qml
-readonly property string notificationPreset: "swaync"   // or "mako" or "custom"
-```
+| Property | SwayNC default | Purpose |
+|----------|----------------|---------|
+| `notificationSubscribe` | `["swaync-client", "-s", "-sw"]` | Live badge / DND state |
+| `notificationTogglePanel` | `["swaync-client", "-t", "-sw"]` | Left-click on bell |
+| `notificationToggleDnd` | `["swaync-client", "-d", "-sw"]` | Right-click menu |
+| `notificationClearAll` | `["swaync-client", "-C", "-sw"]` | Right-click menu |
 
-| Preset | Behavior |
-|--------|----------|
-| `swaync` | Live badge via `swaync-client -s`; left-click toggles panel |
-| `mako` | Polls count/DND every `notificationPollIntervalMs`; no panel (left-click no-op); DND and dismiss via `makoctl` |
-| `custom` | Edit `notificationCustom*` command lists for another CLI |
+Use `[]` to disable an action. Optional `notificationPoll` + `notificationPollIntervalMs` if your daemon has no subscribe stream.
 
-Each action uses an argv list (same style as Quick Launch). Empty list `[]` hides that action. Preset-specific commands live under `notificationSwaync*`, `notificationMako*`, and `notificationCustom*`.
+**SwayNC tip:** run only one instance (e.g. `swaync.service` via systemd, not also `hl.exec_cmd("swaync")` in Hyprland autostart). If `notify-send` shows nothing, check DND: `swaync-client -D -sw` — use `swaync-client -df -sw` to turn off.
 
 ### Quick Launch (`Config.qml`)
 

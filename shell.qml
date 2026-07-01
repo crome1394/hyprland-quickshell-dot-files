@@ -164,7 +164,6 @@ ShellRoot {
             root.wsStartupCloseMagic = cfg.wsStartupCloseMagic
         }
 
-        readonly property alias notificationPreset: cfg.notificationPreset
         readonly property alias notificationPollIntervalMs: cfg.notificationPollIntervalMs
 
         function notificationCommand(action) {
@@ -745,7 +744,7 @@ ShellRoot {
                 }
             }
             onExited: (code) => {
-                console.log("notification subscribe exited with code", code, "preset:", bar.notificationPreset)
+                console.log("notification subscribe exited with code", code)
                 if (bar.notificationUsesLiveSubscribe())
                     Qt.callLater(function() { notifSubscribe.running = true })
             }

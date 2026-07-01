@@ -37,7 +37,7 @@
 //   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
 //   - Widget visibility (bar pill defaults)
 //   - QUICK LAUNCH (pinned app icons and launch commands)
-//   - NOTIFICATION BELL (swaync, mako, or custom client commands)
+//   - NOTIFICATION BELL (notification daemon CLI commands for the bell)
 //   - KILL TARGET PILL (click-to-kill window picker)
 //   - Workspaces (pill behavior, colors, icons, special workspace name)
 //   - SYS STATS PILL (CPU | Memory | GPU bar pill size, gauges, temp colors)
@@ -321,39 +321,24 @@ QtObject {
     // =========================================================================
     // NOTIFICATION BELL (widgets/NotificationBell.qml)
     // =========================================================================
-    // Which notification daemon the bell controls. Change ONE line to switch:
-    //   "swaync" — SwayNC (default): panel, live badge, DND via swaync-client
-    //   "mako"   — Mako: no panel; polls count/DND; DND + dismiss via makoctl
-    //   "custom" — edit notificationCustom* command lists below
+    // CLI commands for your notification daemon. Defaults below are for SwayNC.
+    // To use a different daemon, replace these lists with that client's commands
+    // (same argv-list style as Quick Launch). Leave [] to disable an action.
     //
-    // Commands are argv lists passed to Quickshell.execDetached (same as Quick Launch).
-    // Leave a list empty [] to disable that action in the bell UI.
+    //   notificationSubscribe    — live badge/DND updates (SwayNC: swaync-client -s)
+    //   notificationTogglePanel  — left-click on the bell (SwayNC: -t)
+    //   notificationToggleDnd    — Do Not Disturb toggle in the right-click menu
+    //   notificationClearAll     — clear all in the right-click menu
+    //   notificationPoll         — optional fallback if your daemon has no subscribe
+    //                              stream; script should print one JSON line per run:
+    //                              {"count":N,"dnd":true|false}
 
-    readonly property string notificationPreset: "swaync"
-
-    // How often to refresh badge/DND when preset is "mako" (no live subscribe stream).
+    readonly property var notificationSubscribe:    ["swaync-client", "-s", "-sw"]
+    readonly property var notificationTogglePanel: ["swaync-client", "-t", "-sw"]
+    readonly property var notificationToggleDnd:   ["swaync-client", "-d", "-sw"]
+    readonly property var notificationClearAll:    ["swaync-client", "-C", "-sw"]
+    readonly property var notificationPoll:        []
     readonly property int notificationPollIntervalMs: 2000
-
-    // --- swaync (swaync-client)
-    readonly property var notificationSwayncSubscribe:    ["swaync-client", "-s", "-sw"]
-    readonly property var notificationSwayncTogglePanel: ["swaync-client", "-t", "-sw"]
-    readonly property var notificationSwayncToggleDnd:   ["swaync-client", "-d", "-sw"]
-    readonly property var notificationSwayncClearAll:    ["swaync-client", "-C", "-sw"]
-
-    // --- mako (makoctl) — no notification center panel; left-click does nothing
-    readonly property var notificationMakoToggleDnd: ["makoctl", "mode", "-t"]
-    readonly property var notificationMakoClearAll:  ["makoctl", "dismiss", "-a"]
-    readonly property var notificationMakoPoll: [
-        "/home/crome/.config/quickshell/scripts/notification-state.sh",
-        "mako"
-    ]
-
-    // --- custom (notificationPreset: "custom") — fill in your client's CLI
-    readonly property var notificationCustomSubscribe:    []
-    readonly property var notificationCustomTogglePanel:  []
-    readonly property var notificationCustomToggleDnd:    []
-    readonly property var notificationCustomClearAll:     []
-    readonly property var notificationCustomPoll:         []
 
     // =========================================================================
     // KILL TARGET PILL (widgets/KillTargetPill.qml — xkill-style window picker)
@@ -888,28 +873,11 @@ QtObject {
 
     // --- NotificationBell command resolver (used by shell.qml + NotificationBell.qml)
     function notificationCommand(action) {
-        var preset = (notificationPreset || "swaync").toLowerCase()
-        if (preset === "mako") {
-            if (action === "subscribe") return []
-            if (action === "togglePanel") return []
-            if (action === "toggleDnd") return notificationMakoToggleDnd
-            if (action === "clearAll") return notificationMakoClearAll
-            if (action === "poll") return notificationMakoPoll
-            return []
-        }
-        if (preset === "custom") {
-            if (action === "subscribe") return notificationCustomSubscribe
-            if (action === "togglePanel") return notificationCustomTogglePanel
-            if (action === "toggleDnd") return notificationCustomToggleDnd
-            if (action === "clearAll") return notificationCustomClearAll
-            if (action === "poll") return notificationCustomPoll
-            return []
-        }
-        // swaync (default)
-        if (action === "subscribe") return notificationSwayncSubscribe
-        if (action === "togglePanel") return notificationSwayncTogglePanel
-        if (action === "toggleDnd") return notificationSwayncToggleDnd
-        if (action === "clearAll") return notificationSwayncClearAll
+        if (action === "subscribe") return notificationSubscribe
+        if (action === "togglePanel") return notificationTogglePanel
+        if (action === "toggleDnd") return notificationToggleDnd
+        if (action === "clearAll") return notificationClearAll
+        if (action === "poll") return notificationPoll
         return []
     }
 
