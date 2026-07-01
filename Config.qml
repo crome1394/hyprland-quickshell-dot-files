@@ -221,16 +221,16 @@ QtObject {
         }
     ]
 
-    // Popup implicit sizes (centralized so you can scale the whole UI feel)
-    readonly property int popupAudioWidth:     420
+    // Popup window sizes in pixels (width × height). Increase if content feels cramped.
+    readonly property int popupAudioWidth:     420   // AudioPill device/volume popup
     readonly property int popupAudioHeight:    260
-    readonly property int popupMediaWidth:     520
+    readonly property int popupMediaWidth:     520   // MediaPill player controls popup
     readonly property int popupMediaHeight:    470
-    readonly property int popupPowerWidth:     560
+    readonly property int popupPowerWidth:     560   // PowerMenu full grid (left-click)
     readonly property int popupPowerHeight:    192
     readonly property int popupContextMenuWidth:  220   // Compact right-click menus (bell, power)
-    readonly property int popupContextMenuRowHeight: 34
-    readonly property int popupCalendarWidth:  310
+    readonly property int popupContextMenuRowHeight: 34  // Height of one row in those menus
+    readonly property int popupCalendarWidth:  310   // ClockPill calendar popup
     readonly property int popupCalendarHeight: 280
     // --- SysStatsPill metrics popups (right-click CPU / Memory / GPU on the bar pill)
     // These are the large dropdown panels with charts and process lists — not the
@@ -285,9 +285,9 @@ QtObject {
     // false = always use popupStatsLiveUpdates when you open a popup
     // true  = save per-section pause state to state/popup-stats.json
     readonly property bool popupStatsPersistPause: false
-    readonly property int popupHelpWidth:     1060
-    readonly property int popupHelpHeight:     720
-    readonly property int popupTrayMaxHeight:  520
+    readonly property int popupHelpWidth:     1060  // Hypr Config Inspector default width
+    readonly property int popupHelpHeight:     720   // Hypr Config Inspector default height
+    readonly property int popupTrayMaxHeight:  520   // SystemTrayPill menu max height before scroll
 
     // Popup internal layout tokens (standardizes the repeated glass card patterns)
     readonly property real popupHeaderHighlightHeight: 1.5   // Top light edge on popup glass cards
@@ -334,17 +334,16 @@ QtObject {
     //                              {"count":N,"dnd":true|false}
     //   notificationDndAccent    — border/bell color when Do Not Disturb is on
 
-    readonly property var notificationSubscribe:    ["swaync-client", "-s", "-sw"]
-    readonly property var notificationTogglePanel: ["swaync-client", "-t", "-sw"]
-    readonly property var notificationToggleDnd:   ["swaync-client", "-d", "-sw"]
-    readonly property var notificationClearAll:    ["swaync-client", "-C", "-sw"]
-    // Backup badge/DND refresh (runs on a timer alongside subscribe). For SwayNC,
-    // leave as-is. If you switch daemons, point this at your own sync script.
+    readonly property var notificationSubscribe:    ["swaync-client", "-s", "-sw"]  // Live JSON stream (optional)
+    readonly property var notificationTogglePanel: ["swaync-client", "-t", "-sw"]   // Left-click bell
+    readonly property var notificationToggleDnd:   ["swaync-client", "-d", "-sw"]   // Right-click menu
+    readonly property var notificationClearAll:    ["swaync-client", "-C", "-sw"]   // Right-click menu
+    // Timer poller — reliable badge/DND backup; script must print {"count":N,"dnd":true|false}
     readonly property var notificationSync: [
         "/home/crome/.config/quickshell/scripts/notification-sync.sh"
     ]
-    readonly property int notificationSyncIntervalMs: 2500
-    readonly property color notificationDndAccent: "#e85d5d"  // Pill border + bell when DND is on
+    readonly property int notificationSyncIntervalMs: 2500  // Ms between sync script runs
+    readonly property color notificationDndAccent: "#e85d5d"  // Red pill border + bell when DND is on
 
     // =========================================================================
     // KILL TARGET PILL (widgets/KillTargetPill.qml — xkill-style window picker)
@@ -368,20 +367,20 @@ QtObject {
     // powerMenuActions — labels and icons shown in the grid + right-click menu.
     // Reorder or rename entries here; command lists below must match action ids.
 
-    readonly property var powerLockCommand: ["hyprlock"]
-    readonly property var powerLogoutCommand: [
+    readonly property var powerLockCommand: ["hyprlock"]  // Lock screen (left-click grid + right-click menu)
+    readonly property var powerLogoutCommand: [           // End Hyprland session; edit app list in the shell pipeline
         "sh", "-c",
         "systemctl --user stop psd.service & pkill -f 'steam|discord|flameshot|espanso|google-chrome-stable|brave|brave-origin' & sleep 1 & command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"
     ]
-    readonly property var powerRebootCommand: [
+    readonly property var powerRebootCommand: [         // Reboot the machine
         "sh", "-c",
         "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable|brave|brave-origin\" & sleep 1 & reboot"
     ]
-    readonly property var powerShutdownCommand: [
+    readonly property var powerShutdownCommand: [         // Power off the machine
         "sh", "-c",
         "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable|brave|brave-origin\" & sleep 1 & shutdown now"
     ]
-    readonly property var powerBiosCommand: ["systemctl", "reboot", "--firmware-setup"]
+    readonly property var powerBiosCommand: ["systemctl", "reboot", "--firmware-setup"]  // UEFI/BIOS on next boot
 
     // =========================================================================
     // FONTS
@@ -392,7 +391,7 @@ QtObject {
     // Sizes (chosen for ultrawide readability at 58px bar)
     readonly property int fontClock:      15   // Main clock text (bold)
     readonly property int fontPillLabel:  12   // % labels next to volume bars, small text
-    readonly property int fontPillLabelBold: 12
+    readonly property int fontPillLabelBold: 12   // Bold variant of pill labels (same size as fontPillLabel)
     readonly property int fontPopupTitle: 16   // "Audio Controls", "Power Menu", etc. (prefer popupTitleSize for new popup code)
     readonly property int fontSection:    13   // "Playback", "Recording", tab labels (prefer popupSectionSize)
     readonly property int fontBody:       12   // Most body text in popups
@@ -520,11 +519,11 @@ QtObject {
     readonly property color wsText:        "#64748b"
     readonly property color wsActiveTextLegacy: wsActiveText   // (the alias in shell.qml maps wsActiveText → this)
 
-    readonly property int  wsButtonWidth:   42
-    readonly property int  wsButtonHeight:  32
-    readonly property int  wsIconSize:      iconSizeTray
-    readonly property int  wsNumberSize:    15
-    readonly property int  wsSpacing:        4     // Between workspace buttons
+    readonly property int  wsButtonWidth:   42   // Width of each workspace pill button
+    readonly property int  wsButtonHeight:  32   // Height of each workspace pill button
+    readonly property int  wsIconSize:      iconSizeTray  // Glyph size inside workspace pills
+    readonly property int  wsNumberSize:    15   // Font size for workspace numbers (when no icon)
+    readonly property int  wsSpacing:        4   // Gap between workspace buttons
 
     // --- Per-workspace pill icons (edit here to remap without touching widget logic)
     // Nerd Font glyphs for most slots; Unicode emoji where noted for color/readability.
@@ -648,12 +647,13 @@ QtObject {
     // =========================================================================
     // CAVA VISUALIZER (MediaPill background waveform)
     // =========================================================================
-    readonly property int  cavaBarCount:     40
-    readonly property int  cavaBarGap:        1
-    readonly property color cavaInactive:    Qt.rgba(1, 1, 1, 0.18)
-    readonly property color cavaActive:      Qt.rgba(0.55, 0.71, 0.98, 0.35)
-    readonly property int  cavaAnimFast:     95   // ms when media playing
-    readonly property int  cavaAnimSlow:    420   // ms when idle (saves CPU)
+    // Animated bars behind the media pill when music is playing.
+    readonly property int  cavaBarCount:     40   // Number of vertical bars
+    readonly property int  cavaBarGap:        1   // Pixels between bars
+    readonly property color cavaInactive:    Qt.rgba(1, 1, 1, 0.18)  // Bar color when silent
+    readonly property color cavaActive:      Qt.rgba(0.55, 0.71, 0.98, 0.35)  // Bar color when audio plays
+    readonly property int  cavaAnimFast:     95   // Animation speed (ms) when media is playing
+    readonly property int  cavaAnimSlow:    420   // Animation speed (ms) when idle (saves CPU)
 
     // =========================================================================
     // SYSTEM MONITORING (SysMonService + HyprConfigInsp sysmon tabs)
@@ -910,7 +910,7 @@ QtObject {
     // =========================================================================
     // CONVENIENCE / DERIVED (rarely need editing)
     // =========================================================================
-    readonly property int popupY: barHeight + 2   // Standard y offset under the bar for popups
+    readonly property int popupY: barHeight + 2   // Legacy Y offset under the bar (prefer popupBarGap + popupAnchorY)
 
     // --- NotificationBell command resolver (used by shell.qml + NotificationBell.qml)
     function notificationCommand(action) {

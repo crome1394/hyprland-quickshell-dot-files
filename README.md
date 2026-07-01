@@ -326,10 +326,17 @@ Shortcuts apply while the inspector window is focused (search field captures typ
 Edit `Config.qml` to change:
 
 - Colors, fonts, spacing, radii, and icon glyphs
-- Bar pill visibility defaults (`showLauncherPill`, `showAudioPill`, etc.)
-- Workspace pill count, active-only mode, magic pill default, and startup focus (`setWsMinimumShown`, `setWsShowOnlyActive`, `setWsStartupWorkspace`, `setWsStartupCloseMagic` via IPC)
-- System Stats pill and metrics popups (see below)
-- Inspector sizing and semantic colors (search for `insp*` properties)
+- Bar position and size (`barPosition`, `barHeight`, `barEdgeMargin`)
+- Bar pill visibility defaults (`showLauncherPill`, `showAudioPill`, etc.) and launcher command (`launcherCommand`)
+- **Quick Launch** apps (`quickLaunchApps`)
+- **Notification bell** daemon commands (`notification*`)
+- **Power menu** session commands (`power*Command`, `powerMenuActions`)
+- **Kill Target** pill (`killTargetIcon`, `showKillTargetPill`, etc.)
+- Workspace pill count, active-only mode, magic pill default, and startup focus (search **WORKSPACES**; IPC: `setWsMinimumShown`, `setWsShowOnlyActive`, `setWsStartupWorkspace`, `setWsStartupCloseMagic`)
+- System Stats pill and metrics popups (search **SYS STATS PILL** and `popupStats*`)
+- Inspector sizing and semantic colors (search `insp*` properties)
+
+Every property in `Config.qml` has an inline or section comment explaining what it does and which widget uses it. Search for the section headers in the file (e.g. **POWER MENU**, **NOTIFICATION BELL**, **WIDGET VISIBILITY**).
 
 The file is named `Config.qml` (capital **C**) because QML requires that naming for reliable type registration across subdirectories.
 
