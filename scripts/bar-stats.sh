@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bar-stats.sh
-# Ultra-lightweight poller for the centered CPU+GPU pill in the top bar.
-# Outputs a single line of JSON with current util + temp for AMD 9950X3D + RTX 5080.
+# Ultra-lightweight poller for the centered CPU+RAM+GPU pill in the top bar.
+# Outputs a single line of JSON with CPU/GPU util+temp and RAM util+used GiB.
 # Designed to be called every ~1.5-1.8s. Completes in <120ms.
 
 set -u
@@ -44,6 +44,20 @@ gpu_temp=$(echo "$nvg_raw" | cut -d, -f2 | xargs)
 : "${gpu_util:=0}"
 : "${gpu_temp:=0}"
 
+# ---------- Memory (used % + used GiB from /proc/meminfo) ----------
+mem_total=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+mem_available=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+ram_used=$(( mem_total - mem_available ))
+ram_total_mib=$(( mem_total / 1024 ))
+ram_used_mib=$(( ram_used / 1024 ))
+
+if (( ram_total_mib > 0 )); then
+    ram_pct=$(awk "BEGIN { printf \"%.1f\", ($ram_used_mib * 100.0) / $ram_total_mib }")
+else
+    ram_pct="0.0"
+fi
+ram_used_gib=$(awk "BEGIN { printf \"%.1f\", $ram_used_mib / 1024 }")
+
 # Emit clean single-line JSON (no whitespace bloat)
-printf '{"cpu":{"util":%s,"temp":%s},"gpu":{"util":%s,"temp":%s}}\n' \
-    "$cpu_util" "$cpu_temp" "$gpu_util" "$gpu_temp"
+printf '{"cpu":{"util":%s,"temp":%s},"mem":{"util":%s,"used_gib":%s},"gpu":{"util":%s,"temp":%s}}\n' \
+    "$cpu_util" "$cpu_temp" "$ram_pct" "$ram_used_gib" "$gpu_util" "$gpu_temp"

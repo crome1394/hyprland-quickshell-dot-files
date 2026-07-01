@@ -66,26 +66,56 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-        ToolTip.text: "Power / Session"
+        ToolTip.text: "Left: power menu · Right: quick menu"
         ToolTip.visible: containsMouse
         ToolTip.delay: bar.tooltipDelay
 
-        onClicked: {
-            if (powerPopup.visible) {
-                powerPopup.visible = false
+        onClicked: (mouse) => {
+            if (mouse.button === Qt.RightButton) {
+                showPowerContextMenu()
             } else {
-                showPowerMenu()
+                hidePowerContextMenu()
+                if (powerPopup.visible) {
+                    hidePowerMenu()
+                } else {
+                    showPowerMenu()
+                }
             }
         }
     }
 
     // ===== Power / Session Menu Helpers =====
+    function hidePowerContextMenu() {
+        powerContextPopup.visible = false
+    }
+
+    function showPowerContextMenu() {
+        if (powerContextPopup.visible) {
+            hidePowerContextMenu()
+            return
+        }
+        hidePowerMenu()
+
+        var pos = root.mapToItem(barBg, root.width / 2, 0)
+        var popupW = powerContextPopup.implicitWidth
+        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
+        var targetX = bar.sideMargin + pos.x - (popupW / 2)
+        var minX = 12
+        var maxX = screenW - popupW - 12
+
+        powerContextPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
+        powerContextPopup.anchor.rect.y = bar.popupAnchorY(powerContextPopup.implicitHeight, 2)
+        powerContextPopup.visible = true
+    }
+
     function showPowerMenu() {
         if (powerPopup.visible) {
             hidePowerMenu();
             return;
         }
+        hidePowerContextMenu()
 
         var pos = root.mapToItem(barBg, root.width / 2, root.height);
         var popupW = powerPopup.implicitWidth;
@@ -105,9 +135,14 @@ Rectangle {
         powerPopup.visible = false;
     }
 
+    function hideAllPowerPopups() {
+        hidePowerMenu()
+        hidePowerContextMenu()
+    }
+
     function powerAction(cmd) {
         Quickshell.execDetached(cmd);
-        hidePowerMenu();
+        hideAllPowerPopups();
     }
 
     function powerLock()     { powerAction(["hyprlock"]); }
@@ -118,7 +153,7 @@ Rectangle {
             "sh", "-c",
             "systemctl --user stop psd.service & pkill -f 'steam|discord|flameshot|espanso|google-chrome-stable' & sleep 1 & command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"
         ]);
-        hidePowerMenu();
+        hideAllPowerPopups();
     }
 
     function powerReboot() {
@@ -126,7 +161,7 @@ Rectangle {
             "sh", "-c",
             "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable\" & sleep 1 & reboot"
         ]);
-        hidePowerMenu();
+        hideAllPowerPopups();
     }
 
     function powerShutdown() {
@@ -134,7 +169,123 @@ Rectangle {
             "sh", "-c",
             "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable\" & sleep 1 & shutdown now"
         ]);
-        hidePowerMenu();
+        hideAllPowerPopups();
+    }
+
+    // ===== POWER QUICK MENU (right-click) =====
+    PopupWindow {
+        id: powerContextPopup
+        anchor.window: bar
+        implicitWidth: bar.popupContextMenuWidth
+        implicitHeight: powerContextColumn.implicitHeight + bar.popupSpacingTight * 2
+        visible: false
+        grabFocus: true
+        color: "transparent"
+
+        Rectangle {
+            anchors.fill: parent
+            radius: bar.popupRadius
+            color: bar.glassPopupBg
+            border.width: bar.controlBorderWidth
+            border.color: bar.glassPopupBorder
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: bar.popupHeaderHighlightHeight
+                color: bar.glassPopupHighlight
+                radius: parent.radius
+            }
+
+            ColumnLayout {
+                id: powerContextColumn
+                anchors.fill: parent
+                anchors.margins: bar.popupSpacingTight
+                spacing: 4
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Power"
+                    color: bar.text
+                    font.pixelSize: bar.popupTitleSize
+                    font.bold: true
+                    font.family: bar.fontFamily
+                }
+
+                Repeater {
+                    model: [
+                        { icon: "󰌾", label: "Lock",       action: "lock" },
+                        { icon: "󰍃", label: "Logout",     action: "logout" },
+                        { icon: "󰑓", label: "Reboot",     action: "reboot" },
+                        { icon: "󰐥", label: "Shutdown",   action: "shutdown" },
+                        { icon: "󰛳", label: "Enter BIOS", action: "bios" }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: bar.popupContextMenuRowHeight
+                        radius: bar.buttonRadius
+                        color: ctxMa.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            spacing: 8
+
+                            Text {
+                                text: modelData.icon
+                                font.pixelSize: 15
+                                font.family: bar.fontFamily
+                                color: ctxMa.containsMouse ? bar.accent : bar.subtext
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.label
+                                color: bar.text
+                                font.pixelSize: 12
+                                font.family: bar.fontFamily
+                            }
+                        }
+
+                        MouseArea {
+                            id: ctxMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                switch (modelData.action) {
+                                    case "lock":     powerLock(); break
+                                    case "logout":   powerLogout(); break
+                                    case "reboot":   powerReboot(); break
+                                    case "shutdown": powerShutdown(); break
+                                    case "bios":     powerBios(); break
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: "click outside to close"
+                    color: bar.overlay
+                    font.pixelSize: bar.popupHintSize
+                    font.family: bar.fontFamily
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            onClicked: hidePowerContextMenu()
+        }
     }
 
     // ===== POWER MENU POPUP =====

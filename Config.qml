@@ -37,7 +37,8 @@
 //   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
 //   - Widget visibility (bar pill defaults)
 //   - Workspaces (pill behavior, colors, icons, special workspace name)
-//   - System stats (CPU/GPU bars + temp thresholds)
+//   - SYS STATS PILL (CPU | RAM | GPU bar pill size, gauges, temp colors)
+//   - SysStats metrics popups (right-click dropdown size/position per section)
 //   - Cava visualizer
 //   - System monitoring (gauges, poll default, shared tab-chip colors)
 //   - Hypr Config Inspector (overlay window, tabs, tables, key/env semantic colors)
@@ -181,32 +182,62 @@ QtObject {
     readonly property int popupMediaHeight:    470
     readonly property int popupPowerWidth:     560
     readonly property int popupPowerHeight:    192
+    readonly property int popupContextMenuWidth:  220   // Compact right-click menus (bell, power)
+    readonly property int popupContextMenuRowHeight: 34
     readonly property int popupCalendarWidth:  310
     readonly property int popupCalendarHeight: 280
-    readonly property int popupStatsCpuWidth:  598   // SysStatsPill CPU metrics popup width
-    readonly property int popupStatsCpuHeight: 700   // SysStatsPill CPU metrics popup height
-    readonly property int popupStatsGpuWidth:  598   // SysStatsPill GPU metrics popup width
-    readonly property int popupStatsGpuHeight: 700   // SysStatsPill GPU metrics popup height
-    // --- SysStatsPill metrics popup position (widgets/SysStatsPill.qml showMetricsPopup)
-    // CPU and GPU right-click menus are positioned independently. For each:
-    //   anchorX     — horizontal point on the target: 0 = left, 0.5 = center, 1 = right
-    //                 (popup is centered on that point, then offset/clamped to the screen)
-    //   anchorWholePill — when true, anchor to the full SysStatsPill instead of that half
-    //   offsetX/Y   — pixel nudge after anchor math (negative offsetX = left)
-    //   barGap      — gap between bar edge and popup (popupAnchorY; flips with barPosition)
+    // --- SysStatsPill metrics popups (right-click CPU / RAM / GPU on the bar pill)
+    // These are the large dropdown panels with charts and process lists — not the
+    // compact numbers shown on the pill itself. Each section has its own size.
+    readonly property int popupStatsCpuWidth:  598   // CPU popup width in pixels
+    readonly property int popupStatsCpuHeight: 700   // CPU popup height in pixels
+    readonly property int popupStatsMemWidth:  598   // RAM popup width in pixels
+    readonly property int popupStatsMemHeight: 700   // RAM popup height in pixels
+    readonly property int popupStatsGpuWidth:  598   // GPU popup width in pixels
+    readonly property int popupStatsGpuHeight: 700   // GPU popup height in pixels
+
+    // --- Where each metrics popup appears on screen (widgets/SysStatsPill.qml)
+    // Right-click CPU, RAM, or GPU to open its popup. Position is tuned per section
+    // so popups do not overlap each other or fall off the screen edge.
+    //
+    // Shared terms (same meaning for Cpu / Mem / Gpu):
+    //   anchorX          — which part of the pill section to line up under:
+    //                      0 = left edge, 0.5 = middle, 1 = right edge
+    //   anchorWholePill  — false = anchor under that section only (CPU, RAM, or GPU)
+    //                      true  = anchor under the entire stats pill as one block
+    //   offsetX          — slide popup left (negative) or right (positive) in pixels
+    //   offsetY          — slide popup up (negative) or down (positive) in pixels
+    //   barGap           — space between the bar and the popup (larger = farther away)
+
+    // CPU section (left third of the pill)
     readonly property real popupStatsCpuAnchorX: 0.5
     readonly property bool popupStatsCpuAnchorWholePill: false
     readonly property int popupStatsCpuOffsetX: 100
-    readonly property int popupStatsCpuOffsetY: 0
+    readonly property int popupStatsCpuOffsetY: 7
     readonly property int popupStatsCpuBarGap: 2
+
+    // RAM section (middle third)
+    readonly property real popupStatsMemAnchorX: 0.5
+    readonly property bool popupStatsMemAnchorWholePill: false
+    readonly property int popupStatsMemOffsetX: 0
+    readonly property int popupStatsMemOffsetY: 7
+    readonly property int popupStatsMemBarGap: 2
+
+    // GPU section (right third)
     readonly property real popupStatsGpuAnchorX: 0.5
     readonly property bool popupStatsGpuAnchorWholePill: false
     readonly property int popupStatsGpuOffsetX: -130
-    readonly property int popupStatsGpuOffsetY: 0
+    readonly property int popupStatsGpuOffsetY: 7
     readonly property int popupStatsGpuBarGap: 2
-    // Default live polling when a metrics popup opens (persists across reboot via this file).
+
+    // When you right-click and open a metrics popup, should charts update live?
+    // true  = live graphs and numbers (uses a bit more CPU while open)
+    // false = frozen snapshot until you close and reopen
     readonly property bool popupStatsLiveUpdates: true
-    // When true, Pause/Resume choices are saved to state/popup-stats.json and restored after reboot.
+
+    // Remember your Pause / Resume choice across reboots?
+    // false = always use popupStatsLiveUpdates when you open a popup
+    // true  = save per-section pause state to state/popup-stats.json
     readonly property bool popupStatsPersistPause: false
     readonly property int popupHelpWidth:     1060
     readonly property int popupHelpHeight:     720
@@ -426,33 +457,56 @@ QtObject {
     }
 
     // =========================================================================
-    // SYSTEM STATS GAUGES (CPU / GPU utilization bars + temp labels)
+    // SYS STATS PILL (widgets/SysStatsPill.qml — CPU | RAM | GPU)
     // =========================================================================
-    readonly property int  statGaugeWidth:   73     // Visual bar width inside SysStatsPill
+    // The centered bar pill that shows live CPU, RAM, and GPU stats.
+    // Left-click CPU or RAM opens btop; left-click GPU opens nvtop.
+    // Right-click any section for the detailed metrics popup (see popupStats* above).
+    //
+    // If the glass border looks too narrow or text sticks out past the edges,
+    // increase statPillWidth first. Then tweak section width and padding if needed.
+
+    // Total width of the pill in pixels — the outer glass border you see on the bar.
+    // This is independent of the three columns inside; raise it if content overflows.
+    readonly property int  statPillWidth: 600
+
+    // Width of each clickable column (CPU, RAM, GPU) inside the pill.
+    // Wider columns give more room for the label, bar, and numbers.
+    readonly property int  statPillSectionWidth: 175
+
+    // Empty space between the three columns (the thin vertical dividers sit here).
+    readonly property int  statPillSpacing: 10
+
+    // Left and right padding inside the pill border so text is not flush to the edge.
+    readonly property int  statPillPaddingH: 12
+
+    // Small horizontal utilization bars (the colored fill behind the % numbers).
+    readonly property int  statGaugeWidth:   73
     readonly property int  statGaugeHeight:   8
     readonly property int  statGaugeRadius:   4
-    readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.09)  // Very subtle track
+    readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.09)  // Bar background track
 
-    // Utilization bar color ramp (25% tiers — edit colors and thresholds together)
-    readonly property color statUtilTier1: "#10B981"   // 0–statUtilThreshold1%
-    readonly property color statUtilTier2: "#F59E0B"   // statUtilThreshold1+1–statUtilThreshold2%
-    readonly property color statUtilTier3: "#F97316"   // statUtilThreshold2+1–statUtilThreshold3%
-    readonly property color statUtilTier4: "#EF4444"   // statUtilThreshold3+1–100%
+    // Utilization % bar and text color by load level (green → yellow → orange → red).
+    readonly property color statUtilTier1: "#10B981"   // Low load (0% up to first threshold)
+    readonly property color statUtilTier2: "#F59E0B"
+    readonly property color statUtilTier3: "#F97316"
+    readonly property color statUtilTier4: "#EF4444"   // High load (above third threshold)
 
+    // At what utilization % each color tier starts (must be in ascending order).
     readonly property int statUtilThreshold1: 25
     readonly property int statUtilThreshold2: 50
     readonly property int statUtilThreshold3: 75
 
-    // Temperature text colors (independent from utilization ramp)
-    readonly property color statTempCool: "#cdd6f4"   // Below statTempWarmAt
-    readonly property color statTempWarm: "#f9e2af"   // statTempWarmAt–statTempHotAt
-    readonly property color statTempHot:  "#f38ba8"   // Above statTempHotAt
+    // CPU/GPU temperature text colors (RAM shows used GiB instead — uses subtext color).
+    readonly property color statTempCool: "#cdd6f4"   // Normal temperature
+    readonly property color statTempWarm: "#f9e2af"   // Getting warm
+    readonly property color statTempHot:  "#f38ba8"   // Hot
 
-    // Temperature label thresholds (°C)
+    // Temperatures in °C where the label switches cool → warm → hot.
     readonly property int statTempWarmAt: 70
     readonly property int statTempHotAt:  85
 
-    // "|" between utilization % and temperature in SysStatsPill
+    // Color of the "|" between utilization % and temperature (or used GiB for RAM).
     readonly property color statValueSeparator: overlay
 
     function statUtilColor(util) {

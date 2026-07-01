@@ -6,13 +6,13 @@ import Quickshell.Io as Io
 import "../components"
 
 // =============================================================================
-// SysStatsPill.qml — System resource gauges (CPU, GPU)
+// SysStatsPill.qml — System resource gauges (CPU, RAM, GPU)
 // =============================================================================
 //
 // Purpose:
-//   Overlay gauges showing CPU + GPU utilization and temperatures.
-//   Left-click CPU launches btop; left-click GPU launches nvtop.
-//   Right-click each half opens a metrics dropdown (CpuMonitorView / GpuMonitorView).
+//   Overlay gauges showing CPU + RAM + GPU utilization (and temps for CPU/GPU).
+//   Left-click CPU/RAM launches btop; left-click GPU launches nvtop.
+//   Right-click each third opens a metrics dropdown (Cpu/Memory/GpuMonitorView).
 //   Automatically hides when media is playing.
 //
 // Theme Properties Consumed:
@@ -24,7 +24,8 @@ import "../components"
 //   - bar.statTempCool, bar.statTempWarm, bar.statTempHot, bar.statTempWarmAt,
 //     bar.statTempHotAt, bar.statTempColor(), bar.statValueSeparator
 //   - bar.divider, bar.fontFamily, bar.tooltipDelay, bar.popupAnchorY()
-//   - bar.popupStatsCpu/Gpu Width/Height and per-half position tokens (AnchorX, AnchorWholePill, OffsetX/Y, BarGap)
+//   - bar.popupStatsCpu/Mem/Gpu Width/Height and per-section position tokens (AnchorX, AnchorWholePill, OffsetX/Y, BarGap)
+//   - bar.statPillWidth (total border width), bar.statPillSectionWidth, bar.statPillSpacing, bar.statPillPaddingH
 //   - bar.popupStatsLiveUpdates, bar.popupStatsPersistPause
 //   - bar.surface, bar.overlay, bar.gaugeLow/Mid/High (metrics popup views)
 //
@@ -46,24 +47,27 @@ Rectangle {
     required property Item barBg
     property bool mediaActive: false
 
-    Layout.preferredWidth: 430
+    Layout.preferredWidth: bar.statPillWidth
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
     visible: !mediaActive && sysStatsReady
-    implicitWidth: 430
+    implicitWidth: bar.statPillWidth
     implicitHeight: bar.pillHeight
     radius: bar.pillRadius
     color: sysHover.containsMouse ? bar.glassHover : bar.glassPillBg
     border.width: bar.controlBorderWidth
     border.color: sysHover.containsMouse ? bar.accent : bar.glassBorder
 
-    readonly property bool metricsPopupOpen: cpuMetricsPopup.visible || gpuMetricsPopup.visible
+    readonly property bool metricsPopupOpen: cpuMetricsPopup.visible || memMetricsPopup.visible || gpuMetricsPopup.visible
     property bool cpuLiveUpdates: true
+    property bool memLiveUpdates: true
     property bool gpuLiveUpdates: true
 
     // ===== Stats State & Polling (pill display — unchanged) =====
     property real cpuUtil: 0
     property int  cpuTemp: 0
+    property real memUtil: 0
+    property real memUsedGib: 0
     property real gpuUtil: 0
     property int  gpuTemp: 0
     property bool sysStatsReady: false
@@ -72,6 +76,10 @@ Rectangle {
         if (d.cpu) {
             cpuUtil = Number(d.cpu.util) || 0
             cpuTemp = Math.round(Number(d.cpu.temp) || 0)
+        }
+        if (d.mem) {
+            memUtil = Number(d.mem.util) || 0
+            memUsedGib = Number(d.mem.used_gib) || 0
         }
         if (d.gpu) {
             gpuUtil = Number(d.gpu.util) || 0
@@ -114,6 +122,7 @@ Rectangle {
             if (!statsPoller.running) statsPoller.running = true
             if (!bar.popupStatsPersistPause) {
                 cpuLiveUpdates = bar.popupStatsLiveUpdates
+                memLiveUpdates = bar.popupStatsLiveUpdates
                 gpuLiveUpdates = bar.popupStatsLiveUpdates
             }
         })
@@ -134,6 +143,7 @@ Rectangle {
         Io.JsonAdapter {
             id: pauseAdapter
             property bool cpuLiveUpdates: bar.popupStatsLiveUpdates
+            property bool memLiveUpdates: bar.popupStatsLiveUpdates
             property bool gpuLiveUpdates: bar.popupStatsLiveUpdates
         }
     }
@@ -145,22 +155,28 @@ Rectangle {
 
     function seedPauseStateFromConfig() {
         pauseAdapter.cpuLiveUpdates = bar.popupStatsLiveUpdates
+        pauseAdapter.memLiveUpdates = bar.popupStatsLiveUpdates
         pauseAdapter.gpuLiveUpdates = bar.popupStatsLiveUpdates
         syncLiveUpdatesFromPersisted()
     }
 
     function syncLiveUpdatesFromPersisted() {
         cpuLiveUpdates = pauseAdapter.cpuLiveUpdates
+        memLiveUpdates = pauseAdapter.memLiveUpdates
         gpuLiveUpdates = pauseAdapter.gpuLiveUpdates
         syncMetricsPolling()
     }
 
-    function setLiveUpdates(isCpu, enabled) {
-        if (isCpu) {
+    function setLiveUpdates(section, enabled) {
+        if (section === "cpu") {
             cpuLiveUpdates = enabled
             if (bar.popupStatsPersistPause)
                 pauseAdapter.cpuLiveUpdates = enabled
-        } else {
+        } else if (section === "mem") {
+            memLiveUpdates = enabled
+            if (bar.popupStatsPersistPause)
+                pauseAdapter.memLiveUpdates = enabled
+        } else if (section === "gpu") {
             gpuLiveUpdates = enabled
             if (bar.popupStatsPersistPause)
                 pauseAdapter.gpuLiveUpdates = enabled
@@ -169,6 +185,7 @@ Rectangle {
 
     function metricsPollingEnabled() {
         return (cpuMetricsPopup.visible && cpuLiveUpdates)
+            || (memMetricsPopup.visible && memLiveUpdates)
             || (gpuMetricsPopup.visible && gpuLiveUpdates)
     }
 
@@ -183,18 +200,24 @@ Rectangle {
 
     // === Public API (shell IPC: qs ipc call sysStatsPill …) ===
     function setCpuLiveUpdates(enabled) {
-        setLiveUpdates(true, enabled)
+        setLiveUpdates("cpu", enabled)
+        syncMetricsPolling()
+    }
+
+    function setMemLiveUpdates(enabled) {
+        setLiveUpdates("mem", enabled)
         syncMetricsPolling()
     }
 
     function setGpuLiveUpdates(enabled) {
-        setLiveUpdates(false, enabled)
+        setLiveUpdates("gpu", enabled)
         syncMetricsPolling()
     }
 
     function setMetricsLiveUpdates(enabled) {
-        setLiveUpdates(true, enabled)
-        setLiveUpdates(false, enabled)
+        setLiveUpdates("cpu", enabled)
+        setLiveUpdates("mem", enabled)
+        setLiveUpdates("gpu", enabled)
         syncMetricsPolling()
     }
 
@@ -202,39 +225,58 @@ Rectangle {
         setCpuLiveUpdates(!cpuLiveUpdates)
     }
 
+    function toggleMemLiveUpdates() {
+        setMemLiveUpdates(!memLiveUpdates)
+    }
+
     function toggleGpuLiveUpdates() {
         setGpuLiveUpdates(!gpuLiveUpdates)
     }
 
     function toggleMetricsLiveUpdates() {
-        setMetricsLiveUpdates(!(cpuLiveUpdates || gpuLiveUpdates))
+        setMetricsLiveUpdates(!(cpuLiveUpdates || memLiveUpdates || gpuLiveUpdates))
     }
 
     function hideMetricsPopups() {
         cpuMetricsPopup.visible = false
+        memMetricsPopup.visible = false
         gpuMetricsPopup.visible = false
         syncMetricsPolling()
     }
 
-    function showMetricsPopup(popup, anchorItem, otherPopup, isCpu) {
+    function showMetricsPopup(popup, anchorItem, section) {
         if (popup.visible) {
             popup.visible = false
             syncMetricsPolling()
             return
         }
-        otherPopup.visible = false
+        if (popup !== cpuMetricsPopup) cpuMetricsPopup.visible = false
+        if (popup !== memMetricsPopup) memMetricsPopup.visible = false
+        if (popup !== gpuMetricsPopup) gpuMetricsPopup.visible = false
         if (bar.popupStatsPersistPause) {
-            if (isCpu)
+            if (section === "cpu")
                 cpuLiveUpdates = pauseAdapter.cpuLiveUpdates
-            else
+            else if (section === "mem")
+                memLiveUpdates = pauseAdapter.memLiveUpdates
+            else if (section === "gpu")
                 gpuLiveUpdates = pauseAdapter.gpuLiveUpdates
         }
 
-        var anchorXFrac = isCpu ? bar.popupStatsCpuAnchorX : bar.popupStatsGpuAnchorX
-        var anchorWholePill = isCpu ? bar.popupStatsCpuAnchorWholePill : bar.popupStatsGpuAnchorWholePill
-        var offsetX = isCpu ? bar.popupStatsCpuOffsetX : bar.popupStatsGpuOffsetX
-        var offsetY = isCpu ? bar.popupStatsCpuOffsetY : bar.popupStatsGpuOffsetY
-        var barGap = isCpu ? bar.popupStatsCpuBarGap : bar.popupStatsGpuBarGap
+        var anchorXFrac = section === "cpu" ? bar.popupStatsCpuAnchorX
+                        : section === "mem" ? bar.popupStatsMemAnchorX
+                        : bar.popupStatsGpuAnchorX
+        var anchorWholePill = section === "cpu" ? bar.popupStatsCpuAnchorWholePill
+                            : section === "mem" ? bar.popupStatsMemAnchorWholePill
+                            : bar.popupStatsGpuAnchorWholePill
+        var offsetX = section === "cpu" ? bar.popupStatsCpuOffsetX
+                    : section === "mem" ? bar.popupStatsMemOffsetX
+                    : bar.popupStatsGpuOffsetX
+        var offsetY = section === "cpu" ? bar.popupStatsCpuOffsetY
+                    : section === "mem" ? bar.popupStatsMemOffsetY
+                    : bar.popupStatsGpuOffsetY
+        var barGap = section === "cpu" ? bar.popupStatsCpuBarGap
+                   : section === "mem" ? bar.popupStatsMemBarGap
+                   : bar.popupStatsGpuBarGap
 
         var layoutAnchor = anchorWholePill ? root : anchorItem
         var pos = layoutAnchor.mapToItem(barBg, layoutAnchor.width * anchorXFrac, 0)
@@ -267,13 +309,17 @@ Rectangle {
     }
 
     Row {
-        anchors.centerIn: parent
-        spacing: 17
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: bar.statPillPaddingH
+        anchors.rightMargin: bar.statPillPaddingH
+        spacing: bar.statPillSpacing
 
-        // ----- CPU HALF -----
+        // ----- CPU -----
         Item {
             id: cpuSection
-            width: 195
+            width: bar.statPillSectionWidth
             height: 26
 
             MouseArea {
@@ -284,7 +330,7 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) {
-                        root.showMetricsPopup(cpuMetricsPopup, cpuSection, gpuMetricsPopup, true)
+                        root.showMetricsPopup(cpuMetricsPopup, cpuSection, "cpu")
                     } else {
                         root.hideMetricsPopups()
                         Quickshell.execDetached(["kitty", "-e", "btop"])
@@ -368,10 +414,108 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        // ----- GPU HALF -----
+        // ----- RAM -----
+        Item {
+            id: memSection
+            width: bar.statPillSectionWidth
+            height: 26
+
+            MouseArea {
+                id: memClick
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton) {
+                        root.showMetricsPopup(memMetricsPopup, memSection, "mem")
+                    } else {
+                        root.hideMetricsPopups()
+                        Quickshell.execDetached(["kitty", "-e", "btop"])
+                    }
+                }
+                ToolTip.text: "Left: btop · Right: RAM metrics"
+                ToolTip.visible: memClick.containsMouse
+                ToolTip.delay: bar.tooltipDelay
+            }
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 7
+
+                Text {
+                    text: "RAM"
+                    font.pixelSize: 13
+                    font.bold: true
+                    font.family: bar.fontFamily
+                    color: memClick.containsMouse ? bar.accent : bar.subtext
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Item {
+                    width: bar.statGaugeWidth
+                    height: bar.statGaugeHeight
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: bar.statGaugeRadius
+                        color: bar.statTrack
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.max(2, Math.min(parent.width, parent.width * (root.memUtil / 100)))
+                        height: bar.statGaugeHeight
+                        radius: bar.statGaugeRadius
+                        color: bar.statUtilColor(root.memUtil)
+
+                        Behavior on width {
+                            NumberAnimation { duration: 110; easing.type: Easing.OutQuad }
+                        }
+                    }
+                }
+
+                Row {
+                    spacing: 4
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        text: Math.round(root.memUtil) + "%"
+                        font.pixelSize: 13
+                        font.bold: true
+                        font.family: bar.fontFamily
+                        color: bar.statUtilColor(root.memUtil)
+                    }
+                    Text {
+                        text: "|"
+                        font.pixelSize: 13
+                        font.family: bar.fontFamily
+                        color: bar.statValueSeparator
+                    }
+                    Text {
+                        text: root.memUsedGib.toFixed(0) + "G"
+                        font.pixelSize: 13
+                        font.bold: true
+                        font.family: bar.fontFamily
+                        color: bar.subtext
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 1
+            height: 17
+            color: bar.divider
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        // ----- GPU -----
         Item {
             id: gpuSection
-            width: 195
+            width: bar.statPillSectionWidth
             height: 26
 
             MouseArea {
@@ -382,7 +526,7 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) {
-                        root.showMetricsPopup(gpuMetricsPopup, gpuSection, cpuMetricsPopup, false)
+                        root.showMetricsPopup(gpuMetricsPopup, gpuSection, "gpu")
                     } else {
                         root.hideMetricsPopups()
                         Quickshell.execDetached(["kitty", "-e", "nvtop"])
@@ -530,7 +674,7 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                setLiveUpdates(true, !cpuLiveUpdates)
+                                setLiveUpdates("cpu", !cpuLiveUpdates)
                                 syncMetricsPolling()
                             }
                         }
@@ -561,6 +705,113 @@ Rectangle {
             anchors.fill: parent
             z: -1
             onClicked: cpuMetricsPopup.visible = false
+        }
+    }
+
+    // ===== RAM METRICS POPUP =====
+    PopupWindow {
+        id: memMetricsPopup
+        anchor.window: bar
+        implicitWidth: bar.popupStatsMemWidth
+        implicitHeight: bar.popupStatsMemHeight
+        visible: false
+        grabFocus: true
+        color: "transparent"
+        onVisibleChanged: if (!visible) root.syncMetricsPolling()
+
+        Rectangle {
+            anchors.fill: parent
+            radius: bar.popupRadius
+            color: bar.glassPopupBg
+            border.width: bar.controlBorderWidth
+            border.color: bar.glassPopupBorder
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: bar.popupHeaderHighlightHeight
+                color: bar.glassPopupHighlight
+                radius: parent.radius
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: bar.popupSpacingTight
+                spacing: bar.popupSectionSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: bar.popupSectionSpacing
+
+                    Text {
+                        text: "RAM Metrics"
+                        color: bar.text
+                        font.pixelSize: bar.popupTitleSize
+                        font.bold: true
+                        font.family: bar.fontFamily
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Rectangle {
+                        Layout.preferredHeight: 24
+                        Layout.preferredWidth: memLiveBtnLabel.implicitWidth + 16
+                        radius: bar.buttonRadius
+                        color: memLiveBtnMa.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
+
+                        Text {
+                            id: memLiveBtnLabel
+                            anchors.centerIn: parent
+                            text: memLiveUpdates ? "Pause updates" : "Resume updates"
+                            color: memLiveUpdates ? bar.subtext : bar.accent
+                            font.pixelSize: bar.popupHintSize
+                            font.bold: !memLiveUpdates
+                            font.family: bar.fontFamily
+                        }
+
+                        MouseArea {
+                            id: memLiveBtnMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                setLiveUpdates("mem", !memLiveUpdates)
+                                syncMetricsPolling()
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: (memLiveUpdates ? "live" : "paused") + " · click outside to close"
+                        color: bar.overlay
+                        font.pixelSize: bar.popupHintSize
+                        font.family: bar.fontFamily
+                    }
+                }
+
+                MemoryMonitorView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    service: sysMonService
+                    textColor: bar.text
+                    subtextColor: bar.subtext
+                    accentColor: bar.accent
+                    surfaceColor: bar.surface
+                    overlayColor: bar.overlay
+                    gaugeLowColor: bar.gaugeLow
+                    gaugeMidColor: bar.gaugeMid
+                    gaugeHighColor: bar.gaugeHigh
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            onClicked: memMetricsPopup.visible = false
         }
     }
 
@@ -634,7 +885,7 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                setLiveUpdates(false, !gpuLiveUpdates)
+                                setLiveUpdates("gpu", !gpuLiveUpdates)
                                 syncMetricsPolling()
                             }
                         }

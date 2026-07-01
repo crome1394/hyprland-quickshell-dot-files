@@ -21,6 +21,7 @@
 //   - qs ipc call notificationBell toggleDoNotDisturb
 //   - qs ipc call sysStatsPill setMetricsLiveUpdates false
 //   - qs ipc call sysStatsPill setCpuLiveUpdates false
+//   - qs ipc call sysStatsPill setMemLiveUpdates false
 //   - qs ipc call sysStatsPill toggleGpuLiveUpdates
 //   - qs ipc call shell setWsMinimumShown 7
 //   - qs ipc call shell setWsShowOnlyActive true
@@ -253,12 +254,16 @@ ShellRoot {
         readonly property alias popupMediaHeight: cfg.popupMediaHeight
         readonly property alias popupPowerWidth: cfg.popupPowerWidth
         readonly property alias popupPowerHeight: cfg.popupPowerHeight
+        readonly property alias popupContextMenuWidth: cfg.popupContextMenuWidth
+        readonly property alias popupContextMenuRowHeight: cfg.popupContextMenuRowHeight
         readonly property alias popupCalendarWidth: cfg.popupCalendarWidth
         readonly property alias popupCalendarHeight: cfg.popupCalendarHeight
         readonly property alias popupStatsCpuWidth: cfg.popupStatsCpuWidth
         readonly property alias popupStatsCpuHeight: cfg.popupStatsCpuHeight
         readonly property alias popupStatsGpuWidth: cfg.popupStatsGpuWidth
         readonly property alias popupStatsGpuHeight: cfg.popupStatsGpuHeight
+        readonly property alias popupStatsMemWidth: cfg.popupStatsMemWidth
+        readonly property alias popupStatsMemHeight: cfg.popupStatsMemHeight
         readonly property alias popupStatsCpuAnchorX: cfg.popupStatsCpuAnchorX
         readonly property alias popupStatsCpuAnchorWholePill: cfg.popupStatsCpuAnchorWholePill
         readonly property alias popupStatsCpuOffsetX: cfg.popupStatsCpuOffsetX
@@ -269,6 +274,11 @@ ShellRoot {
         readonly property alias popupStatsGpuOffsetX: cfg.popupStatsGpuOffsetX
         readonly property alias popupStatsGpuOffsetY: cfg.popupStatsGpuOffsetY
         readonly property alias popupStatsGpuBarGap: cfg.popupStatsGpuBarGap
+        readonly property alias popupStatsMemAnchorX: cfg.popupStatsMemAnchorX
+        readonly property alias popupStatsMemAnchorWholePill: cfg.popupStatsMemAnchorWholePill
+        readonly property alias popupStatsMemOffsetX: cfg.popupStatsMemOffsetX
+        readonly property alias popupStatsMemOffsetY: cfg.popupStatsMemOffsetY
+        readonly property alias popupStatsMemBarGap: cfg.popupStatsMemBarGap
         readonly property alias popupStatsLiveUpdates: cfg.popupStatsLiveUpdates
         readonly property alias popupStatsPersistPause: cfg.popupStatsPersistPause
         readonly property alias popupHelpWidth: cfg.popupHelpWidth
@@ -363,6 +373,10 @@ ShellRoot {
         readonly property alias statGaugeWidth: cfg.statGaugeWidth
         readonly property alias statGaugeHeight: cfg.statGaugeHeight
         readonly property alias statGaugeRadius: cfg.statGaugeRadius
+        readonly property alias statPillWidth: cfg.statPillWidth
+        readonly property alias statPillSectionWidth: cfg.statPillSectionWidth
+        readonly property alias statPillSpacing: cfg.statPillSpacing
+        readonly property alias statPillPaddingH: cfg.statPillPaddingH
         readonly property alias statTrack: cfg.statTrack
         readonly property alias gaugeLow: cfg.gaugeLow
         readonly property alias gaugeMid: cfg.gaugeMid
@@ -608,6 +622,7 @@ ShellRoot {
                         id: notificationBell
                         visible: root.showNotificationPill
                         bar: bar
+                        barBg: barBg
                         notif: notif
                     }
 
@@ -696,6 +711,9 @@ ShellRoot {
             function setGpuLiveUpdates(enabled: bool) {
                 if (sysStatsPill && sysStatsPill.setGpuLiveUpdates) sysStatsPill.setGpuLiveUpdates(enabled)
             }
+            function setMemLiveUpdates(enabled: bool) {
+                if (sysStatsPill && sysStatsPill.setMemLiveUpdates) sysStatsPill.setMemLiveUpdates(enabled)
+            }
             function setMetricsLiveUpdates(enabled: bool) {
                 if (sysStatsPill && sysStatsPill.setMetricsLiveUpdates) sysStatsPill.setMetricsLiveUpdates(enabled)
             }
@@ -704,6 +722,9 @@ ShellRoot {
             }
             function toggleGpuLiveUpdates() {
                 if (sysStatsPill && sysStatsPill.toggleGpuLiveUpdates) sysStatsPill.toggleGpuLiveUpdates()
+            }
+            function toggleMemLiveUpdates() {
+                if (sysStatsPill && sysStatsPill.toggleMemLiveUpdates) sysStatsPill.toggleMemLiveUpdates()
             }
             function toggleMetricsLiveUpdates() {
                 if (sysStatsPill && sysStatsPill.toggleMetricsLiveUpdates) sysStatsPill.toggleMetricsLiveUpdates()

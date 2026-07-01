@@ -8,42 +8,41 @@ import Quickshell
 // =============================================================================
 //
 // Purpose:
-//   Shows a bell icon with optional count badge. Supports Do Not Disturb (DND) state.
-//   Left-click toggles the notification center. Right-click toggles DND.
+//   Shows a bell icon with optional count badge. Left-click toggles the
+//   notification center. Right-click opens a compact menu (DND, clear all).
 //
 // Theme Properties Consumed:
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.glassPopupBg, bar.glassPopupBorder, bar.glassPopupHighlight
+//   - bar.popupRadius, bar.popupTitleSize, bar.popupHintSize, bar.popupSpacingTight
+//   - bar.popupContextMenuWidth, bar.popupContextMenuRowHeight, bar.popupButtonHoverBg
 //   - bar.iconSizePillLarge, bar.fontFamily, bar.fontMono, bar.fontTiny
-//   - bar.muted, bar.controlBorderWidth, bar.tooltipDelay
+//   - bar.muted, bar.text, bar.subtext, bar.overlay, bar.controlBorderWidth
+//   - bar.buttonRadius, bar.dividerStrong, bar.tooltipDelay, bar.popupAnchorY()
 //
 // Dependencies:
 //   - required property var bar (from shell.qml)
-//   - required property QtObject notif (shared state from shell.qml, populated by swaync subscribe)
+//   - required property Item barBg (popup positioning)
+//   - required property QtObject notif (shared state from shell.qml)
 //
-// Notes:
-//   - The dark text color on the accent badge ("#111111") is a contrast choice.
-//     A future "textOnAccent" token could be added if we see this pattern elsewhere.
 // =============================================================================
 
 Rectangle {
     id: root
 
-    // === Required Properties ===
     required property var bar
-    required property QtObject notif   // shared notification state from shell.qml
+    required property Item barBg
+    required property QtObject notif
 
-    // === Layout — square pill, same size as PowerMenu for a consistent click target ===
     Layout.preferredWidth: 42
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 
-    // === Appearance via Theme ===
     radius: bar.pillRadius
     color: bellMouse.containsMouse ? bar.glassHover : bar.pillBg
     border.width: bar.controlBorderWidth
     border.color: bellMouse.containsMouse ? bar.accent : bar.pillBorder
 
-    // === Content ===
     Text {
         id: bellIcon
         anchors.centerIn: parent
@@ -53,7 +52,6 @@ Rectangle {
         color: notif.dnd ? bar.muted : (notif.count > 0 ? bar.accent : bar.subtext)
     }
 
-    // Counter badge — overlaid so the pill stays the same width
     Rectangle {
         visible: notif.count > 0
         width: Math.max(16, countLabel.implicitWidth + 6)
@@ -76,12 +74,36 @@ Rectangle {
         }
     }
 
-    // === Public API (toggle from shell IPC: qs ipc call notificationBell toggleDoNotDisturb) ===
     function toggleDoNotDisturb() {
         Quickshell.execDetached(["swaync-client", "-d", "-sw"])
     }
 
-    // === Behavior ===
+    function clearAllNotifications() {
+        Quickshell.execDetached(["swaync-client", "-C", "-sw"])
+    }
+
+    function hideNotifMenu() {
+        notifMenuPopup.visible = false
+    }
+
+    function showNotifMenu() {
+        if (notifMenuPopup.visible) {
+            hideNotifMenu()
+            return
+        }
+
+        var pos = root.mapToItem(barBg, root.width / 2, 0)
+        var popupW = notifMenuPopup.implicitWidth
+        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
+        var targetX = bar.sideMargin + pos.x - (popupW / 2)
+        var minX = 12
+        var maxX = screenW - popupW - 12
+
+        notifMenuPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
+        notifMenuPopup.anchor.rect.y = bar.popupAnchorY(notifMenuPopup.implicitHeight, 2)
+        notifMenuPopup.visible = true
+    }
+
     MouseArea {
         id: bellMouse
         anchors.fill: parent
@@ -90,19 +112,137 @@ Rectangle {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         ToolTip.text: {
-            if (notif.dnd) return notif.count + " notifications (DND enabled)"
-            if (notif.count > 0) return notif.count + " notifications"
-            return "No notifications"
+            if (notif.dnd) return notif.count + " notifications (DND on) · Right-click: menu"
+            if (notif.count > 0) return notif.count + " notifications · Right-click: menu"
+            return "No notifications · Right-click: menu"
         }
         ToolTip.visible: containsMouse
         ToolTip.delay: bar.tooltipDelay
 
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {
-                root.toggleDoNotDisturb()
-            } else if (mouse.button === Qt.LeftButton) {
+                showNotifMenu()
+            } else {
+                hideNotifMenu()
                 Quickshell.execDetached(["swaync-client", "-t", "-sw"])
             }
+        }
+    }
+
+    PopupWindow {
+        id: notifMenuPopup
+        anchor.window: bar
+        implicitWidth: bar.popupContextMenuWidth
+        implicitHeight: notifMenuColumn.implicitHeight + bar.popupSpacingTight * 2
+        visible: false
+        grabFocus: true
+        color: "transparent"
+        Rectangle {
+            anchors.fill: parent
+            radius: bar.popupRadius
+            color: bar.glassPopupBg
+            border.width: bar.controlBorderWidth
+            border.color: bar.glassPopupBorder
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: bar.popupHeaderHighlightHeight
+                color: bar.glassPopupHighlight
+                radius: parent.radius
+            }
+
+            ColumnLayout {
+                id: notifMenuColumn
+                anchors.fill: parent
+                anchors.margins: bar.popupSpacingTight
+                spacing: 4
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Notifications"
+                    color: bar.text
+                    font.pixelSize: bar.popupTitleSize
+                    font.bold: true
+                    font.family: bar.fontFamily
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: bar.popupContextMenuRowHeight
+                    radius: bar.buttonRadius
+                    color: dndRowMa.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
+                    border.width: bar.controlBorderWidth
+                    border.color: bar.dividerStrong
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10
+                        text: notif.dnd ? "Turn off Do Not Disturb" : "Turn on Do Not Disturb"
+                        color: notif.dnd ? bar.muted : bar.text
+                        font.pixelSize: 12
+                        font.family: bar.fontFamily
+                    }
+
+                    MouseArea {
+                        id: dndRowMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            toggleDoNotDisturb()
+                            hideNotifMenu()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: bar.popupContextMenuRowHeight
+                    radius: bar.buttonRadius
+                    color: clearRowMa.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
+                    border.width: bar.controlBorderWidth
+                    border.color: bar.dividerStrong
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10
+                        text: "Clear all notifications"
+                        color: bar.text
+                        font.pixelSize: 12
+                        font.family: bar.fontFamily
+                    }
+
+                    MouseArea {
+                        id: clearRowMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            clearAllNotifications()
+                            hideNotifMenu()
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: "click outside to close"
+                    color: bar.overlay
+                    font.pixelSize: bar.popupHintSize
+                    font.family: bar.fontFamily
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            z: -1
+            onClicked: hideNotifMenu()
         }
     }
 }
