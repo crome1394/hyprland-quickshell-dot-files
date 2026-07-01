@@ -9,16 +9,16 @@ Personal Hyprland status bar built with [Quickshell](https://quickshell.org), pl
 | `widgets/SysMonService.qml` | Shared metrics polling service |
 | `components/` | Inspector tab views and reusable UI pieces |
 | `scripts/` | Shell pollers and control helpers |
-| `Theme.qml` | Global colors, spacing, and inspector tokens |
+| `Config.qml` | Global colors, spacing, workspace behavior, and inspector tokens |
 | `widgets/*.qml` | Status bar pills and popups |
 
 ---
 
 ## Status bar
 
-The top (or bottom) Hyprland panel is a glassmorphic Quickshell `PanelWindow` defined in `shell.qml`. Widgets are grouped into **left**, **center**, and **right** zones. Each pill is a self-contained file under `widgets/` and reads colors, spacing, and fonts from `Theme.qml` via the shared `bar` object.
+The top (or bottom) Hyprland panel is a glassmorphic Quickshell `PanelWindow` defined in `shell.qml`. Widgets are grouped into **left**, **center**, and **right** zones. Each pill is a self-contained file under `widgets/` and reads colors, spacing, and behavior defaults from `Config.qml` via the shared `bar` object.
 
-Bar position and edge gap are set in `Theme.qml` (`barPosition`: `"top"` or `"bottom"`, `barHeight`, `barEdgeMargin`). To rearrange widgets, cut and paste the marked blocks in `shell.qml` between the left, center, and right zones — no changes inside the widget files are required.
+Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"bottom"`, `barHeight`, `barEdgeMargin`). To rearrange widgets, cut and paste the marked blocks in `shell.qml` between the left, center, and right zones — no changes inside the widget files are required.
 
 ### Layout (default)
 
@@ -35,7 +35,7 @@ Bar position and edge gap are set in `Theme.qml` (`barPosition`: `"top"` or `"bo
 | **App Launcher** | `shell.qml` (inline) | Opens the Rofi app drawer (`~/.local/bin/rofi-app-drawer`) |
 | **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps (VSCodium, Firefox, Logseq, LM Studio) |
 | **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
-| **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills; click to switch, scroll wheel to move between workspaces |
+| **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
 | **System Stats** | `SysStatsPill.qml` | CPU and GPU utilization + temperature gauges. Left-click CPU opens `btop` in a terminal; left-click GPU opens `nvtop`. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel adjustment, and device selection popup (PipeWire) |
@@ -54,9 +54,42 @@ qs ipc call shell setShowMediaWidget true
 qs ipc call shell setShowStatsWidget false
 qs ipc call shell toggleShowMediaWidget
 qs ipc call shell toggleShowStatsWidget
+qs ipc call shell setShowMagicWorkspacePill true
+qs ipc call shell toggleShowMagicWorkspacePill
 ```
 
-By default, **Media Player** is off and **System Stats** is on. Run `qs ipc show` for the full IPC list.
+By default, **Media Player** is off, **System Stats** is on, and the **magic workspace pill** follows `wsShowSpecialPill` in `Config.qml`. Run `qs ipc show` for the full IPC list.
+
+### Workspaces (`WorkspacesPill.qml` + `Config.qml`)
+
+Workspace pill behavior is configured in `Config.qml` and applied by `widgets/WorkspacesPill.qml`.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `wsShowSpecialPill` | `true` | Show the magic-space pill (🪄) before workspace 1. Overridable at runtime via IPC until `qs` restarts |
+| `wsMinimumShown` | `5` | When `wsShowOnlyActive` is `false`, always show numbered pills `1` … `N` (even if empty) |
+| `wsShowOnlyActive` | `false` | When `true`, only show numbered workspaces that are occupied or active (plus any extras above `wsMinimumShown` that qualify) |
+| `wsStartupWorkspace` | `1` | Hyprland workspace to focus when `qs` starts (`0` = leave workspace unchanged) |
+| `wsStartupCloseMagic` | `true` | Close the magic overlay on `qs` start before applying `wsStartupWorkspace` |
+| `wsSpecialName` | `"magic"` | Hyprland special workspace name (must match `keybindings.lua`) |
+| `wsIcon1` … `wsIcon10` | — | Per-workspace pill icons; see icon picker comment in `Config.qml` |
+
+**Examples**
+
+```qml
+// Always show 7 numbered pills, magic pill on
+wsShowOnlyActive: false
+wsMinimumShown: 7
+wsShowSpecialPill: true
+
+// Only occupied/active numbered pills (no empty placeholders)
+wsShowOnlyActive: true
+
+// Do not change workspace when qs restarts
+wsStartupWorkspace: 0
+```
+
+**Keyboard cycling (Hyprland)** — `SUPER + CTRL + Left/Right` uses `~/.config/hypr/scripts/cycle-workspace.sh` so magic space is included in the cycle (e.g. left from workspace 1 opens magic). Configured in `~/.config/hypr/config/keybindings.lua`.
 
 ---
 
@@ -128,7 +161,7 @@ If you are used to one monolithic `hyprland.conf`, think of `hyprland.lua` as a 
 - **Per-tab refresh** and **Refresh All** (`Ctrl+R`) for on-demand data
 - **Edit in terminal** (`Ctrl+E`) opens the current config file in `$TERMINAL` with `nano`
 - **Copy** buttons and click-to-copy on many values
-- **Resizable** window with themed Catppuccin-style UI from `Theme.qml`
+- **Resizable** window with themed Catppuccin-style UI from `Config.qml`
 
 ### Tabs
 
@@ -219,9 +252,17 @@ Shortcuts apply while the inspector window is focused (search field captures typ
 
 ---
 
-## Theming
+## Configuration (`Config.qml`)
 
-Visual tokens for the bar and inspector live in `Theme.qml`. `shell.qml` exposes them on the root `bar` object; the inspector uses the same theme via a local `Theme` instance. Edit `Theme.qml` to change colors, spacing, and inspector-specific sizes.
+`Config.qml` is the single source of truth for bar visuals and workspace behavior. `shell.qml` re-exports its properties on the root `bar` object (e.g. `bar.accent`, `bar.wsMinimumShown`). The inspector loads a local `Config` instance for overlay-specific tokens.
+
+Edit `Config.qml` to change:
+
+- Colors, fonts, spacing, radii, and icon glyphs
+- Workspace pill count, active-only mode, magic pill default, and startup focus
+- Inspector sizing and semantic colors (search for `insp*` properties)
+
+The file is named `Config.qml` (capital **C**) because QML requires that naming for reliable type registration across subdirectories.
 
 ---
 
