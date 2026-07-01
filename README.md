@@ -42,7 +42,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
 | **Notifications** | `NotificationBell.qml` | Bell with count badge and red DND styling. Polls your daemon's CLI from `Config.qml` (defaults: SwayNC / `swaync-client`) via timer sync + optional live subscribe — state and `Io.Process` polling live in this widget, not `shell.qml`. Left-click toggles panel; right-click opens menu (DND, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
 | **Kill Target** | `KillTargetPill.qml` | xkill-style window picker (hidden by default). Click the pill to arm pick mode (crosshair on all monitors), then click a window to send **SIGTERM** to its process. Escape, right-click, empty click, or a second pill click cancels. Uses `window-at-point.sh` + `process-control.sh` (user-owned processes only). IPC: `qs ipc call killTargetPill activatePickMode` |
-| **Power** | `PowerMenu.qml` | Left-click opens the full session menu (lock, logout, reboot, shutdown, BIOS); right-click opens a compact quick menu with the same actions |
+| **Power** | `PowerMenu.qml` | Left-click opens the full session menu; right-click opens a compact quick menu. Actions and commands are configured in `Config.qml` (search **POWER MENU**) |
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
 
@@ -381,6 +381,21 @@ Search for **NOTIFICATION BELL** in `Config.qml`. Defaults are SwayNC (`swaync-c
 Use `[]` to disable subscribe, sync, or any action. Keep `notificationSync` enabled for reliable badge/DND state; subscribe is optional live updates on top. Config command lists are QML lists — the bell copies them to JS arrays before starting `Io.Process` (do not bind lists directly).
 
 **SwayNC tip:** run only one instance (e.g. `swaync.service` via systemd, not also `hl.exec_cmd("swaync")` in Hyprland autostart). If `notify-send` shows nothing, check DND: `swaync-client -D -sw` — use `swaync-client -df -sw` to turn off.
+
+### Power menu (`Config.qml`)
+
+Search for **POWER MENU**. Each session action has its own command list (or shell string). Use `[]` to hide an action from both the grid and right-click menu.
+
+| Property | Default | Purpose |
+|----------|---------|---------|
+| `powerLockCommand` | `["hyprlock"]` | Lock screen |
+| `powerLogoutCommand` | `["sh", "-c", "…"]` | Log out of Hyprland (stops apps, then `hyprshutdown` or `hl.dsp.exit`) |
+| `powerRebootCommand` | `["sh", "-c", "…"]` | Reboot |
+| `powerShutdownCommand` | `["sh", "-c", "…"]` | Shutdown |
+| `powerBiosCommand` | `["systemctl", "reboot", "--firmware-setup"]` | Firmware setup on next boot |
+| `powerMenuActions` | Lock / Logout / … rows | Icons (`iconLock`, etc.), labels, and `action` ids — reorder or rename here |
+
+Logout/reboot/shutdown defaults stop `psd.service` and several user apps before the system action. Edit those pipelines to match your setup.
 
 ### Quick Launch (`Config.qml`)
 

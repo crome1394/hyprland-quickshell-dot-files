@@ -38,6 +38,7 @@
 //   - Widget visibility (bar pill defaults)
 //   - QUICK LAUNCH (pinned app icons and launch commands)
 //   - NOTIFICATION BELL (notification daemon CLI commands for the bell)
+//   - POWER MENU (lock / logout / reboot / shutdown / BIOS commands)
 //   - KILL TARGET PILL (click-to-kill window picker)
 //   - Workspaces (pill behavior, colors, icons, special workspace name)
 //   - SYS STATS PILL (CPU | Memory | GPU bar pill size, gauges, temp colors)
@@ -358,6 +359,31 @@ QtObject {
     readonly property real killTargetOverlayDim: 0.12
 
     // =========================================================================
+    // POWER MENU (widgets/PowerMenu.qml — session actions)
+    // =========================================================================
+    // Commands for lock, logout, reboot, shutdown, and Enter BIOS. Each is a list
+    // (preferred): ["hyprlock"] or ["sh", "-c", "your shell pipeline"] — or a shell
+    // string (runs via sh -c). Use [] to hide an action from both power menus.
+    //
+    // powerMenuActions — labels and icons shown in the grid + right-click menu.
+    // Reorder or rename entries here; command lists below must match action ids.
+
+    readonly property var powerLockCommand: ["hyprlock"]
+    readonly property var powerLogoutCommand: [
+        "sh", "-c",
+        "systemctl --user stop psd.service & pkill -f 'steam|discord|flameshot|espanso|google-chrome-stable' & sleep 1 & command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"
+    ]
+    readonly property var powerRebootCommand: [
+        "sh", "-c",
+        "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable\" & sleep 1 & reboot"
+    ]
+    readonly property var powerShutdownCommand: [
+        "sh", "-c",
+        "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable\" & sleep 1 & shutdown now"
+    ]
+    readonly property var powerBiosCommand: ["systemctl", "reboot", "--firmware-setup"]
+
+    // =========================================================================
     // FONTS
     // =========================================================================
     readonly property string fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
@@ -390,6 +416,16 @@ QtObject {
     readonly property string iconReboot:        "󰑓"
     readonly property string iconShutdown:      "󰐥"
     readonly property string iconBios:          "󰛳"
+
+    // Menu rows for PowerMenu.qml (grid + right-click). Reorder or rename freely.
+    readonly property var powerMenuActions: [
+        { icon: iconLock,     label: "Lock",       action: "lock" },
+        { icon: iconLogout,   label: "Logout",     action: "logout" },
+        { icon: iconReboot,   label: "Reboot",     action: "reboot" },
+        { icon: iconShutdown, label: "Shutdown",   action: "shutdown" },
+        { icon: iconBios,     label: "Enter BIOS", action: "bios" },
+    ]
+
     // Misc common
     readonly property string iconLauncher:      "󰀻"   // Launcher pill glyph (shell.qml)
     readonly property string iconBell:          "󱅫"
@@ -911,6 +947,36 @@ QtObject {
     function notificationSupportsClearAll() {
         var cmd = notificationCommand("clearAll")
         return cmd && cmd.length !== undefined && cmd.length > 0
+    }
+
+    // --- PowerMenu command resolver (used by shell.qml + PowerMenu.qml)
+    function powerCommand(action) {
+        if (action === "lock") return powerLockCommand
+        if (action === "logout") return powerLogoutCommand
+        if (action === "reboot") return powerRebootCommand
+        if (action === "shutdown") return powerShutdownCommand
+        if (action === "bios") return powerBiosCommand
+        return []
+    }
+
+    function powerActionEnabled(action) {
+        var cmd = powerCommand(action)
+        if (typeof cmd === "string")
+            return cmd.length > 0
+        return cmd && cmd.length !== undefined && cmd.length > 0
+    }
+
+    function powerMenuItems() {
+        var out = []
+        var actions = powerMenuActions
+        if (!actions || actions.length === undefined)
+            return out
+        for (var i = 0; i < actions.length; i++) {
+            var entry = actions[i]
+            if (entry && powerActionEnabled(entry.action))
+                out.push(entry)
+        }
+        return out
     }
 
 }

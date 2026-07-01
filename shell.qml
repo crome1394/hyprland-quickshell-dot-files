@@ -214,6 +214,34 @@ ShellRoot {
                 notificationBell.refreshState()
         }
 
+        function powerCmdArray(action) {
+            const cmd = cfg.powerCommand(action)
+            if (!cmd || cmd.length === undefined || cmd.length <= 0)
+                return []
+            const args = []
+            for (let i = 0; i < cmd.length; i++)
+                args.push(cmd[i])
+            return args
+        }
+
+        function execPowerCommand(action) {
+            const cmd = cfg.powerCommand(action)
+            if (cmd === undefined || cmd === null)
+                return
+            if (typeof cmd === "string") {
+                if (cmd.length > 0)
+                    Quickshell.execDetached(["sh", "-c", cmd])
+                return
+            }
+            const args = powerCmdArray(action)
+            if (args.length > 0)
+                Quickshell.execDetached(args)
+        }
+
+        function powerMenuItems() {
+            return cfg.powerMenuItems()
+        }
+
         // --- Base palette
         property alias bg: cfg.bg
         property alias surface: cfg.surface

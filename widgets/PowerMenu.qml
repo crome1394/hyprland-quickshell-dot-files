@@ -27,7 +27,7 @@ import Quickshell
 //   - required property Item barBg (for popup positioning)
 //
 // Notes:
-//   - Power action commands are preserved exactly.
+//   - Session commands and menu rows come from Config.qml (search POWER MENU).
 //   - Button styling inside the popup has been aligned to theme tokens
 //     (including new state colors where applicable).
 //   - Action buttons inside the Repeater still contain some hardcoded
@@ -140,36 +140,9 @@ Rectangle {
         hidePowerContextMenu()
     }
 
-    function powerAction(cmd) {
-        Quickshell.execDetached(cmd);
-        hideAllPowerPopups();
-    }
-
-    function powerLock()     { powerAction(["hyprlock"]); }
-    function powerBios()     { powerAction(["systemctl", "reboot", "--firmware-setup"]); }
-
-    function powerLogout() {
-        Quickshell.execDetached([
-            "sh", "-c",
-            "systemctl --user stop psd.service & pkill -f 'steam|discord|flameshot|espanso|google-chrome-stable' & sleep 1 & command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"
-        ]);
-        hideAllPowerPopups();
-    }
-
-    function powerReboot() {
-        Quickshell.execDetached([
-            "sh", "-c",
-            "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable\" & sleep 1 & reboot"
-        ]);
-        hideAllPowerPopups();
-    }
-
-    function powerShutdown() {
-        Quickshell.execDetached([
-            "sh", "-c",
-            "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable\" & sleep 1 & shutdown now"
-        ]);
-        hideAllPowerPopups();
+    function runPowerAction(action) {
+        bar.execPowerCommand(action)
+        hideAllPowerPopups()
     }
 
     // ===== POWER QUICK MENU (right-click) =====
@@ -214,13 +187,7 @@ Rectangle {
                 }
 
                 Repeater {
-                    model: [
-                        { icon: "󰌾", label: "Lock",       action: "lock" },
-                        { icon: "󰍃", label: "Logout",     action: "logout" },
-                        { icon: "󰑓", label: "Reboot",     action: "reboot" },
-                        { icon: "󰐥", label: "Shutdown",   action: "shutdown" },
-                        { icon: "󰛳", label: "Enter BIOS", action: "bios" }
-                    ]
+                    model: bar.powerMenuItems()
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
@@ -257,15 +224,7 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                switch (modelData.action) {
-                                    case "lock":     powerLock(); break
-                                    case "logout":   powerLogout(); break
-                                    case "reboot":   powerReboot(); break
-                                    case "shutdown": powerShutdown(); break
-                                    case "bios":     powerBios(); break
-                                }
-                            }
+                            onClicked: runPowerAction(modelData.action)
                         }
                     }
                 }
@@ -366,13 +325,7 @@ Rectangle {
                     spacing: 10   // deliberate visual gap between large action cards
 
                     Repeater {
-                        model: [
-                            { icon: "󰌾", label: "Lock",     action: "lock" },
-                            { icon: "󰍃", label: "Logout",   action: "logout" },
-                            { icon: "󰑓", label: "Reboot",   action: "reboot" },
-                            { icon: "󰐥", label: "Shutdown", action: "shutdown" },
-                            { icon: "󰛳", label: "Enter BIOS", action: "bios" }
-                        ]
+                        model: bar.powerMenuItems()
                         delegate: Rectangle {
                             required property var modelData
                             Layout.fillWidth: true
@@ -406,15 +359,7 @@ Rectangle {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    switch (modelData.action) {
-                                        case "lock":     powerLock(); break;
-                                        case "logout":   powerLogout(); break;
-                                        case "reboot":   powerReboot(); break;
-                                        case "shutdown": powerShutdown(); break;
-                                        case "bios":     powerBios(); break;
-                                    }
-                                }
+                                onClicked: runPowerAction(modelData.action)
                             }
                         }
                     }
