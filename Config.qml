@@ -187,8 +187,10 @@ QtObject {
     readonly property int popupStatsCpuHeight: 700   // SysStatsPill CPU metrics popup height
     readonly property int popupStatsGpuWidth:  598   // SysStatsPill GPU metrics popup width
     readonly property int popupStatsGpuHeight: 700   // SysStatsPill GPU metrics popup height
-    // Default live polling when a metrics popup opens; each popup has a Pause/Resume button too.
+    // Default live polling when a metrics popup opens (persists across reboot via this file).
     readonly property bool popupStatsLiveUpdates: true
+    // When true, Pause/Resume choices are saved to state/popup-stats.json and restored after reboot.
+    readonly property bool popupStatsPersistPause: false
     readonly property int popupHelpWidth:     1060
     readonly property int popupHelpHeight:     720
     readonly property int popupTrayMaxHeight:  520

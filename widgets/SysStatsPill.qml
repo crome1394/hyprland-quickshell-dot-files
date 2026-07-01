@@ -111,6 +111,10 @@ Rectangle {
     Component.onCompleted: {
         Qt.callLater(function() {
             if (!statsPoller.running) statsPoller.running = true
+            if (!bar.popupStatsPersistPause) {
+                cpuLiveUpdates = bar.popupStatsLiveUpdates
+                gpuLiveUpdates = bar.popupStatsLiveUpdates
+            }
         })
     }
 
@@ -135,8 +139,7 @@ Rectangle {
 
     SysMonService {
         id: sysMonService
-        autoPoll: (cpuMetricsPopup.visible && cpuLiveUpdates)
-               || (gpuMetricsPopup.visible && gpuLiveUpdates)
+        autoPoll: false
     }
 
     function seedPauseStateFromConfig() {
@@ -148,12 +151,7 @@ Rectangle {
     function syncLiveUpdatesFromPersisted() {
         cpuLiveUpdates = pauseAdapter.cpuLiveUpdates
         gpuLiveUpdates = pauseAdapter.gpuLiveUpdates
-    }
-
-    function liveUpdatesForOpen(isCpu) {
-        if (bar.popupStatsPersistPause)
-            return isCpu ? pauseAdapter.cpuLiveUpdates : pauseAdapter.gpuLiveUpdates
-        return bar.popupStatsLiveUpdates
+        syncMetricsPolling()
     }
 
     function setLiveUpdates(isCpu, enabled) {
@@ -168,21 +166,68 @@ Rectangle {
         }
     }
 
+    function metricsPollingEnabled() {
+        return (cpuMetricsPopup.visible && cpuLiveUpdates)
+            || (gpuMetricsPopup.visible && gpuLiveUpdates)
+    }
+
+    function syncMetricsPolling() {
+        const poll = metricsPollingEnabled()
+        sysMonService.setAutoPoll(poll)
+        if (!poll)
+            sysMonService.stopPolling()
+        else
+            sysMonService.refresh()
+    }
+
+    // === Public API (shell IPC: qs ipc call sysStatsPill …) ===
+    function setCpuLiveUpdates(enabled) {
+        setLiveUpdates(true, enabled)
+        syncMetricsPolling()
+    }
+
+    function setGpuLiveUpdates(enabled) {
+        setLiveUpdates(false, enabled)
+        syncMetricsPolling()
+    }
+
+    function setMetricsLiveUpdates(enabled) {
+        setLiveUpdates(true, enabled)
+        setLiveUpdates(false, enabled)
+        syncMetricsPolling()
+    }
+
+    function toggleCpuLiveUpdates() {
+        setCpuLiveUpdates(!cpuLiveUpdates)
+    }
+
+    function toggleGpuLiveUpdates() {
+        setGpuLiveUpdates(!gpuLiveUpdates)
+    }
+
+    function toggleMetricsLiveUpdates() {
+        setMetricsLiveUpdates(!(cpuLiveUpdates || gpuLiveUpdates))
+    }
+
     function hideMetricsPopups() {
         cpuMetricsPopup.visible = false
         gpuMetricsPopup.visible = false
+        syncMetricsPolling()
     }
 
     function showMetricsPopup(popup, anchorItem, otherPopup, isCpu) {
         if (popup.visible) {
             popup.visible = false
+            syncMetricsPolling()
             return
         }
         otherPopup.visible = false
-        if (isCpu)
-            cpuLiveUpdates = liveUpdatesForOpen(true)
-        else
-            gpuLiveUpdates = liveUpdatesForOpen(false)
+        if (bar.popupStatsPersistPause) {
+            if (isCpu)
+                cpuLiveUpdates = pauseAdapter.cpuLiveUpdates
+            else
+                gpuLiveUpdates = pauseAdapter.gpuLiveUpdates
+        }
 
         var pos = anchorItem.mapToItem(barBg, anchorItem.width / 2, 0)
         var popupW = popup.implicitWidth
@@ -193,8 +238,8 @@ Rectangle {
 
         popup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
         popup.anchor.rect.y = bar.popupAnchorY(popup.implicitHeight, 2)
-        sysMonService.refresh()
         popup.visible = true
+        syncMetricsPolling()
     }
 
     // === Appearance via Theme ===
@@ -416,6 +461,7 @@ Rectangle {
         visible: false
         grabFocus: true
         color: "transparent"
+        onVisibleChanged: if (!visible) root.syncMetricsPolling()
 
         Rectangle {
             anchors.fill: parent
@@ -476,10 +522,8 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                const next = !cpuLiveUpdates
-                                setLiveUpdates(true, next)
-                                if (next)
-                                    sysMonService.refresh()
+                                setLiveUpdates(true, !cpuLiveUpdates)
+                                syncMetricsPolling()
                             }
                         }
                     }
@@ -521,6 +565,7 @@ Rectangle {
         visible: false
         grabFocus: true
         color: "transparent"
+        onVisibleChanged: if (!visible) root.syncMetricsPolling()
 
         Rectangle {
             anchors.fill: parent
@@ -581,10 +626,8 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                const next = !gpuLiveUpdates
-                                setLiveUpdates(false, next)
-                                if (next)
-                                    sysMonService.refresh()
+                                setLiveUpdates(false, !gpuLiveUpdates)
+                                syncMetricsPolling()
                             }
                         }
                     }

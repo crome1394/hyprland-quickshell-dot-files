@@ -19,6 +19,9 @@
 //   - qs ipc call shell setShowAudioPill false   (and set/toggle for each bar pill)
 //   - qs ipc call clockPill showCalendar
 //   - qs ipc call notificationBell toggleDoNotDisturb
+//   - qs ipc call sysStatsPill setMetricsLiveUpdates false
+//   - qs ipc call sysStatsPill setCpuLiveUpdates false
+//   - qs ipc call sysStatsPill toggleGpuLiveUpdates
 //   (Run `qs ipc show` for the full list of shell visibility commands.)
 //
 // Bar position (Config.qml):
@@ -243,6 +246,7 @@ ShellRoot {
         readonly property alias popupStatsGpuWidth: cfg.popupStatsGpuWidth
         readonly property alias popupStatsGpuHeight: cfg.popupStatsGpuHeight
         readonly property alias popupStatsLiveUpdates: cfg.popupStatsLiveUpdates
+        readonly property alias popupStatsPersistPause: cfg.popupStatsPersistPause
         readonly property alias popupHelpWidth: cfg.popupHelpWidth
         readonly property alias popupHelpHeight: cfg.popupHelpHeight
 
@@ -510,6 +514,7 @@ ShellRoot {
 
                     // ─ System Stats ─
                     SysStatsPill {
+                        id: sysStatsPill
                         visible: root.showStatsWidget
                         bar: bar
                         barBg: barBg
@@ -656,6 +661,28 @@ ShellRoot {
             target: "notificationBell"
             function toggleDoNotDisturb() {
                 if (notificationBell && notificationBell.toggleDoNotDisturb) notificationBell.toggleDoNotDisturb()
+            }
+        }
+
+        Io.IpcHandler {
+            target: "sysStatsPill"
+            function setCpuLiveUpdates(enabled: bool) {
+                if (sysStatsPill && sysStatsPill.setCpuLiveUpdates) sysStatsPill.setCpuLiveUpdates(enabled)
+            }
+            function setGpuLiveUpdates(enabled: bool) {
+                if (sysStatsPill && sysStatsPill.setGpuLiveUpdates) sysStatsPill.setGpuLiveUpdates(enabled)
+            }
+            function setMetricsLiveUpdates(enabled: bool) {
+                if (sysStatsPill && sysStatsPill.setMetricsLiveUpdates) sysStatsPill.setMetricsLiveUpdates(enabled)
+            }
+            function toggleCpuLiveUpdates() {
+                if (sysStatsPill && sysStatsPill.toggleCpuLiveUpdates) sysStatsPill.toggleCpuLiveUpdates()
+            }
+            function toggleGpuLiveUpdates() {
+                if (sysStatsPill && sysStatsPill.toggleGpuLiveUpdates) sysStatsPill.toggleGpuLiveUpdates()
+            }
+            function toggleMetricsLiveUpdates() {
+                if (sysStatsPill && sysStatsPill.toggleMetricsLiveUpdates) sysStatsPill.toggleMetricsLiveUpdates()
             }
         }
 
