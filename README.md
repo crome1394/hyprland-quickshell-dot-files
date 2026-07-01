@@ -33,7 +33,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | Widget | File | Description |
 |--------|------|-------------|
 | **App Launcher** | `shell.qml` (inline) | Opens the Rofi app drawer (`~/.local/bin/rofi-app-drawer`) |
-| **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps (VSCodium, Firefox, Logseq, LM Studio) |
+| **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps. Add or edit apps in `Config.qml` (search **QUICK LAUNCH** — `quickLaunchApps`: `icon`, `command`, `tooltip` per entry) |
 | **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
 | **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
@@ -363,6 +363,19 @@ Search for **SYS STATS PILL** for the compact bar widget (CPU | Memory | GPU), a
 - `*BarGap` — distance between the bar and the popup
 
 **Live updates** — `popupStatsLiveUpdates` sets whether charts refresh while a popup is open. `popupStatsPersistPause: true` saves Pause/Resume choices to `state/popup-stats.json`.
+
+### Quick Launch (`Config.qml`)
+
+Search for **QUICK LAUNCH**. Edit the `quickLaunchApps` list — one object per icon. Reorder, add, or remove entries; Quickshell reloads automatically.
+
+| Field | Purpose |
+|-------|---------|
+| `icon` | Path to PNG/SVG image |
+| `glyph` | Optional nerd-font character (use instead of `icon` if `icon` is empty) |
+| `command` | Launch command as a list `["gtk-launch", "firefox"]` or shell string `"gtk-launch firefox"` |
+| `tooltip` | Hover label |
+
+Also tune `quickLaunchIcon` (size), `quickLaunchSpacing`, and `quickLaunchPaddingH`.
 
 ### Kill Target pill (`Config.qml`)
 

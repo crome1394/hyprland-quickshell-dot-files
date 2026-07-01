@@ -250,6 +250,9 @@ ShellRoot {
         readonly property alias iconSizeMediaArt: cfg.iconSizeMediaArt
         readonly property alias iconSizeTray: cfg.iconSizeTray
         readonly property alias quickLaunchIcon: cfg.quickLaunchIcon
+        readonly property alias quickLaunchSpacing: cfg.quickLaunchSpacing
+        readonly property alias quickLaunchPaddingH: cfg.quickLaunchPaddingH
+        readonly property alias quickLaunchApps: cfg.quickLaunchApps
 
         // --- Popup sizes
         readonly property alias popupAudioWidth: cfg.popupAudioWidth

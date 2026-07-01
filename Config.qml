@@ -36,6 +36,7 @@
 //   - Icons (glyphs for speaker/mic/power/etc — easy to swap entire icon set)
 //   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
 //   - Widget visibility (bar pill defaults)
+//   - QUICK LAUNCH (pinned app icons and launch commands)
 //   - KILL TARGET PILL (click-to-kill window picker)
 //   - Workspaces (pill behavior, colors, icons, special workspace name)
 //   - SYS STATS PILL (CPU | Memory | GPU bar pill size, gauges, temp colors)
@@ -175,6 +176,47 @@ QtObject {
     readonly property int iconSizePower:       32   // Big icons in the power menu grid
     readonly property int iconSizeMediaArt:    42   // Placeholder music note when no album art
     readonly property int quickLaunchIcon:     20   // Quick launch row icon size
+    readonly property int quickLaunchSpacing:  10   // Gap between quick-launch icons
+    readonly property int quickLaunchPaddingH: 10   // Left/right padding inside the pill
+
+    // =========================================================================
+    // QUICK LAUNCH (widgets/QuickLaunchPill.qml — pinned app icon row)
+    // =========================================================================
+    // Add, remove, or reorder entries in quickLaunchApps. Each entry is one icon.
+    //
+    //   icon    — path to a PNG/SVG image file shown on the bar
+    //   glyph   — optional nerd-font character instead of icon (leave icon "" to use)
+    //   command — how to start the app when clicked:
+    //               • list: ["gtk-launch", "firefox"] or ["/path/to/AppImage"]
+    //               • string: "gtk-launch firefox" (runs through the shell)
+    //   tooltip — hover label (optional)
+
+    readonly property var quickLaunchApps: [
+        {
+            icon: "/home/crome/icons/vscodium.svg",
+            glyph: "",
+            command: ["gtk-launch", "vscodium"],
+            tooltip: "VSCodium"
+        },
+        {
+            icon: "/home/crome/icons/firefox.svg",
+            glyph: "",
+            command: ["gtk-launch", "firefox"],
+            tooltip: "Firefox"
+        },
+        {
+            icon: "/home/crome/icons/logseq-a.svg",
+            glyph: "",
+            command: ["gtk-launch", "logseq"],
+            tooltip: "Logseq"
+        },
+        {
+            icon: "/home/crome/icons/lmstudio-dark.png",
+            glyph: "",
+            command: ["/home/crome/applications/LM-Studio-0.4.13-1-x64.AppImage"],
+            tooltip: "LM Studio"
+        }
+    ]
 
     // Popup implicit sizes (centralized so you can scale the whole UI feel)
     readonly property int popupAudioWidth:     420
@@ -281,7 +323,7 @@ QtObject {
     // Sends SIGTERM to the window's process (same safety rules as the inspector
     // Processes tab). Escape, right-click, or clicking empty desktop cancels.
 
-    readonly property string killTargetIcon: "󰍣"   // Crosshair / target icon on the bar pill
+    readonly property string killTargetIcon: "🎯"   // 󰍣Crosshair / target icon on the bar pill
     readonly property string killTargetTooltip: "Click to pick a window and kill its app · Esc cancels"
     // Darkening applied to each monitor while pick mode is active (0 = invisible overlay).
     readonly property real killTargetOverlayDim: 0.12

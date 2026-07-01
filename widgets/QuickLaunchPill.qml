@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import Quickshell
 
 // =============================================================================
@@ -7,138 +8,97 @@ import Quickshell
 // =============================================================================
 //
 // Purpose:
-//   Horizontal row of icon buttons inside a pill that launch frequently used
-//   applications (VSCodium, Firefox, Logseq, LM Studio).
+//   Horizontal row of icon buttons inside a pill. Apps and icons are defined in
+//   Config.qml (search QUICK LAUNCH — quickLaunchApps).
 //
 // Theme Properties Consumed:
 //   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
-//   - bar.quickLaunchIcon, bar.controlBorderWidth
-//
-// Dependencies:
-//   - required property var bar (from shell.qml)
-//
-// Notes:
-//   - Each icon has its own MouseArea for clicks while the outer area handles hover.
-//   - Icon paths and launch commands are content and are left unchanged.
+//   - bar.quickLaunchIcon, bar.quickLaunchSpacing, bar.quickLaunchPaddingH
+//   - bar.quickLaunchApps, bar.fontFamily, bar.controlBorderWidth, bar.tooltipDelay
 // =============================================================================
 
 Rectangle {
     id: root
 
-    // === Required Properties ===
     required property var bar
 
-    // === Layout (for RowLayout participation in the bar) ===
-    Layout.preferredWidth: appsRow.implicitWidth + 20
+    Layout.preferredWidth: appsRow.implicitWidth + bar.quickLaunchPaddingH * 2
     Layout.preferredHeight: 36
     Layout.alignment: Qt.AlignVCenter
 
-    // === Appearance via Theme ===
     radius: bar.pillRadius
     color: appsHover.containsMouse ? bar.glassHover : bar.pillBg
     border.width: bar.controlBorderWidth
     border.color: appsHover.containsMouse ? bar.accent : bar.pillBorder
 
-    // === Hover Area (covers the whole pill) ===
+    function launchEntry(entry) {
+        if (!entry || entry.command === undefined || entry.command === null)
+            return
+        if (Array.isArray(entry.command)) {
+            if (entry.command.length > 0)
+                Quickshell.execDetached(entry.command)
+            return
+        }
+        if (typeof entry.command === "string" && entry.command.length > 0)
+            Quickshell.execDetached(["sh", "-c", entry.command])
+    }
+
+    function entryUsesGlyph(entry) {
+        return entry && (!entry.icon || entry.icon.length === 0) && entry.glyph && entry.glyph.length > 0
+    }
+
     MouseArea {
         id: appsHover
         anchors.fill: parent
         hoverEnabled: true
     }
 
-    // === Content ===
     Row {
         id: appsRow
         anchors.centerIn: parent
-        spacing: 10
+        spacing: bar.quickLaunchSpacing
 
-        // VSCodium
-        Item {
-            width: bar.quickLaunchIcon
-            height: bar.quickLaunchIcon
+        Repeater {
+            model: bar.quickLaunchApps
 
-            Image {
-                anchors.centerIn: parent
+            Item {
+                required property var modelData
+                required property int index
+
                 width: bar.quickLaunchIcon
                 height: bar.quickLaunchIcon
-                source: "/home/crome/icons/vscodium.svg"
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                mipmap: true
-            }
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Quickshell.execDetached(["gtk-launch", "vscodium"])
-            }
-        }
+                Image {
+                    visible: !root.entryUsesGlyph(modelData)
+                    anchors.centerIn: parent
+                    width: bar.quickLaunchIcon
+                    height: bar.quickLaunchIcon
+                    source: modelData.icon || ""
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
+                }
 
-        // Firefox
-        Item {
-            width: bar.quickLaunchIcon
-            height: bar.quickLaunchIcon
+                Text {
+                    visible: root.entryUsesGlyph(modelData)
+                    anchors.centerIn: parent
+                    text: modelData.glyph || ""
+                    font.pixelSize: bar.quickLaunchIcon
+                    font.family: bar.fontFamily
+                    color: launchClick.containsMouse ? bar.accent : bar.subtext
+                }
 
-            Image {
-                anchors.centerIn: parent
-                width: bar.quickLaunchIcon
-                height: bar.quickLaunchIcon
-                source: "/home/crome/icons/firefox.svg"
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                mipmap: true
-            }
+                MouseArea {
+                    id: launchClick
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.launchEntry(modelData)
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Quickshell.execDetached(["gtk-launch", "firefox"])
-            }
-        }
-
-        // Logseq
-        Item {
-            width: bar.quickLaunchIcon
-            height: bar.quickLaunchIcon
-
-            Image {
-                anchors.centerIn: parent
-                width: bar.quickLaunchIcon
-                height: bar.quickLaunchIcon
-                source: "/home/crome/icons/logseq-a.svg"
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                mipmap: true
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Quickshell.execDetached(["gtk-launch", "logseq"])
-            }
-        }
-
-        // LM Studio
-        Item {
-            width: bar.quickLaunchIcon
-            height: bar.quickLaunchIcon
-
-            Image {
-                anchors.centerIn: parent
-                width: bar.quickLaunchIcon
-                height: bar.quickLaunchIcon
-                source: "/home/crome/icons/lmstudio-dark.png"
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                mipmap: true
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Quickshell.execDetached([
-                    "/home/crome/applications/LM-Studio-0.4.13-1-x64.AppImage"
-                ])
+                    ToolTip.text: modelData.tooltip || ""
+                    ToolTip.visible: containsMouse && (modelData.tooltip || "").length > 0
+                    ToolTip.delay: bar.tooltipDelay
+                }
             }
         }
     }
