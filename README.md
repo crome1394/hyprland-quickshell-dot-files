@@ -41,6 +41,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel adjustment, and device selection popup (PipeWire) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
 | **Notifications** | `NotificationBell.qml` | SwayNC bell with unread badge. Left-click toggles the notification center; right-click opens a menu (Do Not Disturb, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
+| **Kill Target** | `KillTargetPill.qml` | xkill-style window picker (hidden by default). Click the pill to arm pick mode (crosshair on all monitors), then click a window to send **SIGTERM** to its process. Escape, right-click, empty click, or a second pill click cancels. Uses `window-at-point.sh` + `process-control.sh` (user-owned processes only). IPC: `qs ipc call killTargetPill activatePickMode` |
 | **Power** | `PowerMenu.qml` | Left-click opens the full session menu (lock, logout, reboot, shutdown, BIOS); right-click opens a compact quick menu with the same actions |
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
@@ -60,6 +61,7 @@ Every bar pill can be hidden or shown. Defaults live in `Config.qml` (search for
 | `showAudioPill` | `true` | `setShowAudioPill` / `toggleShowAudioPill` | Audio |
 | `showClockPill` | `true` | `setShowClockPill` / `toggleShowClockPill` | Clock |
 | `showNotificationPill` | `true` | `setShowNotificationPill` / `toggleShowNotificationPill` | Notifications |
+| `showKillTargetPill` | `false` | `setShowKillTargetPill` / `toggleShowKillTargetPill` | Kill Target |
 | `showPowerPill` | `true` | `setShowPowerPill` / `toggleShowPowerPill` | Power |
 
 The **magic workspace pill** (🪄 inside the workspaces strip) is separate: `wsShowSpecialPill` in config, plus `setShowMagicWorkspacePill` / `toggleShowMagicWorkspacePill` via IPC.
@@ -87,6 +89,7 @@ Some bar widgets expose actions beyond show/hide. These work from scripts, Hyprl
 |--------|---------|--------|
 | `clockPill` | `showCalendar` | Open the ClockPill calendar popup |
 | `notificationBell` | `toggleDoNotDisturb` | Toggle SwayNC Do Not Disturb (same as right-clicking the bell) |
+| `killTargetPill` | `activatePickMode` / `cancelPickMode` | Arm or cancel the click-to-kill picker (same as clicking the pill) |
 | `sysStatsPill` | `setMetricsLiveUpdates` | Pause (`false`) or resume (`true`) metrics-popup polling for all CPU/Memory/GPU sections |
 | `sysStatsPill` | `setCpuLiveUpdates` / `setMemLiveUpdates` / `setGpuLiveUpdates` | Pause or resume metrics-popup polling for one section |
 | `sysStatsPill` | `toggleMetricsLiveUpdates` | Toggle metrics-popup polling for all sections |
@@ -100,6 +103,8 @@ qs ipc call notificationBell toggleDoNotDisturb
 qs ipc call sysStatsPill setMetricsLiveUpdates false
 qs ipc call sysStatsPill toggleMetricsLiveUpdates
 qs ipc call sysStatsPill setCpuLiveUpdates false
+qs ipc call shell setShowKillTargetPill true
+qs ipc call killTargetPill activatePickMode
 ```
 
 Metrics-popup IPC pauses sparklines, gauges, and process lists in the right-click dropdowns — not the compact CPU/Memory/GPU stats on the bar pill. Takes effect immediately while a popup is open; otherwise the paused state applies the next time you open that section. When `popupStatsPersistPause` is `true` in `Config.qml`, the choice is saved to `state/popup-stats.json`.
@@ -110,6 +115,7 @@ Metrics-popup IPC pauses sparklines, gauges, and process lists in the right-clic
 SUPER + C   →   qs ipc call clockPill showCalendar
 SUPER + N   →   qs ipc call notificationBell toggleDoNotDisturb
 SUPER + M   →   qs ipc call sysStatsPill toggleMetricsLiveUpdates
+SUPER + X   →   qs ipc call killTargetPill activatePickMode
 ```
 
 ### Workspaces (`WorkspacesPill.qml` + `Config.qml`)
@@ -357,6 +363,10 @@ Search for **SYS STATS PILL** for the compact bar widget (CPU | Memory | GPU), a
 - `*BarGap` — distance between the bar and the popup
 
 **Live updates** — `popupStatsLiveUpdates` sets whether charts refresh while a popup is open. `popupStatsPersistPause: true` saves Pause/Resume choices to `state/popup-stats.json`.
+
+### Kill Target pill (`Config.qml`)
+
+Search for **KILL TARGET PILL**. Set `showKillTargetPill: true` to show the bar icon (default is hidden). Tune `killTargetIcon`, `killTargetTooltip`, and `killTargetOverlayDim` (screen dimming while picking). Kills use SIGTERM via `process-control.sh` — only processes owned by your user; root-owned apps are rejected with an error message.
 
 ---
 

@@ -36,6 +36,7 @@
 //   - Icons (glyphs for speaker/mic/power/etc — easy to swap entire icon set)
 //   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
 //   - Widget visibility (bar pill defaults)
+//   - KILL TARGET PILL (click-to-kill window picker)
 //   - Workspaces (pill behavior, colors, icons, special workspace name)
 //   - SYS STATS PILL (CPU | Memory | GPU bar pill size, gauges, temp colors)
 //   - SysStats metrics popups (right-click dropdown size/position per section)
@@ -271,6 +272,19 @@ QtObject {
     readonly property bool showClockPill:           true   // ClockPill.qml
     readonly property bool showNotificationPill:     true   // NotificationBell.qml
     readonly property bool showPowerPill:           true   // PowerMenu.qml
+    readonly property bool showKillTargetPill:    false  // KillTargetPill.qml (click-to-kill picker)
+
+    // =========================================================================
+    // KILL TARGET PILL (widgets/KillTargetPill.qml — xkill-style window picker)
+    // =========================================================================
+    // Click the pill to arm pick mode, then click any window to close its app.
+    // Sends SIGTERM to the window's process (same safety rules as the inspector
+    // Processes tab). Escape, right-click, or clicking empty desktop cancels.
+
+    readonly property string killTargetIcon: "󰍣"   // Crosshair / target icon on the bar pill
+    readonly property string killTargetTooltip: "Click to pick a window and kill its app · Esc cancels"
+    // Darkening applied to each monitor while pick mode is active (0 = invisible overlay).
+    readonly property real killTargetOverlayDim: 0.12
 
     // =========================================================================
     // FONTS

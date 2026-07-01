@@ -22,6 +22,8 @@
 //   - qs ipc call sysStatsPill setMetricsLiveUpdates false
 //   - qs ipc call sysStatsPill setCpuLiveUpdates false
 //   - qs ipc call sysStatsPill setMemLiveUpdates false
+//   - qs ipc call killTargetPill activatePickMode
+//   - qs ipc call shell setShowKillTargetPill true
 //   - qs ipc call sysStatsPill toggleGpuLiveUpdates
 //   - qs ipc call shell setWsMinimumShown 7
 //   - qs ipc call shell setWsShowOnlyActive true
@@ -91,6 +93,7 @@ ShellRoot {
     property bool showClockPill: true
     property bool showNotificationPill: true
     property bool showPowerPill: true
+    property bool showKillTargetPill: false
     property bool showMagicWorkspacePill: true   // Magic pill inside WorkspacesPill (wsShowSpecialPill)
 
     // Workspace behavior (config defaults in Config.qml; IPC overrides until qs restart)
@@ -153,6 +156,7 @@ ShellRoot {
             root.showClockPill = cfg.showClockPill
             root.showNotificationPill = cfg.showNotificationPill
             root.showPowerPill = cfg.showPowerPill
+            root.showKillTargetPill = cfg.showKillTargetPill
             root.showMagicWorkspacePill = cfg.wsShowSpecialPill
             root.wsMinimumShown = cfg.wsMinimumShown
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
@@ -301,6 +305,9 @@ ShellRoot {
         readonly property alias iconMic: cfg.iconMic
         readonly property alias iconMicMuted: cfg.iconMicMuted
         readonly property alias iconPower: cfg.iconPower
+        readonly property alias killTargetIcon: cfg.killTargetIcon
+        readonly property alias killTargetTooltip: cfg.killTargetTooltip
+        readonly property alias killTargetOverlayDim: cfg.killTargetOverlayDim
         readonly property alias iconLock: cfg.iconLock
         readonly property alias iconLogout: cfg.iconLogout
         readonly property alias iconReboot: cfg.iconReboot
@@ -628,7 +635,23 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showNotificationPill && root.showPowerPill
+                        visible: root.showNotificationPill && (root.showKillTargetPill || root.showPowerPill)
+                        Layout.preferredWidth: bar.dividerThickness
+                        Layout.preferredHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
+                        color: bar.divider
+                    }
+
+                    // ─ Kill Target ─
+                    KillTargetPill {
+                        id: killTargetPill
+                        visible: root.showKillTargetPill
+                        bar: bar
+                    }
+
+                    // ── divider ──
+                    Rectangle {
+                        visible: root.showKillTargetPill && root.showPowerPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -700,6 +723,16 @@ ShellRoot {
             target: "notificationBell"
             function toggleDoNotDisturb() {
                 if (notificationBell && notificationBell.toggleDoNotDisturb) notificationBell.toggleDoNotDisturb()
+            }
+        }
+
+        Io.IpcHandler {
+            target: "killTargetPill"
+            function activatePickMode() {
+                if (killTargetPill && killTargetPill.activatePickMode) killTargetPill.activatePickMode()
+            }
+            function cancelPickMode() {
+                if (killTargetPill && killTargetPill.cancelPickMode) killTargetPill.cancelPickMode()
             }
         }
 
@@ -795,6 +828,12 @@ ShellRoot {
         }
         function toggleShowPowerPill(): void {
             root.showPowerPill = !root.showPowerPill
+        }
+        function setShowKillTargetPill(enabled: bool): void {
+            root.showKillTargetPill = enabled
+        }
+        function toggleShowKillTargetPill(): void {
+            root.showKillTargetPill = !root.showKillTargetPill
         }
         function setShowMagicWorkspacePill(enabled: bool): void {
             root.showMagicWorkspacePill = enabled
