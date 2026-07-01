@@ -177,7 +177,7 @@ Item {
     }
 
     Variants {
-        variants: Quickshell.screens
+        model: Quickshell.screens
 
         PanelWindow {
             property var modelData
