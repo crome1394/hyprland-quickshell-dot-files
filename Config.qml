@@ -187,6 +187,23 @@ QtObject {
     readonly property int popupStatsCpuHeight: 700   // SysStatsPill CPU metrics popup height
     readonly property int popupStatsGpuWidth:  598   // SysStatsPill GPU metrics popup width
     readonly property int popupStatsGpuHeight: 700   // SysStatsPill GPU metrics popup height
+    // --- SysStatsPill metrics popup position (widgets/SysStatsPill.qml showMetricsPopup)
+    // CPU and GPU right-click menus are positioned independently. For each:
+    //   anchorX     — horizontal point on the target: 0 = left, 0.5 = center, 1 = right
+    //                 (popup is centered on that point, then offset/clamped to the screen)
+    //   anchorWholePill — when true, anchor to the full SysStatsPill instead of that half
+    //   offsetX/Y   — pixel nudge after anchor math (negative offsetX = left)
+    //   barGap      — gap between bar edge and popup (popupAnchorY; flips with barPosition)
+    readonly property real popupStatsCpuAnchorX: 0.5
+    readonly property bool popupStatsCpuAnchorWholePill: false
+    readonly property int popupStatsCpuOffsetX: 100
+    readonly property int popupStatsCpuOffsetY: 0
+    readonly property int popupStatsCpuBarGap: 2
+    readonly property real popupStatsGpuAnchorX: 0.5
+    readonly property bool popupStatsGpuAnchorWholePill: false
+    readonly property int popupStatsGpuOffsetX: -130
+    readonly property int popupStatsGpuOffsetY: 0
+    readonly property int popupStatsGpuBarGap: 2
     // Default live polling when a metrics popup opens (persists across reboot via this file).
     readonly property bool popupStatsLiveUpdates: true
     // When true, Pause/Resume choices are saved to state/popup-stats.json and restored after reboot.

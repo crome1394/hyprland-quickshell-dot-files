@@ -245,6 +245,16 @@ ShellRoot {
         readonly property alias popupStatsCpuHeight: cfg.popupStatsCpuHeight
         readonly property alias popupStatsGpuWidth: cfg.popupStatsGpuWidth
         readonly property alias popupStatsGpuHeight: cfg.popupStatsGpuHeight
+        readonly property alias popupStatsCpuAnchorX: cfg.popupStatsCpuAnchorX
+        readonly property alias popupStatsCpuAnchorWholePill: cfg.popupStatsCpuAnchorWholePill
+        readonly property alias popupStatsCpuOffsetX: cfg.popupStatsCpuOffsetX
+        readonly property alias popupStatsCpuOffsetY: cfg.popupStatsCpuOffsetY
+        readonly property alias popupStatsCpuBarGap: cfg.popupStatsCpuBarGap
+        readonly property alias popupStatsGpuAnchorX: cfg.popupStatsGpuAnchorX
+        readonly property alias popupStatsGpuAnchorWholePill: cfg.popupStatsGpuAnchorWholePill
+        readonly property alias popupStatsGpuOffsetX: cfg.popupStatsGpuOffsetX
+        readonly property alias popupStatsGpuOffsetY: cfg.popupStatsGpuOffsetY
+        readonly property alias popupStatsGpuBarGap: cfg.popupStatsGpuBarGap
         readonly property alias popupStatsLiveUpdates: cfg.popupStatsLiveUpdates
         readonly property alias popupStatsPersistPause: cfg.popupStatsPersistPause
         readonly property alias popupHelpWidth: cfg.popupHelpWidth

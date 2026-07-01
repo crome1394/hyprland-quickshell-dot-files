@@ -36,7 +36,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps (VSCodium, Firefox, Logseq, LM Studio) |
 | **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
-| **System Stats** | `SysStatsPill.qml` | CPU and GPU utilization + temperature gauges (lightweight bar polling; always live). Left-click CPU opens `btop`; left-click GPU opens `nvtop`. Right-click each half opens a metrics dropdown (inspector CPU/GPU tabs; `sysmon-poller.sh`). Popup size: `popupStatsCpuWidth/Height`, `popupStatsGpuWidth/Height` in `Config.qml` (default 598×700). **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
+| **System Stats** | `SysStatsPill.qml` | CPU and GPU utilization + temperature gauges (lightweight bar polling; always live). Left-click CPU opens `btop`; left-click GPU opens `nvtop`. Right-click each half opens a metrics dropdown (inspector CPU/GPU tabs; `sysmon-poller.sh`). Popup size and position are set per half in `Config.qml` — CPU: `popupStatsCpuWidth/Height`, `popupStatsCpuAnchorX`, `popupStatsCpuAnchorWholePill`, `popupStatsCpuOffsetX/Y`, `popupStatsCpuBarGap`; GPU: `popupStatsGpu*` equivalents. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel adjustment, and device selection popup (PipeWire) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
@@ -313,6 +313,7 @@ Edit `Config.qml` to change:
 - Colors, fonts, spacing, radii, and icon glyphs
 - Bar pill visibility defaults (`showLauncherPill`, `showAudioPill`, etc.)
 - Workspace pill count, active-only mode, magic pill default, and startup focus
+- SysStats metrics popup size and position per half (`popupStatsCpu*` / `popupStatsGpu*` — search for **popupStats** in `Config.qml`)
 - Inspector sizing and semantic colors (search for `insp*` properties)
 
 The file is named `Config.qml` (capital **C**) because QML requires that naming for reliable type registration across subdirectories.

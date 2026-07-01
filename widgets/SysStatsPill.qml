@@ -24,7 +24,8 @@ import "../components"
 //   - bar.statTempCool, bar.statTempWarm, bar.statTempHot, bar.statTempWarmAt,
 //     bar.statTempHotAt, bar.statTempColor(), bar.statValueSeparator
 //   - bar.divider, bar.fontFamily, bar.tooltipDelay, bar.popupAnchorY()
-//   - bar.popupStatsCpu/Gpu Width/Height, bar.popupStatsLiveUpdates, bar.popupStatsPersistPause
+//   - bar.popupStatsCpu/Gpu Width/Height and per-half position tokens (AnchorX, AnchorWholePill, OffsetX/Y, BarGap)
+//   - bar.popupStatsLiveUpdates, bar.popupStatsPersistPause
 //   - bar.surface, bar.overlay, bar.gaugeLow/Mid/High (metrics popup views)
 //
 // Dependencies:
@@ -229,15 +230,22 @@ Rectangle {
                 gpuLiveUpdates = pauseAdapter.gpuLiveUpdates
         }
 
-        var pos = anchorItem.mapToItem(barBg, anchorItem.width / 2, 0)
+        var anchorXFrac = isCpu ? bar.popupStatsCpuAnchorX : bar.popupStatsGpuAnchorX
+        var anchorWholePill = isCpu ? bar.popupStatsCpuAnchorWholePill : bar.popupStatsGpuAnchorWholePill
+        var offsetX = isCpu ? bar.popupStatsCpuOffsetX : bar.popupStatsGpuOffsetX
+        var offsetY = isCpu ? bar.popupStatsCpuOffsetY : bar.popupStatsGpuOffsetY
+        var barGap = isCpu ? bar.popupStatsCpuBarGap : bar.popupStatsGpuBarGap
+
+        var layoutAnchor = anchorWholePill ? root : anchorItem
+        var pos = layoutAnchor.mapToItem(barBg, layoutAnchor.width * anchorXFrac, 0)
         var popupW = popup.implicitWidth
         var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
-        var targetX = bar.sideMargin + pos.x - (popupW / 2)
+        var targetX = bar.sideMargin + pos.x - (popupW / 2) + offsetX
         var minX = 12
         var maxX = screenW - popupW - 12
 
         popup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
-        popup.anchor.rect.y = bar.popupAnchorY(popup.implicitHeight, 2)
+        popup.anchor.rect.y = bar.popupAnchorY(popup.implicitHeight, barGap) + offsetY
         popup.visible = true
         syncMetricsPolling()
     }
