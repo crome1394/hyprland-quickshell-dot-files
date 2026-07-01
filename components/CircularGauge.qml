@@ -1,7 +1,7 @@
 import QtQuick
 
 // Theme import must be top-level (QML rule). Provides fallback for colors.
-import "../Theme.qml" as ThemeModule
+import "../Config.qml" as ConfigModule
 
 // =============================================================================
 // CircularGauge.qml — Reusable circular progress gauge for system metrics
@@ -16,7 +16,7 @@ import "../Theme.qml" as ThemeModule
 //   - (size, stroke, label etc remain component props for flexibility)
 //
 // Dependencies:
-//   - import "../Theme.qml" as ThemeModule  (for direct standalone use)
+//   - import "../Config.qml" as ConfigModule  (for direct standalone use)
 //   - Optional overrides: lowColor, midColor, highColor props
 //
 // Notes:
@@ -40,7 +40,7 @@ Item {
 
     // === Theme fallback (VolumeBar/MiniVolumeBar pattern) ===
     // Placed early so the readonly t can be used in default expressions below.
-    readonly property QtObject t: ThemeModule.Theme
+    readonly property QtObject t: ConfigModule.Config
 
     // Color ramp (override to customize per gauge, e.g. GPU uses same ramp).
     // Defaults pulled from Theme so a single edit in Theme.qml retunes all gauges.

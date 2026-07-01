@@ -28,7 +28,7 @@ import Quickshell.Io as Io
 //   - system            → fastfetch (systemProcess, lazy until tab opened)
 //
 // Theming:
-//   - Theme { id: th } is the single visual source (see Theme.qml HYPR CONFIG INSPECTOR).
+//   - Config { id: th } is the single visual source (see config.qml HYPR CONFIG INSPECTOR).
 //   - Window fill: inspWindowBg (solid) or inspUseGradient + inspGradientTop/Bottom.
 //   - Short aliases below (accent, inspTabRadius, …) keep QML bindings readable.
 //   - `required property var bar` is passed from shell.qml for API consistency; visuals use `th`.
@@ -39,7 +39,7 @@ import Quickshell.Io as Io
 //   3. Add a *View component under the content Rectangle (visible bound to view id).
 //   4. Wire refresh/focus/scroll in: activateTab, refreshAll, refreshCurrentTab,
 //      focusActiveTabContent, resetTabScroll, pageContentScroll, statusText.
-//   5. Add theme tokens to Theme.qml if the new tab needs unique colors/sizes.
+//   5. Add theme tokens to config.qml if the new tab needs unique colors/sizes.
 //
 // Features:
 //   - Parsed tabs: Key Bindings, Environment, Runtime Options, Config Files, sysmon tabs, Audio, Logs, Services, System Info
@@ -54,17 +54,17 @@ import "../components"
 Item {
     id: root
 
-    // === Required API (shell passes bar; visuals come from local Theme instance) ===
+    // === Required API (shell passes bar; visuals come from local Config instance) ===
     required property var bar
 
-    Theme { id: th }
+    Config { id: th }
 
     SysMonService {
         id: sysMonService
         autoPoll: root.inspectorActive   // poll only while overlay is shown (not minimized)
     }
 
-    // === Theme aliases — short names for bindings (all values from Theme.qml) ===
+    // === Config aliases — short names for bindings (all values from config.qml) ===
     // Inspector window background (inspWindow* — independent of other bar popups)
     readonly property color inspWindowBg: th.inspWindowBg
     readonly property color inspWindowBorder: th.inspWindowBorder
@@ -961,7 +961,7 @@ Item {
         return entries
     }
 
-    // Key/env semantic colors — delegated to Theme helpers (edit colors in Theme.qml)
+    // Key/env semantic colors — delegated to config helpers (edit colors in config.qml)
     function keyPillColor(key) { return th.inspKeyPillColor(key) }
     function keyPillTextColor(key) { return th.inspKeyPillTextColor(key) }
     function envKeyIsHighlight(key) { return th.inspEnvKeyIsHighlight(key) }

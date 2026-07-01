@@ -1,28 +1,27 @@
-// Theme.qml
+// Config.qml — Quickshell configuration (theme colors + workspace behavior)
 // =============================================================================
-// SINGLE SOURCE OF TRUTH — Quickshell Visual Theme (CachyOS + Hyprland)
+// SINGLE SOURCE OF TRUTH — edit this file for bar visuals and workspace defaults.
+// (Named Config.qml for QML type registration; referred to as "config" in docs.)
 // =============================================================================
 //
-// All visual properties (colors, sizes, spacing, radii, fonts, icons, slider
-// styling, etc.) live here. This is the ONLY file you should edit for theming.
+// Visual properties (colors, sizes, spacing, radii, fonts, icons, slider
+// styling, etc.) and workspace behavior defaults live here.
 //
 // How it works in this config:
-//   - shell.qml instantiates Theme once and re-exports **every** property as
+//   - shell.qml instantiates Config once and re-exports **every** property as
 //     aliases on the root `bar` object (e.g. bar.accent, bar.sliderFill,
-//     bar.iconSpeaker, bar.popupRadius, bar.fontClock, etc.).
+//     bar.wsMinimumShown, bar.wsShowSpecialPill, etc.).
 //   - Almost all widgets receive `required property var bar` and use `bar.xxx`.
-//     This gives perfect global theming with zero prop-drilling pain.
 //   - Low-level components (VolumeBar, MiniVolumeBar, CavaVisualizer) read
 //     values from `bar` with safe fallbacks so they also stay in sync.
 //
 // You can also import it directly in new code if you prefer:
-//     import "Theme.qml" as T
-//     color: T.Theme.accent
+//     import "config.qml" as C
+//     color: C.Config.accent
 //
 // (We deliberately avoided a heavy pragma Singleton + qmldir setup because
-//  it caused loader conflicts with the existing `Theme {}` + alias pattern
-//  that the entire bar relies on. The "instantiated once at the root +
-//  massive alias list" approach gives the same practical benefit.)
+//  it caused loader conflicts with the existing `Config {}` + alias pattern
+//  that the entire bar relies on.)
 //
 // All properties below are heavily commented with their purpose and consumers.
 //
@@ -36,7 +35,7 @@
 //   - Fonts (families + sizes)
 //   - Icons (glyphs for speaker/mic/power/etc — easy to swap entire icon set)
 //   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
-//   - Workspaces
+//   - Workspaces (pill behavior, colors, icons, special workspace name)
 //   - System stats (CPU/GPU bars + temp thresholds)
 //   - Cava visualizer
 //   - System monitoring (gauges, poll default, shared tab-chip colors)
@@ -296,6 +295,23 @@ QtObject {
     // =========================================================================
     // WORKSPACES (Hyprland filtered active/occupied pills)
     // =========================================================================
+    // Consumed by WorkspacesPill.qml + shell.qml startup via bar.* aliases.
+    //
+    // Pill display:
+    //   wsShowOnlyActive false → always show numbered pills 1..wsMinimumShown
+    //   wsShowOnlyActive true  → only occupied/active numbered pills (+ extras)
+    //   wsShowSpecialPill      → config default for magic pill (IPC can override at runtime)
+    //
+    // qs startup (shell.qml):
+    //   wsStartupWorkspace 0 → do not change Hyprland workspace on qs start
+    //   wsStartupWorkspace N → focus workspace N (after optional magic close)
+
+    readonly property bool wsShowSpecialPill: true    // Magic pill default (toggle via qs ipc call shell setShowMagicWorkspacePill)
+    readonly property int  wsMinimumShown: 3           // Numbered pills 1..N always visible when wsShowOnlyActive is false
+    readonly property bool wsShowOnlyActive: false    // true = hide empty numbered pills; only show occupied/active
+    readonly property int  wsStartupWorkspace: 1       // Focus this workspace on qs start (0 = leave workspace unchanged)
+    readonly property bool wsStartupCloseMagic: true   // Close magic overlay on qs start before focusing wsStartupWorkspace
+
     readonly property color wsHoverYellow: "#fdf9db"           // Hover from original eww migration
     readonly property color wsActiveBg:    Qt.rgba(0.53, 0.69, 0.96, 0.22)  // Active workspace glass
     readonly property color wsActiveBorder: Qt.rgba(0.53, 0.69, 0.96, 0.6)
@@ -311,6 +327,57 @@ QtObject {
     readonly property int  wsIconSize:      iconSizeTray
     readonly property int  wsNumberSize:    15
     readonly property int  wsSpacing:        4     // Between workspace buttons
+
+    // --- Per-workspace pill icons (edit here to remap without touching widget logic)
+    // Nerd Font glyphs for most slots; Unicode emoji where noted for color/readability.
+    readonly property string wsIcon1:        ""     // Code / dev
+    readonly property string wsIcon2:        ""     // Browser
+    readonly property string wsIcon3:        "🕹"     // Game (color emoji)
+    readonly property string wsIcon4:        ""     // Misc
+    readonly property string wsIcon5:        ""     // Misc
+    readonly property string wsIcon6:        "󰈸"     // Misc
+    readonly property string wsIcon7:        "󰈸"     // Misc
+    readonly property string wsIcon8:        "󰈸"     // Misc
+    readonly property string wsIcon9:        "󰈸"     // Misc
+    readonly property string wsIcon10:       "󰈸"     // Misc
+    readonly property string wsIconDefault:  "󰈸"     // Fallback for unmapped workspace ids
+
+    // Icon picker reference — copy any glyph into wsIcon1…wsIcon10 or wsIconSpecial:
+    //   Coding / dev:     💻 🖥️ ⌨️ 🧑‍💻 📟 🛠️ ⚙️ 🔧 🐛 🧪
+    //   Browsers:         🌐 🦁 🔍 🦊 🌍 📡
+    //   Editors / IDE:   󰨞 📝 ✏️ 📋 📄 🗒️ 💾
+    //   Terminal:         ⌨️ 📟
+    //   Chat / social:    💬 📱 📧 🗨️
+    //   Media:           🎵 🎧 🎬 📺 🎮 🕹
+    //   Files / misc:    📁 🗂️  󰈹 󰈸 🔥 ⭐ ✨ 🪄
+
+    // --- Hyprland special workspace (negative id; toggled via Super+S in keybindings.lua)
+    // wsSpecialName must match hl.dsp.workspace.toggle_special('<name>') and special:<name> moves.
+    readonly property string wsSpecialName:  "magic"
+    readonly property string wsIconSpecial:  "🪄"     // Magic space — colorful emoji, icon-only pill
+
+    // Resolve the icon glyph/emoji for a numbered Hyprland workspace id.
+    function wsIconForId(id) {
+        switch (id) {
+            case 1:  return wsIcon1;
+            case 2:  return wsIcon2;
+            case 3:  return wsIcon3;
+            case 4:  return wsIcon4;
+            case 5:  return wsIcon5;
+            case 6:  return wsIcon6;
+            case 7:  return wsIcon7;
+            case 8:  return wsIcon8;
+            case 9:  return wsIcon9;
+            case 10: return wsIcon10;
+            default: return wsIconDefault;
+        }
+    }
+
+    // True when a Hyprland workspace name refers to the configured special workspace.
+    function wsIsSpecialName(name) {
+        if (!name || name.length === 0) return false;
+        return name === wsSpecialName || name === ("special:" + wsSpecialName);
+    }
 
     // =========================================================================
     // SYSTEM STATS GAUGES (CPU / GPU utilization bars + temp labels)
@@ -406,7 +473,7 @@ QtObject {
     //
     // How to extend:
     //   - Add a property here, alias it in HyprConfigInsp via `th.xxx`, use in UI.
-    //   - Semantic color helpers (envValueColor) live in Theme so other tools can reuse.
+    //   - Semantic color helpers (envValueColor) live in config so other tools can reuse.
     // =========================================================================
 
     // --- Window geometry (FloatingWindow defaults + resize limits)

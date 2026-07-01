@@ -9,7 +9,7 @@ import ".."
 Item {
     id: root
 
-    Theme { id: theme }
+    Config { id: theme }
 
     property string globalFilter: ""
     property bool active: false

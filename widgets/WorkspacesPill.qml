@@ -8,24 +8,27 @@ import Quickshell.Hyprland
 // =============================================================================
 //
 // Purpose:
-//   Always shows workspaces 1–5 as pills (empty or occupied), plus any
-//   additional workspaces that are occupied or active. Supports click
-//   activation and scroll wheel switching.
+//   Shows numbered Hyprland workspace pills and an optional magic-space pill.
+//   Display rules come from config.qml (via bar.*): minimum count, active-only
+//   mode, and magic pill visibility (config default + IPC override).
 //
-// Theme Properties Consumed:
+// Config / bar properties consumed:
+//   - bar.wsMinimumShown, bar.wsShowOnlyActive, bar.showMagicWorkspacePill
+//   - bar.wsIconForId(id), bar.wsIconSpecial, bar.wsSpecialName, bar.wsIsSpecialName(name)
 //   - bar.pillRadius, bar.glassPillBg, bar.glassBorder, bar.controlBorderWidth
 //   - bar.wsButtonWidth, bar.wsButtonHeight, bar.workspaceRadius
 //   - bar.wsSpacing, bar.wsIconSize, bar.wsNumberSize
 //   - bar.wsActiveBg, bar.wsActiveBorder, bar.wsActiveText
 //   - bar.wsHoverYellow, bar.clock, bar.fontFamily
 //
-// Dependencies:
-//   - required property var bar (from shell.qml)
-//   - Quickshell.Hyprland (for workspace state)
+// IPC (runtime magic pill toggle):
+//   qs ipc call shell setShowMagicWorkspacePill false
+//   qs ipc call shell toggleShowMagicWorkspacePill
 //
 // Notes:
-//   - Filtering, cold-start polling, and scroll logic are preserved exactly.
-//   - Delegate styling has been aligned to theme tokens where possible.
+//   - Workspace icons live in config.qml (wsIcon1…wsIcon10, wsIconSpecial).
+//   - Activation uses root.activateEntry() — do not store functions on model
+//     objects (QML Repeater strips them from plain JS objects).
 // =============================================================================
 
 Rectangle {
@@ -40,14 +43,13 @@ Rectangle {
     implicitWidth: wsRow.implicitWidth + 16
     implicitHeight: bar.pillHeight
 
-    // === Appearance via Theme ===
+    // === Appearance via config (bar aliases) ===
     color: bar.glassPillBg
     radius: bar.pillRadius
     border.width: bar.controlBorderWidth
     border.color: bar.glassBorder
 
     // ===== Workspace logic (tightly coupled to this widget) =====
-    property int minimumWorkspaces: 5
     property var shownWorkspaces: []
 
     function workspaceHasWindows(w) {
@@ -57,6 +59,7 @@ Rectangle {
         return false;
     }
 
+    // Extra numbered workspaces (6+) only appear when occupied or active.
     function shouldShowExtraWorkspace(w) {
         if (!w || w.id <= 0) return false;
         return workspaceHasWindows(w) || w.active || w.focused;
@@ -65,26 +68,76 @@ Rectangle {
     function makePlaceholderWorkspace(id, focusedId) {
         return {
             id: id,
+            isSpecial: false,
             active: false,
-            focused: focusedId === id,
-            activate: function() { Hyprland.dispatch("workspace " + id); }
+            focused: focusedId === id
         };
     }
 
-    function getWsIcon(id) {
-        switch (id) {
-            case 1: return "";     //   code
-            case 2: return "";     // "🦁 Brave Browser
-            case 3: return "";     //  chats
-            case 4: return "";     // 
-            case 5: return "🕹";    // 🕹 game
-            case 6: return "";     //  Misc
-            case 7: return "";     // 󰈹 Firefox
-            case 8: return "";     //  term
-            case 9: return "";     // 󰨞 vscode
-            case 10: return "";    // Misc
-            default: return "󰈸";
+    // Central activation path — plain JS model objects cannot keep function props.
+    // Hyprland 0.55+ lua configs require hl.dsp.* dispatch strings (legacy
+    // "workspace N" / "togglespecialworkspace" IPC is rejected by hl.dispatch).
+    function activateEntry(entry) {
+        if (!entry) return;
+
+        if (entry.isSpecial) {
+            Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + bar.wsSpecialName + "')");
+            return;
         }
+
+        if (entry.id > 0) {
+            Hyprland.dispatch("hl.dsp.focus({ workspace = " + entry.id + " })");
+        }
+    }
+
+    // Special workspace is an overlay — focusedWorkspace may stay on the last
+    // numbered ws while magic is visible. activeToplevel.workspace is reliable.
+    function isSpecialWorkspaceActive() {
+        const toplevel = Hyprland.activeToplevel;
+        if (toplevel && toplevel.workspace && bar.wsIsSpecialName(toplevel.workspace.name))
+            return true;
+        const hyprWs = root.findSpecialWorkspace();
+        if (hyprWs && (hyprWs.active || hyprWs.focused)) return true;
+        const focusedWs = Hyprland.focusedWorkspace;
+        return focusedWs && bar.wsIsSpecialName(focusedWs.name);
+    }
+
+    function findSpecialWorkspace() {
+        if (!Hyprland.workspaces || !Hyprland.workspaces.values) return null;
+        const values = Hyprland.workspaces.values;
+        for (let i = 0; i < values.length; i++) {
+            const w = values[i];
+            if (w && w.id < 0 && bar.wsIsSpecialName(w.name)) return w;
+        }
+        return null;
+    }
+
+    function makeSpecialWorkspaceEntry() {
+        const hyprWs = root.findSpecialWorkspace();
+        const specialActive = root.isSpecialWorkspaceActive();
+
+        if (hyprWs) {
+            return {
+                id: hyprWs.id,
+                isSpecial: true,
+                active: specialActive,
+                focused: specialActive
+            };
+        }
+
+        return {
+            id: -1,
+            isSpecial: true,
+            active: specialActive,
+            focused: specialActive
+        };
+    }
+
+    function workspaceMatchesFocus(entry, focusedWs) {
+        if (!entry) return false;
+        if (entry.isSpecial) return root.isSpecialWorkspaceActive();
+        if (!focusedWs || focusedWs.id <= 0) return false;
+        return entry.id === focusedWs.id;
     }
 
     function updateShownWorkspaces() {
@@ -99,39 +152,51 @@ Rectangle {
             });
         }
 
-        for (let i = 1; i <= root.minimumWorkspaces; i++) {
-            idsToShow[i] = true;
+        // config.wsShowOnlyActive false → always show pills 1..wsMinimumShown
+        if (!bar.wsShowOnlyActive) {
+            const minimum = Math.max(1, bar.wsMinimumShown || 1);
+            for (let i = 1; i <= minimum; i++) {
+                idsToShow[i] = true;
+            }
         }
 
-        const focusedId = (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id)
+        const focusedId = (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id > 0)
             ? Hyprland.focusedWorkspace.id
             : 1;
 
         const sortedIds = Object.keys(idsToShow).map(Number).sort(function(a, b) { return a - b; });
         const result = [];
+        if (bar.showMagicWorkspacePill) {
+            result.push(root.makeSpecialWorkspaceEntry());
+        }
         for (let i = 0; i < sortedIds.length; i++) {
             const id = sortedIds[i];
             result.push(wsById[id] || root.makePlaceholderWorkspace(id, focusedId));
         }
+
         root.shownWorkspaces = result;
     }
 
     function switchToRelative(delta) {
         if (!root.shownWorkspaces || root.shownWorkspaces.length === 0) return;
-        const activeId = (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id) ? Hyprland.focusedWorkspace.id : 1;
+
+        const focusedWs = Hyprland.focusedWorkspace;
         let idx = -1;
         for (let i = 0; i < root.shownWorkspaces.length; i++) {
-            if (root.shownWorkspaces[i].id === activeId) { idx = i; break; }
+            if (workspaceMatchesFocus(root.shownWorkspaces[i], focusedWs)) {
+                idx = i;
+                break;
+            }
         }
         if (idx < 0) idx = 0;
+
         let newIdx = idx + delta;
         if (newIdx < 0) newIdx = 0;
         if (newIdx >= root.shownWorkspaces.length) newIdx = root.shownWorkspaces.length - 1;
-        const target = root.shownWorkspaces[newIdx];
-        if (target && target.activate) target.activate();
+
+        root.activateEntry(root.shownWorkspaces[newIdx]);
     }
 
-    // Hyprland workspace change listeners
     Connections {
         target: Hyprland.workspaces
         function onValuesChanged() { root.updateShownWorkspaces(); }
@@ -139,9 +204,13 @@ Rectangle {
     Connections {
         target: Hyprland
         function onFocusedWorkspaceChanged() { root.updateShownWorkspaces(); }
+        function onActiveToplevelChanged() { root.updateShownWorkspaces(); }
+    }
+    Connections {
+        target: bar
+        function onShowMagicWorkspacePillChanged() { root.updateShownWorkspaces(); }
     }
 
-    // Cold-start workspace polling
     property int _wsColdPollCount: 0
     Timer {
         id: wsColdStartPoller
@@ -162,7 +231,6 @@ Rectangle {
         wsColdStartPoller.start();
     }
 
-    // Mouse wheel support
     WheelHandler {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: (event) => {
@@ -171,7 +239,6 @@ Rectangle {
         }
     }
 
-    // === Content ===
     Row {
         id: wsRow
         anchors.centerIn: parent
@@ -183,7 +250,8 @@ Rectangle {
                 id: wsBtn
                 required property var modelData
                 required property int index
-                property bool isActive: modelData && (modelData.active || modelData.focused)
+                property bool isSpecial: !!(modelData && modelData.isSpecial)
+                property bool isActive: !!(modelData && (modelData.active || modelData.focused))
                 property bool isHovered: wsMouse.containsMouse
 
                 width: bar.wsButtonWidth
@@ -201,9 +269,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (modelData) modelData.activate();
-                    }
+                    onClicked: root.activateEntry(modelData)
                 }
 
                 Row {
@@ -211,7 +277,9 @@ Rectangle {
                     spacing: 3
 
                     Text {
-                        text: root.getWsIcon(modelData ? modelData.id : 0)
+                        text: isSpecial
+                              ? bar.wsIconSpecial
+                              : bar.wsIconForId(modelData ? modelData.id : 0)
                         font.pixelSize: bar.wsIconSize
                         color: isActive ? bar.wsActiveText :
                                (isHovered ? "#111111" : bar.clock)
@@ -219,6 +287,7 @@ Rectangle {
                         font.bold: true
                     }
                     Text {
+                        visible: !isSpecial
                         text: modelData ? modelData.id : ""
                         font.pixelSize: bar.wsNumberSize || 15
                         font.bold: true

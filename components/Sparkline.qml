@@ -1,7 +1,7 @@
 import QtQuick
 
 // Theme import at top level (required by QML). Reserved for future defaults.
-import "../Theme.qml" as ThemeModule
+import "../Config.qml" as ConfigModule
 
 // =============================================================================
 // Sparkline.qml — Compact filled history graph for dashboards
@@ -50,7 +50,7 @@ Item {
     property int leftPadding: 28   // space for Y labels
 
     // Theme fallback (for future centralization of sparkline colors)
-    readonly property QtObject t: ThemeModule.Theme
+    readonly property QtObject t: ConfigModule.Config
 
     implicitWidth: 120
     implicitHeight: 36

@@ -1,5 +1,5 @@
 import QtQuick
-import "../Theme.qml" as ThemeModule
+import "../Config.qml" as ConfigModule
 
 // =============================================================================
 // VolumeBar.qml — Reusable clickable volume / progress bar
@@ -17,11 +17,11 @@ import "../Theme.qml" as ThemeModule
 //
 // Dependencies:
 //   - Optional: property var bar (preferred — carries aliases from shell.qml)
-//   - Fallback: direct import of Theme.qml (for standalone use or when bar aliases are absent)
+//   - Fallback: direct import of config.qml (for standalone use or when bar aliases are absent)
 //
 // Notes:
 //   - Hybrid access pattern is intentional and preserved.
-//   - All fallback defaults are kept in sync with Theme.qml.
+//   - All fallback defaults are kept in sync with config.qml.
 //   - This component is used by AudioPill (single + dual views) and audio popups.
 // =============================================================================
 
@@ -37,9 +37,9 @@ Item {
 
     // === SLIDER STYLING FROM THEME (hybrid access) ===
     // Primary path: values from bar (preferred for consistency with the rest of the UI).
-    // Fallback path: direct Theme.qml import (ensures the component remains usable
+    // Fallback path: direct config.qml import (ensures the component remains usable
     // even if bar aliases are not present).
-    readonly property QtObject t: ThemeModule.Theme
+    readonly property QtObject t: ConfigModule.Config
 
     property color fill:     (bar && bar.sliderFill)  ? bar.sliderFill  : (t ? t.sliderFill     : "#0095ff")
     property color track:    (bar && bar.sliderTrack) ? bar.sliderTrack : (t ? t.sliderTrack    : "#313244")

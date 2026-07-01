@@ -1,5 +1,5 @@
 import QtQuick
-import "../Theme.qml" as ThemeModule
+import "../Config.qml" as ConfigModule
 
 // =============================================================================
 // MiniVolumeBar.qml — Compact volume bar for dual (speaker + mic) view
@@ -17,12 +17,12 @@ import "../Theme.qml" as ThemeModule
 //
 // Dependencies:
 //   - Optional: property var bar (preferred)
-//   - Fallback: direct import of Theme.qml
+//   - Fallback: direct import of config.qml
 //
 // Notes:
 //   - This is the most space-constrained slider in the entire configuration.
 //   - Hybrid access pattern is intentional and preserved exactly.
-//   - All fallback defaults are kept in sync with Theme.qml.
+//   - All fallback defaults are kept in sync with config.qml.
 // =============================================================================
 
 Item {
@@ -34,7 +34,7 @@ Item {
     property var onSet: function(v){}
 
     // === THEME-DRIVEN DEFAULTS (hybrid access) ===
-    readonly property QtObject t: ThemeModule.Theme
+    readonly property QtObject t: ConfigModule.Config
 
     property color fill:     (bar && bar.sliderFill) ? bar.sliderFill : (t ? t.sliderFill : "#0095ff")
     property color track:    (bar && bar.sliderTrack) ? bar.sliderTrack : (t ? t.sliderTrack : "#313244")
