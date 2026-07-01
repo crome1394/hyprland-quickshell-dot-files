@@ -183,6 +183,12 @@ QtObject {
     readonly property int popupPowerHeight:    192
     readonly property int popupCalendarWidth:  310
     readonly property int popupCalendarHeight: 280
+    readonly property int popupStatsCpuWidth:  598   // SysStatsPill CPU metrics popup width
+    readonly property int popupStatsCpuHeight: 700   // SysStatsPill CPU metrics popup height
+    readonly property int popupStatsGpuWidth:  598   // SysStatsPill GPU metrics popup width
+    readonly property int popupStatsGpuHeight: 700   // SysStatsPill GPU metrics popup height
+    // Default live polling when a metrics popup opens; each popup has a Pause/Resume button too.
+    readonly property bool popupStatsLiveUpdates: true
     readonly property int popupHelpWidth:     1060
     readonly property int popupHelpHeight:     720
     readonly property int popupTrayMaxHeight:  520

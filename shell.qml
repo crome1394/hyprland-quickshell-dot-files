@@ -238,6 +238,11 @@ ShellRoot {
         readonly property alias popupPowerHeight: cfg.popupPowerHeight
         readonly property alias popupCalendarWidth: cfg.popupCalendarWidth
         readonly property alias popupCalendarHeight: cfg.popupCalendarHeight
+        readonly property alias popupStatsCpuWidth: cfg.popupStatsCpuWidth
+        readonly property alias popupStatsCpuHeight: cfg.popupStatsCpuHeight
+        readonly property alias popupStatsGpuWidth: cfg.popupStatsGpuWidth
+        readonly property alias popupStatsGpuHeight: cfg.popupStatsGpuHeight
+        readonly property alias popupStatsLiveUpdates: cfg.popupStatsLiveUpdates
         readonly property alias popupHelpWidth: cfg.popupHelpWidth
         readonly property alias popupHelpHeight: cfg.popupHelpHeight
 
@@ -331,6 +336,9 @@ ShellRoot {
         readonly property alias statGaugeHeight: cfg.statGaugeHeight
         readonly property alias statGaugeRadius: cfg.statGaugeRadius
         readonly property alias statTrack: cfg.statTrack
+        readonly property alias gaugeLow: cfg.gaugeLow
+        readonly property alias gaugeMid: cfg.gaugeMid
+        readonly property alias gaugeHigh: cfg.gaugeHigh
         readonly property alias statUtilTier1: cfg.statUtilTier1
         readonly property alias statUtilTier2: cfg.statUtilTier2
         readonly property alias statUtilTier3: cfg.statUtilTier3
@@ -504,6 +512,7 @@ ShellRoot {
                     SysStatsPill {
                         visible: root.showStatsWidget
                         bar: bar
+                        barBg: barBg
                         mediaActive: mediaPill.hasMedia
                     }
 
