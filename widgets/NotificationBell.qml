@@ -41,9 +41,13 @@ Rectangle {
     Layout.alignment: Qt.AlignVCenter
 
     radius: bar.pillRadius
-    color: bellMouse.containsMouse ? bar.glassHover : bar.pillBg
+    color: notif.dnd
+           ? (bellMouse.containsMouse ? Qt.rgba(0.55, 0.14, 0.14, 0.45) : Qt.rgba(0.40, 0.10, 0.10, 0.32))
+           : (bellMouse.containsMouse ? bar.glassHover : bar.pillBg)
     border.width: bar.controlBorderWidth
-    border.color: bellMouse.containsMouse ? bar.accent : bar.pillBorder
+    border.color: notif.dnd
+                  ? bar.notificationDndAccent
+                  : (bellMouse.containsMouse ? bar.accent : bar.pillBorder)
 
     Text {
         id: bellIcon
@@ -51,15 +55,18 @@ Rectangle {
         text: notif.icon
         font.pixelSize: bar.iconSizePillLarge
         font.family: bar.fontFamily
-        color: notif.dnd ? bar.muted : (notif.count > 0 ? bar.accent : bar.subtext)
+        color: notif.dnd
+               ? bar.notificationDndAccent
+               : (notif.count > 0 ? bar.accent : bar.subtext)
     }
 
     Rectangle {
         visible: notif.count > 0
+        z: 1
         width: Math.max(16, countLabel.implicitWidth + 6)
         height: 16
         radius: 8
-        color: notif.dnd ? Qt.rgba(0.6, 0.2, 0.2, 0.9) : bar.accent
+        color: notif.dnd ? Qt.rgba(0.75, 0.18, 0.18, 0.95) : bar.accent
         anchors.top: bellIcon.top
         anchors.right: bellIcon.right
         anchors.topMargin: -5
@@ -78,10 +85,12 @@ Rectangle {
 
     function toggleDoNotDisturb() {
         bar.execNotificationCommand("toggleDnd")
+        Qt.callLater(function() { bar.refreshNotificationState() })
     }
 
     function clearAllNotifications() {
         bar.execNotificationCommand("clearAll")
+        Qt.callLater(function() { bar.refreshNotificationState() })
     }
 
     function hideNotifMenu() {
@@ -187,7 +196,7 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.leftMargin: 10
                         text: notif.dnd ? "Turn off Do Not Disturb" : "Turn on Do Not Disturb"
-                        color: notif.dnd ? bar.muted : bar.text
+                        color: notif.dnd ? bar.notificationDndAccent : bar.text
                         font.pixelSize: 12
                         font.family: bar.fontFamily
                     }

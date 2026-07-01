@@ -329,16 +329,21 @@ QtObject {
     //   notificationTogglePanel  — left-click on the bell (SwayNC: -t)
     //   notificationToggleDnd    — Do Not Disturb toggle in the right-click menu
     //   notificationClearAll     — clear all in the right-click menu
-    //   notificationPoll         — optional fallback if your daemon has no subscribe
-    //                              stream; script should print one JSON line per run:
+    //   notificationSync         — backup poll script; prints one JSON line per run:
     //                              {"count":N,"dnd":true|false}
+    //   notificationDndAccent    — border/bell color when Do Not Disturb is on
 
     readonly property var notificationSubscribe:    ["swaync-client", "-s", "-sw"]
     readonly property var notificationTogglePanel: ["swaync-client", "-t", "-sw"]
     readonly property var notificationToggleDnd:   ["swaync-client", "-d", "-sw"]
     readonly property var notificationClearAll:    ["swaync-client", "-C", "-sw"]
-    readonly property var notificationPoll:        []
-    readonly property int notificationPollIntervalMs: 2000
+    // Backup badge/DND refresh (runs on a timer alongside subscribe). For SwayNC,
+    // leave as-is. If you switch daemons, point this at your own sync script.
+    readonly property var notificationSync: [
+        "/home/crome/.config/quickshell/scripts/notification-sync.sh"
+    ]
+    readonly property int notificationSyncIntervalMs: 2500
+    readonly property color notificationDndAccent: "#e85d5d"  // Pill border + bell when DND is on
 
     // =========================================================================
     // KILL TARGET PILL (widgets/KillTargetPill.qml — xkill-style window picker)
@@ -877,13 +882,20 @@ QtObject {
         if (action === "togglePanel") return notificationTogglePanel
         if (action === "toggleDnd") return notificationToggleDnd
         if (action === "clearAll") return notificationClearAll
-        if (action === "poll") return notificationPoll
+        if (action === "sync") return notificationSync
         return []
     }
 
-    function notificationUsesLiveSubscribe() {
-        var cmd = notificationCommand("subscribe")
+    function notificationCmdLength(cmd) {
         return cmd && cmd.length !== undefined && cmd.length > 0
+    }
+
+    function notificationUsesLiveSubscribe() {
+        return notificationCmdLength(notificationSubscribe)
+    }
+
+    function notificationSyncEnabled() {
+        return notificationCmdLength(notificationSync)
     }
 
     function notificationSupportsPanel() {
@@ -901,8 +913,4 @@ QtObject {
         return cmd && cmd.length !== undefined && cmd.length > 0
     }
 
-    function notificationPollEnabled() {
-        var cmd = notificationCommand("poll")
-        return cmd && cmd.length !== undefined && cmd.length > 0
-    }
 }

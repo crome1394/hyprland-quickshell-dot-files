@@ -375,7 +375,7 @@ Search for **NOTIFICATION BELL**. Defaults are SwayNC (`swaync-client`). To use 
 | `notificationToggleDnd` | `["swaync-client", "-d", "-sw"]` | Right-click menu |
 | `notificationClearAll` | `["swaync-client", "-C", "-sw"]` | Right-click menu |
 
-Use `[]` to disable an action. Optional `notificationPoll` + `notificationPollIntervalMs` if your daemon has no subscribe stream.
+Use `[]` to disable an action. `notificationSync` runs on a timer as a reliable badge backup (default: `notification-sync.sh`). Tune `notificationDndAccent` for the red DND pill border.
 
 **SwayNC tip:** run only one instance (e.g. `swaync.service` via systemd, not also `hl.exec_cmd("swaync")` in Hyprland autostart). If `notify-send` shows nothing, check DND: `swaync-client -D -sw` — use `swaync-client -df -sw` to turn off.
 

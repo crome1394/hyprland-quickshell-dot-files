@@ -164,7 +164,9 @@ ShellRoot {
             root.wsStartupCloseMagic = cfg.wsStartupCloseMagic
         }
 
-        readonly property alias notificationPollIntervalMs: cfg.notificationPollIntervalMs
+        readonly property alias notificationSubscribe: cfg.notificationSubscribe
+        readonly property alias notificationSyncIntervalMs: cfg.notificationSyncIntervalMs
+        readonly property alias notificationDndAccent: cfg.notificationDndAccent
 
         function notificationCommand(action) {
             return cfg.notificationCommand(action)
@@ -196,8 +198,13 @@ ShellRoot {
             return cfg.notificationSupportsClearAll()
         }
 
-        function notificationPollEnabled() {
-            return cfg.notificationPollEnabled()
+        function notificationSyncEnabled() {
+            return cfg.notificationSyncEnabled()
+        }
+
+        function refreshNotificationState() {
+            if (bar.notificationSyncEnabled() && !notifSyncProcess.running)
+                notifSyncProcess.running = true
         }
 
         // --- Base palette
@@ -723,16 +730,27 @@ ShellRoot {
 
         // --- Background services (do not move to zones) ---
         function applyNotificationState(j) {
-            if (typeof j.count === "number") notif.count = j.count
-            if (typeof j.dnd === "boolean") notif.dnd = j.dnd
-            if (typeof j.inhibited === "boolean") notif.inhibited = j.inhibited
+            if (j === undefined || j === null) return
+            if (j.count !== undefined && j.count !== null)
+                notif.count = Math.max(0, Number(j.count) || 0)
+            if (j.dnd !== undefined && j.dnd !== null) {
+                if (typeof j.dnd === "boolean")
+                    notif.dnd = j.dnd
+                else
+                    notif.dnd = String(j.dnd).toLowerCase() === "true"
+            }
+            if (j.inhibited !== undefined && j.inhibited !== null) {
+                if (typeof j.inhibited === "boolean")
+                    notif.inhibited = j.inhibited
+                else
+                    notif.inhibited = String(j.inhibited).toLowerCase() === "true"
+            }
         }
 
         Io.Process {
             id: notifSubscribe
-            property var subscribeCmd: bar.notificationCommand("subscribe")
             running: bar.notificationUsesLiveSubscribe()
-            command: (subscribeCmd && subscribeCmd.length > 0) ? subscribeCmd : ["sleep", "infinity"]
+            command: bar.notificationSubscribe
             stdout: Io.SplitParser {
                 splitMarker: "\n"
                 onRead: (data) => {
@@ -751,21 +769,20 @@ ShellRoot {
         }
 
         Timer {
-            id: notifPollTimer
-            interval: bar.notificationPollIntervalMs
-            running: bar.notificationPollEnabled()
+            id: notifSyncTimer
+            interval: bar.notificationSyncIntervalMs
+            running: bar.notificationSyncEnabled()
             repeat: true
             triggeredOnStart: true
             onTriggered: {
-                if (!notifPollProcess.running)
-                    notifPollProcess.running = true
+                if (!notifSyncProcess.running)
+                    notifSyncProcess.running = true
             }
         }
 
         Io.Process {
-            id: notifPollProcess
-            property var pollCmd: bar.notificationCommand("poll")
-            command: (pollCmd && pollCmd.length > 0) ? pollCmd : ["true"]
+            id: notifSyncProcess
+            command: bar.notificationCommand("sync")
             stdout: Io.SplitParser {
                 splitMarker: "\n"
                 onRead: (data) => {
@@ -777,8 +794,8 @@ ShellRoot {
                 }
             }
             onExited: () => {
-                if (bar.notificationPollEnabled() && notifPollTimer.running)
-                    Qt.callLater(function() { notifPollProcess.running = true })
+                if (bar.notificationSyncEnabled() && notifSyncTimer.running)
+                    Qt.callLater(function() { notifSyncProcess.running = true })
             }
         }
 
