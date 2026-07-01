@@ -35,6 +35,7 @@
 //   - Fonts (families + sizes)
 //   - Icons (glyphs for speaker/mic/power/etc — easy to swap entire icon set)
 //   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
+//   - Widget visibility (bar pill defaults)
 //   - Workspaces (pill behavior, colors, icons, special workspace name)
 //   - System stats (CPU/GPU bars + temp thresholds)
 //   - Cava visualizer
@@ -196,6 +197,23 @@ QtObject {
     readonly property int popupSectionSpacing:         6    // Spacing between sections inside popups
 
     // =========================================================================
+    // WIDGET VISIBILITY (bar pill defaults — IPC can override until qs restart)
+    // =========================================================================
+    // Consumed by shell.qml on startup; toggled at runtime via qs ipc call shell …
+    // Magic pill visibility is separate (wsShowSpecialPill + setShowMagicWorkspacePill).
+
+    readonly property bool showLauncherPill:        true   // Inline app launcher (shell.qml)
+    readonly property bool showQuickLaunchPill:     true   // QuickLaunchPill.qml
+    readonly property bool showMediaPill:           false  // MediaPill.qml (hidden by default)
+    readonly property bool showWorkspacesPill:      true   // WorkspacesPill.qml (numbered pills)
+    readonly property bool showStatsPill:           true   // SysStatsPill.qml
+    readonly property bool showTrayPill:             true   // SystemTrayPill.qml
+    readonly property bool showAudioPill:           true   // AudioPill.qml
+    readonly property bool showClockPill:           true   // ClockPill.qml
+    readonly property bool showNotificationPill:     true   // NotificationBell.qml
+    readonly property bool showPowerPill:           true   // PowerMenu.qml
+
+    // =========================================================================
     // FONTS
     // =========================================================================
     readonly property string fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
@@ -335,8 +353,8 @@ QtObject {
     readonly property string wsIcon3:        "🕹"     // Game (color emoji)
     readonly property string wsIcon4:        ""     // Misc
     readonly property string wsIcon5:        ""     // Misc
-    readonly property string wsIcon6:        "󰈸"     // Misc
-    readonly property string wsIcon7:        "󰈸"     // Misc
+    readonly property string wsIcon6:        ""     // Misc
+    readonly property string wsIcon7:        ""     // Misc
     readonly property string wsIcon8:        "󰈸"     // Misc
     readonly property string wsIcon9:        "󰈸"     // Misc
     readonly property string wsIcon10:       "󰈸"     // Misc

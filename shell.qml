@@ -16,7 +16,8 @@
 //   - qs ipc call shell toggleShowStatsWidget
 //   - qs ipc call shell setShowMagicWorkspacePill true
 //   - qs ipc call shell toggleShowMagicWorkspacePill
-//   (Run `qs ipc show` to list all registered commands.)
+//   - qs ipc call shell setShowAudioPill false   (and set/toggle for each bar pill)
+//   (Run `qs ipc show` for the full list of shell visibility commands.)
 //
 // Bar position (Config.qml):
 //   - barPosition: "top" or "bottom"
@@ -69,10 +70,18 @@ import "widgets"
 ShellRoot {
     id: root
 
-    // --- Widget visibility (also toggled via IPC; see header) ---
+    // --- Widget visibility (config defaults in Config.qml; IPC overrides until qs restart) ---
+    property bool showLauncherPill: true
+    property bool showQuickLaunchPill: true
     property bool showMediaWidget: false
+    property bool showWorkspacesPill: true
     property bool showStatsWidget: true
-    property bool showMagicWorkspacePill: true   // Initialized from cfg.wsShowSpecialPill in bar.onCompleted
+    property bool showTrayPill: true
+    property bool showAudioPill: true
+    property bool showClockPill: true
+    property bool showNotificationPill: true
+    property bool showPowerPill: true
+    property bool showMagicWorkspacePill: true   // Magic pill inside WorkspacesPill (wsShowSpecialPill)
 
     // On qs start, optionally close magic and focus wsStartupWorkspace (see Config.qml).
     // Polls a few times so Hyprland.activeToplevel is ready (Hyprland 0.55+ lua).
@@ -118,6 +127,16 @@ ShellRoot {
         Config { id: cfg }
 
         Component.onCompleted: {
+            root.showLauncherPill = cfg.showLauncherPill
+            root.showQuickLaunchPill = cfg.showQuickLaunchPill
+            root.showMediaWidget = cfg.showMediaPill
+            root.showWorkspacesPill = cfg.showWorkspacesPill
+            root.showStatsWidget = cfg.showStatsPill
+            root.showTrayPill = cfg.showTrayPill
+            root.showAudioPill = cfg.showAudioPill
+            root.showClockPill = cfg.showClockPill
+            root.showNotificationPill = cfg.showNotificationPill
+            root.showPowerPill = cfg.showPowerPill
             root.showMagicWorkspacePill = cfg.wsShowSpecialPill
         }
 
@@ -408,6 +427,7 @@ ShellRoot {
                     // ─ App Launcher ─
                     Rectangle {
                         id: launcherPill
+                        visible: root.showLauncherPill
                         Layout.preferredWidth: 42
                         Layout.preferredHeight: bar.pillHeight
                         radius: bar.pillRadius
@@ -438,6 +458,7 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
+                        visible: root.showLauncherPill && root.showQuickLaunchPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -445,10 +466,14 @@ ShellRoot {
                     }
 
                     // ─ Quick Launch ─
-                    QuickLaunchPill { bar: bar }
+                    QuickLaunchPill {
+                        visible: root.showQuickLaunchPill
+                        bar: bar
+                    }
 
                     // ── divider ──
                     Rectangle {
+                        visible: root.showQuickLaunchPill && root.showMediaWidget
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -458,7 +483,7 @@ ShellRoot {
                     // ─ Media Player ─
                     MediaPill {
                         id: mediaPill
-                        visible: showMediaWidget
+                        visible: root.showMediaWidget
                         bar: bar
                         barBg: barBg
                     }
@@ -473,13 +498,14 @@ ShellRoot {
 
                     // ─ System Stats ─
                     SysStatsPill {
-                        visible: showStatsWidget
+                        visible: root.showStatsWidget
                         bar: bar
                         mediaActive: mediaPill.hasMedia
                     }
 
                     // ── divider ──
                     Rectangle {
+                        visible: root.showStatsWidget && root.showTrayPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -488,12 +514,14 @@ ShellRoot {
 
                     // ─ System Tray ─
                     SystemTrayPill {
+                        visible: root.showTrayPill
                         bar: bar
                         barBg: barBg
                     }
 
                     // ── divider ──
                     Rectangle {
+                        visible: root.showTrayPill && root.showAudioPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -502,12 +530,14 @@ ShellRoot {
 
                     // ─ Audio ─
                     AudioPill {
+                        visible: root.showAudioPill
                         bar: bar
                         barBg: barBg
                     }
 
                     // ── divider ──
                     Rectangle {
+                        visible: root.showAudioPill && root.showClockPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -516,12 +546,14 @@ ShellRoot {
 
                     // ─ Clock + Calendar ─
                     ClockPill {
+                        visible: root.showClockPill
                         bar: bar
                         barBg: barBg
                     }
 
                     // ── divider ──
                     Rectangle {
+                        visible: root.showClockPill && root.showNotificationPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -530,12 +562,14 @@ ShellRoot {
 
                     // ─ Notifications ─
                     NotificationBell {
+                        visible: root.showNotificationPill
                         bar: bar
                         notif: notif
                     }
 
                     // ── divider ──
                     Rectangle {
+                        visible: root.showNotificationPill && root.showPowerPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -544,6 +578,7 @@ ShellRoot {
 
                     // ─ Power Menu ─
                     PowerMenu {
+                        visible: root.showPowerPill
                         bar: bar
                         barBg: barBg
                     }
@@ -558,7 +593,10 @@ ShellRoot {
                 spacing: bar.widgetSpacing
 
                 // ─ Workspaces ─
-                WorkspacesPill { bar: bar }
+                WorkspacesPill {
+                    visible: root.showWorkspacesPill
+                    bar: bar
+                }
             }
         }
 
@@ -597,17 +635,65 @@ ShellRoot {
     // IPC handlers must use explicit types (bool, string, etc.) — `var` is not supported
     Io.IpcHandler {
         target: "shell"
+        function setShowLauncherPill(enabled: bool): void {
+            root.showLauncherPill = enabled
+        }
+        function toggleShowLauncherPill(): void {
+            root.showLauncherPill = !root.showLauncherPill
+        }
+        function setShowQuickLaunchPill(enabled: bool): void {
+            root.showQuickLaunchPill = enabled
+        }
+        function toggleShowQuickLaunchPill(): void {
+            root.showQuickLaunchPill = !root.showQuickLaunchPill
+        }
         function setShowMediaWidget(enabled: bool): void {
             root.showMediaWidget = enabled
-        }
-        function setShowStatsWidget(enabled: bool): void {
-            root.showStatsWidget = enabled
         }
         function toggleShowMediaWidget(): void {
             root.showMediaWidget = !root.showMediaWidget
         }
+        function setShowWorkspacesPill(enabled: bool): void {
+            root.showWorkspacesPill = enabled
+        }
+        function toggleShowWorkspacesPill(): void {
+            root.showWorkspacesPill = !root.showWorkspacesPill
+        }
+        function setShowStatsWidget(enabled: bool): void {
+            root.showStatsWidget = enabled
+        }
         function toggleShowStatsWidget(): void {
             root.showStatsWidget = !root.showStatsWidget
+        }
+        function setShowTrayPill(enabled: bool): void {
+            root.showTrayPill = enabled
+        }
+        function toggleShowTrayPill(): void {
+            root.showTrayPill = !root.showTrayPill
+        }
+        function setShowAudioPill(enabled: bool): void {
+            root.showAudioPill = enabled
+        }
+        function toggleShowAudioPill(): void {
+            root.showAudioPill = !root.showAudioPill
+        }
+        function setShowClockPill(enabled: bool): void {
+            root.showClockPill = enabled
+        }
+        function toggleShowClockPill(): void {
+            root.showClockPill = !root.showClockPill
+        }
+        function setShowNotificationPill(enabled: bool): void {
+            root.showNotificationPill = enabled
+        }
+        function toggleShowNotificationPill(): void {
+            root.showNotificationPill = !root.showNotificationPill
+        }
+        function setShowPowerPill(enabled: bool): void {
+            root.showPowerPill = enabled
+        }
+        function toggleShowPowerPill(): void {
+            root.showPowerPill = !root.showPowerPill
         }
         function setShowMagicWorkspacePill(enabled: bool): void {
             root.showMagicWorkspacePill = enabled

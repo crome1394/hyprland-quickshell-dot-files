@@ -9,7 +9,7 @@ Personal Hyprland status bar built with [Quickshell](https://quickshell.org), pl
 | `widgets/SysMonService.qml` | Shared metrics polling service |
 | `components/` | Inspector tab views and reusable UI pieces |
 | `scripts/` | Shell pollers and control helpers |
-| `Config.qml` | Global colors, spacing, workspace behavior, and inspector tokens |
+| `Config.qml` | Global colors, spacing, widget visibility defaults, workspace behavior, and inspector tokens |
 | `widgets/*.qml` | Status bar pills and popups |
 
 ---
@@ -45,20 +45,39 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
 
-### Bar widget visibility (IPC)
+### Bar widget visibility (`Config.qml` + IPC)
 
-Some widgets can be shown or hidden at runtime:
+Every bar pill can be hidden or shown. Defaults live in `Config.qml` (search for **WIDGET VISIBILITY**). `shell.qml` applies them on startup; **IPC overrides last until `qs` restarts**.
+
+| Config property | Default | IPC `set` / `toggle` | Widget |
+|-----------------|---------|----------------------|--------|
+| `showLauncherPill` | `true` | `setShowLauncherPill` / `toggleShowLauncherPill` | App Launcher (inline) |
+| `showQuickLaunchPill` | `true` | `setShowQuickLaunchPill` / `toggleShowQuickLaunchPill` | Quick Launch |
+| `showMediaPill` | `false` | `setShowMediaWidget` / `toggleShowMediaWidget` | Media Player |
+| `showWorkspacesPill` | `true` | `setShowWorkspacesPill` / `toggleShowWorkspacesPill` | Workspaces strip |
+| `showStatsPill` | `true` | `setShowStatsWidget` / `toggleShowStatsWidget` | System Stats |
+| `showTrayPill` | `true` | `setShowTrayPill` / `toggleShowTrayPill` | System Tray |
+| `showAudioPill` | `true` | `setShowAudioPill` / `toggleShowAudioPill` | Audio |
+| `showClockPill` | `true` | `setShowClockPill` / `toggleShowClockPill` | Clock |
+| `showNotificationPill` | `true` | `setShowNotificationPill` / `toggleShowNotificationPill` | Notifications |
+| `showPowerPill` | `true` | `setShowPowerPill` / `toggleShowPowerPill` | Power |
+
+The **magic workspace pill** (🪄 inside the workspaces strip) is separate: `wsShowSpecialPill` in config, plus `setShowMagicWorkspacePill` / `toggleShowMagicWorkspacePill` via IPC.
+
+**Examples**
 
 ```bash
-qs ipc call shell setShowMediaWidget true
-qs ipc call shell setShowStatsWidget false
-qs ipc call shell toggleShowMediaWidget
-qs ipc call shell toggleShowStatsWidget
-qs ipc call shell setShowMagicWorkspacePill true
-qs ipc call shell toggleShowMagicWorkspacePill
+# Runtime (until qs restarts)
+qs ipc call shell setShowAudioPill false
+qs ipc call shell toggleShowPowerPill
+qs ipc call shell setShowWorkspacesPill true
+
+# Permanent default in Config.qml
+showAudioPill: false
+showMediaPill: true
 ```
 
-By default, **Media Player** is off, **System Stats** is on, and the **magic workspace pill** follows `wsShowSpecialPill` in `Config.qml`. Run `qs ipc show` for the full IPC list.
+Zone dividers hide automatically when a neighboring pill is off. Run `qs ipc show` for the full command list.
 
 ### Workspaces (`WorkspacesPill.qml` + `Config.qml`)
 
@@ -254,11 +273,12 @@ Shortcuts apply while the inspector window is focused (search field captures typ
 
 ## Configuration (`Config.qml`)
 
-`Config.qml` is the single source of truth for bar visuals and workspace behavior. `shell.qml` re-exports its properties on the root `bar` object (e.g. `bar.accent`, `bar.wsMinimumShown`). The inspector loads a local `Config` instance for overlay-specific tokens.
+`Config.qml` is the single source of truth for bar visuals, widget visibility defaults, and workspace behavior. `shell.qml` re-exports theme properties on the root `bar` object (e.g. `bar.accent`, `bar.wsMinimumShown`). The inspector loads a local `Config` instance for overlay-specific tokens.
 
 Edit `Config.qml` to change:
 
 - Colors, fonts, spacing, radii, and icon glyphs
+- Bar pill visibility defaults (`showLauncherPill`, `showAudioPill`, etc.)
 - Workspace pill count, active-only mode, magic pill default, and startup focus
 - Inspector sizing and semantic colors (search for `insp*` properties)
 
