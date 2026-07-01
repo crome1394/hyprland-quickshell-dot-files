@@ -600,7 +600,7 @@ Item {
             const pct = mem ? (mem.ram_pct || 0).toFixed(0) : "0"
             const usedGiB = mem ? (mem.ram_used / 1024).toFixed(1) : "0"
             const totalGiB = mem ? (mem.ram_total / 1024).toFixed(1) : "0"
-            return pct + "% RAM  ·  " + usedGiB + "/" + totalGiB + " GiB  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
+            return pct + "% Memory  ·  " + usedGiB + "/" + totalGiB + " GiB  ·  live (" + (sysMonService.pollInterval / 1000).toFixed(1) + "s)" + filterNote
         }
         if (tab.view === "temperature") {
             const cpuT = sysMonService.data.cpu ? (sysMonService.data.cpu.temp || 0).toFixed(0) : "0"

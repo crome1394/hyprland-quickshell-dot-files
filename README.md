@@ -36,7 +36,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps (VSCodium, Firefox, Logseq, LM Studio) |
 | **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
-| **System Stats** | `SysStatsPill.qml` | CPU, RAM, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; RAM shows utilization + used GiB. Left-click CPU or RAM opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; RAM: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
+| **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel adjustment, and device selection popup (PipeWire) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
@@ -87,7 +87,7 @@ Some bar widgets expose actions beyond show/hide. These work from scripts, Hyprl
 |--------|---------|--------|
 | `clockPill` | `showCalendar` | Open the ClockPill calendar popup |
 | `notificationBell` | `toggleDoNotDisturb` | Toggle SwayNC Do Not Disturb (same as right-clicking the bell) |
-| `sysStatsPill` | `setMetricsLiveUpdates` | Pause (`false`) or resume (`true`) metrics-popup polling for all CPU/RAM/GPU sections |
+| `sysStatsPill` | `setMetricsLiveUpdates` | Pause (`false`) or resume (`true`) metrics-popup polling for all CPU/Memory/GPU sections |
 | `sysStatsPill` | `setCpuLiveUpdates` / `setMemLiveUpdates` / `setGpuLiveUpdates` | Pause or resume metrics-popup polling for one section |
 | `sysStatsPill` | `toggleMetricsLiveUpdates` | Toggle metrics-popup polling for all sections |
 | `sysStatsPill` | `toggleCpuLiveUpdates` / `toggleMemLiveUpdates` / `toggleGpuLiveUpdates` | Toggle metrics-popup polling for one section |
@@ -102,7 +102,7 @@ qs ipc call sysStatsPill toggleMetricsLiveUpdates
 qs ipc call sysStatsPill setCpuLiveUpdates false
 ```
 
-Metrics-popup IPC pauses sparklines, gauges, and process lists in the right-click dropdowns — not the compact CPU/RAM/GPU stats on the bar pill. Takes effect immediately while a popup is open; otherwise the paused state applies the next time you open that section. When `popupStatsPersistPause` is `true` in `Config.qml`, the choice is saved to `state/popup-stats.json`.
+Metrics-popup IPC pauses sparklines, gauges, and process lists in the right-click dropdowns — not the compact CPU/Memory/GPU stats on the bar pill. Takes effect immediately while a popup is open; otherwise the paused state applies the next time you open that section. When `popupStatsPersistPause` is `true` in `Config.qml`, the choice is saved to `state/popup-stats.json`.
 
 **Hyprland keybind examples** (in `~/.config/hypr/config/keybindings.lua`):
 
@@ -234,7 +234,7 @@ If you are used to one monolithic `hyprland.conf`, think of `hyprland.lua` as a 
 | **Config Files** | Browse all split `config/*.lua` modules plus Hypridle/Hyprlock/Hyprpaper configs; syntax highlighting, search, copy, and edit |
 | **CPU** | CPU usage gauge, history sparkline, load averages, and top CPU processes |
 | **GPU** | GPU utilization, VRAM, temperature, and related stats (when available) |
-| **Memory** | RAM and swap usage with history and breakdown |
+| **Memory** | System memory and swap usage with history and breakdown |
 | **Temperature** | CPU and GPU temperature monitoring with history |
 | **Network** | Interfaces, routing, DNS, latency, firewall, active connections, per-process bandwidth, and live traffic graphs |
 | **Processes** | Process list with CPU/memory usage, PR/NI columns, sort, filter, and signal controls |
@@ -329,14 +329,14 @@ The file is named `Config.qml` (capital **C**) because QML requires that naming 
 
 ### System Stats pill (`Config.qml`)
 
-Search for **SYS STATS PILL** for the compact bar widget (CPU | RAM | GPU), and **popupStats** for the large right-click dropdowns.
+Search for **SYS STATS PILL** for the compact bar widget (CPU | Memory | GPU), and **popupStats** for the large right-click dropdowns.
 
 **Bar pill size** — if the glass border is too narrow or numbers stick out past the edges:
 
 | Property | What it does | Default |
 |----------|--------------|---------|
-| `statPillWidth` | Total width of the pill border in pixels. **Change this first.** | `600` |
-| `statPillSectionWidth` | Width of each column (CPU, RAM, GPU) | `175` |
+| `statPillWidth` | Total width of the pill border in pixels. **Change this first.** | `640` |
+| `statPillSectionWidth` | Width of each column (CPU, Memory, GPU) | `190` |
 | `statPillSpacing` | Gap between columns | `10` |
 | `statPillPaddingH` | Left/right padding inside the border | `12` |
 
@@ -347,7 +347,7 @@ Search for **SYS STATS PILL** for the compact bar widget (CPU | RAM | GPU), and 
 | Prefix | Section |
 |--------|---------|
 | `popupStatsCpu*` | CPU (left) |
-| `popupStatsMem*` | RAM (middle) |
+| `popupStatsMem*` | Memory (middle) |
 | `popupStatsGpu*` | GPU (right) |
 
 - `*Width` / `*Height` — popup panel size in pixels

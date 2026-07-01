@@ -37,7 +37,7 @@
 //   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
 //   - Widget visibility (bar pill defaults)
 //   - Workspaces (pill behavior, colors, icons, special workspace name)
-//   - SYS STATS PILL (CPU | RAM | GPU bar pill size, gauges, temp colors)
+//   - SYS STATS PILL (CPU | Memory | GPU bar pill size, gauges, temp colors)
 //   - SysStats metrics popups (right-click dropdown size/position per section)
 //   - Cava visualizer
 //   - System monitoring (gauges, poll default, shared tab-chip colors)
@@ -186,24 +186,24 @@ QtObject {
     readonly property int popupContextMenuRowHeight: 34
     readonly property int popupCalendarWidth:  310
     readonly property int popupCalendarHeight: 280
-    // --- SysStatsPill metrics popups (right-click CPU / RAM / GPU on the bar pill)
+    // --- SysStatsPill metrics popups (right-click CPU / Memory / GPU on the bar pill)
     // These are the large dropdown panels with charts and process lists — not the
     // compact numbers shown on the pill itself. Each section has its own size.
     readonly property int popupStatsCpuWidth:  598   // CPU popup width in pixels
-    readonly property int popupStatsCpuHeight: 700   // CPU popup height in pixels
-    readonly property int popupStatsMemWidth:  598   // RAM popup width in pixels
-    readonly property int popupStatsMemHeight: 700   // RAM popup height in pixels
+    readonly property int popupStatsCpuHeight: 850   // CPU popup height in pixels
+    readonly property int popupStatsMemWidth:  598   // Memory popup width in pixels
+    readonly property int popupStatsMemHeight: 850   // Memory popup height in pixels
     readonly property int popupStatsGpuWidth:  598   // GPU popup width in pixels
-    readonly property int popupStatsGpuHeight: 700   // GPU popup height in pixels
+    readonly property int popupStatsGpuHeight: 850   // GPU popup height in pixels
 
     // --- Where each metrics popup appears on screen (widgets/SysStatsPill.qml)
-    // Right-click CPU, RAM, or GPU to open its popup. Position is tuned per section
+    // Right-click CPU, Memory, or GPU to open its popup. Position is tuned per section
     // so popups do not overlap each other or fall off the screen edge.
     //
     // Shared terms (same meaning for Cpu / Mem / Gpu):
     //   anchorX          — which part of the pill section to line up under:
     //                      0 = left edge, 0.5 = middle, 1 = right edge
-    //   anchorWholePill  — false = anchor under that section only (CPU, RAM, or GPU)
+    //   anchorWholePill  — false = anchor under that section only (CPU, Memory, or GPU)
     //                      true  = anchor under the entire stats pill as one block
     //   offsetX          — slide popup left (negative) or right (positive) in pixels
     //   offsetY          — slide popup up (negative) or down (positive) in pixels
@@ -212,11 +212,11 @@ QtObject {
     // CPU section (left third of the pill)
     readonly property real popupStatsCpuAnchorX: 0.5
     readonly property bool popupStatsCpuAnchorWholePill: false
-    readonly property int popupStatsCpuOffsetX: 100
+    readonly property int popupStatsCpuOffsetX: 200
     readonly property int popupStatsCpuOffsetY: 7
     readonly property int popupStatsCpuBarGap: 2
 
-    // RAM section (middle third)
+    // Memory section (middle third)
     readonly property real popupStatsMemAnchorX: 0.5
     readonly property bool popupStatsMemAnchorWholePill: false
     readonly property int popupStatsMemOffsetX: 0
@@ -226,7 +226,7 @@ QtObject {
     // GPU section (right third)
     readonly property real popupStatsGpuAnchorX: 0.5
     readonly property bool popupStatsGpuAnchorWholePill: false
-    readonly property int popupStatsGpuOffsetX: -130
+    readonly property int popupStatsGpuOffsetX: -200
     readonly property int popupStatsGpuOffsetY: 7
     readonly property int popupStatsGpuBarGap: 2
 
@@ -457,10 +457,10 @@ QtObject {
     }
 
     // =========================================================================
-    // SYS STATS PILL (widgets/SysStatsPill.qml — CPU | RAM | GPU)
+    // SYS STATS PILL (widgets/SysStatsPill.qml — CPU | Memory | GPU)
     // =========================================================================
-    // The centered bar pill that shows live CPU, RAM, and GPU stats.
-    // Left-click CPU or RAM opens btop; left-click GPU opens nvtop.
+    // The centered bar pill that shows live CPU, Memory, and GPU stats.
+    // Left-click CPU or Memory opens btop; left-click GPU opens nvtop.
     // Right-click any section for the detailed metrics popup (see popupStats* above).
     //
     // If the glass border looks too narrow or text sticks out past the edges,
@@ -468,11 +468,11 @@ QtObject {
 
     // Total width of the pill in pixels — the outer glass border you see on the bar.
     // This is independent of the three columns inside; raise it if content overflows.
-    readonly property int  statPillWidth: 600
+    readonly property int  statPillWidth: 640
 
-    // Width of each clickable column (CPU, RAM, GPU) inside the pill.
+    // Width of each clickable column (CPU, Memory, GPU) inside the pill.
     // Wider columns give more room for the label, bar, and numbers.
-    readonly property int  statPillSectionWidth: 175
+    readonly property int  statPillSectionWidth: 190
 
     // Empty space between the three columns (the thin vertical dividers sit here).
     readonly property int  statPillSpacing: 10
@@ -497,7 +497,7 @@ QtObject {
     readonly property int statUtilThreshold2: 50
     readonly property int statUtilThreshold3: 75
 
-    // CPU/GPU temperature text colors (RAM shows used GiB instead — uses subtext color).
+    // CPU/GPU temperature text colors (Memory shows used GiB instead — uses subtext color).
     readonly property color statTempCool: "#cdd6f4"   // Normal temperature
     readonly property color statTempWarm: "#f9e2af"   // Getting warm
     readonly property color statTempHot:  "#f38ba8"   // Hot
@@ -506,7 +506,7 @@ QtObject {
     readonly property int statTempWarmAt: 70
     readonly property int statTempHotAt:  85
 
-    // Color of the "|" between utilization % and temperature (or used GiB for RAM).
+    // Color of the "|" between utilization % and temperature (or used GiB for Memory).
     readonly property color statValueSeparator: overlay
 
     function statUtilColor(util) {

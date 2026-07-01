@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bar-stats.sh
-# Ultra-lightweight poller for the centered CPU+RAM+GPU pill in the top bar.
-# Outputs a single line of JSON with CPU/GPU util+temp and RAM util+used GiB.
+# Ultra-lightweight poller for the centered CPU+Memory+GPU pill in the top bar.
+# Outputs a single line of JSON with CPU/GPU util+temp and memory util+used GiB.
 # Designed to be called every ~1.5-1.8s. Completes in <120ms.
 
 set -u

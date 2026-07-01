@@ -6,12 +6,12 @@ import Quickshell.Io as Io
 import "../components"
 
 // =============================================================================
-// SysStatsPill.qml — System resource gauges (CPU, RAM, GPU)
+// SysStatsPill.qml — System resource gauges (CPU, Memory, GPU)
 // =============================================================================
 //
 // Purpose:
-//   Overlay gauges showing CPU + RAM + GPU utilization (and temps for CPU/GPU).
-//   Left-click CPU/RAM launches btop; left-click GPU launches nvtop.
+//   Overlay gauges showing CPU + Memory + GPU utilization (and temps for CPU/GPU).
+//   Left-click CPU/Memory launches btop; left-click GPU launches nvtop.
 //   Right-click each third opens a metrics dropdown (Cpu/Memory/GpuMonitorView).
 //   Automatically hides when media is playing.
 //
@@ -414,7 +414,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        // ----- RAM -----
+        // ----- Memory -----
         Item {
             id: memSection
             width: bar.statPillSectionWidth
@@ -434,7 +434,7 @@ Rectangle {
                         Quickshell.execDetached(["kitty", "-e", "btop"])
                     }
                 }
-                ToolTip.text: "Left: btop · Right: RAM metrics"
+                ToolTip.text: "Left: btop · Right: Memory metrics"
                 ToolTip.visible: memClick.containsMouse
                 ToolTip.delay: bar.tooltipDelay
             }
@@ -444,7 +444,7 @@ Rectangle {
                 spacing: 7
 
                 Text {
-                    text: "RAM"
+                    text: "Memory"
                     font.pixelSize: 13
                     font.bold: true
                     font.family: bar.fontFamily
@@ -708,7 +708,7 @@ Rectangle {
         }
     }
 
-    // ===== RAM METRICS POPUP =====
+    // ===== MEMORY METRICS POPUP =====
     PopupWindow {
         id: memMetricsPopup
         anchor.window: bar
@@ -745,7 +745,7 @@ Rectangle {
                     spacing: bar.popupSectionSpacing
 
                     Text {
-                        text: "RAM Metrics"
+                        text: "Memory Metrics"
                         color: bar.text
                         font.pixelSize: bar.popupTitleSize
                         font.bold: true
