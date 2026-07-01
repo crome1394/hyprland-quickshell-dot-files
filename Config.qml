@@ -203,6 +203,9 @@ QtObject {
     // Magic pill visibility is separate (wsShowSpecialPill + setShowMagicWorkspacePill).
 
     readonly property bool showLauncherPill:        true   // Inline app launcher (shell.qml)
+    // Shell command run when the launcher pill is clicked (shell.qml passes this to sh -c).
+    readonly property string launcherCommand: "~/.local/bin/rofi-app-drawer"
+    readonly property string launcherTooltip: "App Launcher"
     readonly property bool showQuickLaunchPill:     true   // QuickLaunchPill.qml
     readonly property bool showMediaPill:           false  // MediaPill.qml (hidden by default)
     readonly property bool showWorkspacesPill:      true   // WorkspacesPill.qml (numbered pills)
@@ -247,7 +250,7 @@ QtObject {
     readonly property string iconShutdown:      "󰐥"
     readonly property string iconBios:          "󰛳"
     // Misc common
-    readonly property string iconLauncher:      "󰀻"
+    readonly property string iconLauncher:      "󰀻"   // Launcher pill glyph (shell.qml)
     readonly property string iconBell:          "󱅫"
     readonly property string iconBellDnd:       "󰂠"
     readonly property string iconBellEmpty:     "󰂜"

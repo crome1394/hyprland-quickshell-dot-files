@@ -264,6 +264,8 @@ ShellRoot {
         readonly property alias iconShutdown: cfg.iconShutdown
         readonly property alias iconBios: cfg.iconBios
         readonly property alias iconLauncher: cfg.iconLauncher
+        readonly property alias launcherCommand: cfg.launcherCommand
+        readonly property alias launcherTooltip: cfg.launcherTooltip
         readonly property alias audioSpeakerIcon: cfg.audioSpeakerIcon
         readonly property alias audioMicIcon: cfg.audioMicIcon
         readonly property alias audioSpeakerIconMuted: cfg.audioSpeakerIconMuted
@@ -426,7 +428,7 @@ ShellRoot {
                     id: leftZone
                     spacing: bar.widgetSpacing
 
-                    // ─ App Launcher ─
+                    // ─ App Launcher (command + tooltip from Config.qml: launcherCommand, launcherTooltip) ─
                     Rectangle {
                         id: launcherPill
                         visible: root.showLauncherPill
@@ -450,10 +452,10 @@ ShellRoot {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: Quickshell.execDetached(["sh", "-c", "~/.local/bin/rofi-app-drawer"])
+                            onClicked: Quickshell.execDetached(["sh", "-c", bar.launcherCommand])
                         }
 
-                        ToolTip.text: "App Launcher"
+                        ToolTip.text: bar.launcherTooltip
                         ToolTip.visible: launcherMouse.containsMouse
                         ToolTip.delay: bar.tooltipDelay
                     }
