@@ -371,15 +371,15 @@ QtObject {
     readonly property var powerLockCommand: ["hyprlock"]
     readonly property var powerLogoutCommand: [
         "sh", "-c",
-        "systemctl --user stop psd.service & pkill -f 'steam|discord|flameshot|espanso|google-chrome-stable' & sleep 1 & command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"
+        "systemctl --user stop psd.service & pkill -f 'steam|discord|flameshot|espanso|google-chrome-stable|brave|brave-origin' & sleep 1 & command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"
     ]
     readonly property var powerRebootCommand: [
         "sh", "-c",
-        "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable\" & sleep 1 & reboot"
+        "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable|brave|brave-origin\" & sleep 1 & reboot"
     ]
     readonly property var powerShutdownCommand: [
         "sh", "-c",
-        "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable\" & sleep 1 & shutdown now"
+        "systemctl --user stop psd.service & pkill -f \"steam|discord|flameshot|espanso|google-chrome-stable|brave|brave-origin\" & sleep 1 & shutdown now"
     ]
     readonly property var powerBiosCommand: ["systemctl", "reboot", "--firmware-setup"]
 
