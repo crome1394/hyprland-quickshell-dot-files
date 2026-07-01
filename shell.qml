@@ -162,6 +162,8 @@ ShellRoot {
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
             root.wsStartupWorkspace = cfg.wsStartupWorkspace
             root.wsStartupCloseMagic = cfg.wsStartupCloseMagic
+            bar.startNotifSync()
+            bar.startNotifSubscribe()
         }
 
         readonly property alias notificationSubscribe: cfg.notificationSubscribe
@@ -172,14 +174,41 @@ ShellRoot {
             return cfg.notificationCommand(action)
         }
 
-        function execNotificationCommand(action) {
+        function notificationCmdArray(action) {
             const cmd = cfg.notificationCommand(action)
             if (!cmd || cmd.length === undefined || cmd.length <= 0)
-                return
+                return []
             const args = []
             for (let i = 0; i < cmd.length; i++)
                 args.push(cmd[i])
+            return args
+        }
+
+        function execNotificationCommand(action) {
+            const args = notificationCmdArray(action)
+            if (args.length <= 0)
+                return
             Quickshell.execDetached(args)
+        }
+
+        function startNotifSync() {
+            if (!bar.notificationSyncEnabled() || notifSyncProcess.running)
+                return
+            const args = bar.notificationCmdArray("sync")
+            if (args.length <= 0)
+                return
+            notifSyncProcess.command = args
+            notifSyncProcess.running = true
+        }
+
+        function startNotifSubscribe() {
+            if (!bar.notificationUsesLiveSubscribe() || notifSubscribe.running)
+                return
+            const args = bar.notificationCmdArray("subscribe")
+            if (args.length <= 0)
+                return
+            notifSubscribe.command = args
+            notifSubscribe.running = true
         }
 
         function notificationUsesLiveSubscribe() {
@@ -203,8 +232,7 @@ ShellRoot {
         }
 
         function refreshNotificationState() {
-            if (bar.notificationSyncEnabled() && !notifSyncProcess.running)
-                notifSyncProcess.running = true
+            bar.startNotifSync()
         }
 
         // --- Base palette
@@ -485,8 +513,8 @@ ShellRoot {
             property bool dnd: false
             property bool inhibited: false
             readonly property string icon: {
-                if (dnd) return notif.count > 0 ? "󰂠" : "󰪓"
-                return notif.count > 0 ? "󱅫" : "󰂜"
+                if (dnd) return count > 0 ? "󰂠" : "󰪓"
+                return count > 0 ? "󱅫" : "󰂜"
             }
         }
 
@@ -749,8 +777,7 @@ ShellRoot {
 
         Io.Process {
             id: notifSubscribe
-            running: bar.notificationUsesLiveSubscribe()
-            command: bar.notificationSubscribe
+            running: false
             stdout: Io.SplitParser {
                 splitMarker: "\n"
                 onRead: (data) => {
@@ -762,10 +789,16 @@ ShellRoot {
                 }
             }
             onExited: (code) => {
-                console.log("notification subscribe exited with code", code)
-                if (bar.notificationUsesLiveSubscribe())
-                    Qt.callLater(function() { notifSubscribe.running = true })
+                if (!bar.notificationUsesLiveSubscribe())
+                    return
+                notifSubscribeRestartTimer.restart()
             }
+        }
+
+        Timer {
+            id: notifSubscribeRestartTimer
+            interval: 2000
+            onTriggered: bar.startNotifSubscribe()
         }
 
         Timer {
@@ -774,15 +807,12 @@ ShellRoot {
             running: bar.notificationSyncEnabled()
             repeat: true
             triggeredOnStart: true
-            onTriggered: {
-                if (!notifSyncProcess.running)
-                    notifSyncProcess.running = true
-            }
+            onTriggered: bar.startNotifSync()
         }
 
         Io.Process {
             id: notifSyncProcess
-            command: bar.notificationCommand("sync")
+            running: false
             stdout: Io.SplitParser {
                 splitMarker: "\n"
                 onRead: (data) => {
@@ -792,10 +822,6 @@ ShellRoot {
                         applyNotificationState(JSON.parse(line))
                     } catch (e) {}
                 }
-            }
-            onExited: () => {
-                if (bar.notificationSyncEnabled() && notifSyncTimer.running)
-                    Qt.callLater(function() { notifSyncProcess.running = true })
             }
         }
 
