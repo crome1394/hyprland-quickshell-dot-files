@@ -17,6 +17,8 @@
 //   - qs ipc call shell setShowMagicWorkspacePill true
 //   - qs ipc call shell toggleShowMagicWorkspacePill
 //   - qs ipc call shell setShowAudioPill false   (and set/toggle for each bar pill)
+//   - qs ipc call clockPill showCalendar
+//   - qs ipc call notificationBell toggleDoNotDisturb
 //   (Run `qs ipc show` for the full list of shell visibility commands.)
 //
 // Bar position (Config.qml):
@@ -546,6 +548,7 @@ ShellRoot {
 
                     // ─ Clock + Calendar ─
                     ClockPill {
+                        id: clockPill
                         visible: root.showClockPill
                         bar: bar
                         barBg: barBg
@@ -562,6 +565,7 @@ ShellRoot {
 
                     // ─ Notifications ─
                     NotificationBell {
+                        id: notificationBell
                         visible: root.showNotificationPill
                         bar: bar
                         notif: notif
@@ -627,6 +631,20 @@ ShellRoot {
             target: "hyprConfigInsp"
             function toggle() {
                 if (hyprConfigInsp && hyprConfigInsp.toggle) hyprConfigInsp.toggle()
+            }
+        }
+
+        Io.IpcHandler {
+            target: "clockPill"
+            function showCalendar() {
+                if (clockPill && clockPill.showCalendar) clockPill.showCalendar()
+            }
+        }
+
+        Io.IpcHandler {
+            target: "notificationBell"
+            function toggleDoNotDisturb() {
+                if (notificationBell && notificationBell.toggleDoNotDisturb) notificationBell.toggleDoNotDisturb()
             }
         }
 

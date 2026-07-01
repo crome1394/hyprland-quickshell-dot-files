@@ -39,8 +39,8 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **System Stats** | `SysStatsPill.qml` | CPU and GPU utilization + temperature gauges. Left-click CPU opens `btop` in a terminal; left-click GPU opens `nvtop`. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel adjustment, and device selection popup (PipeWire) |
-| **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup |
-| **Notifications** | `NotificationBell.qml` | SwayNC notification bell with unread badge. Left-click toggles the notification center; right-click toggles Do Not Disturb |
+| **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
+| **Notifications** | `NotificationBell.qml` | SwayNC notification bell with unread badge. Left-click toggles the notification center; right-click toggles Do Not Disturb. IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
 | **Power** | `PowerMenu.qml` | Session menu — lock, logout, reboot, shutdown, and enter BIOS |
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
@@ -78,6 +78,29 @@ showMediaPill: true
 ```
 
 Zone dividers hide automatically when a neighboring pill is off. Run `qs ipc show` for the full command list.
+
+### Widget actions (IPC)
+
+Some bar widgets expose actions beyond show/hide. These work from scripts, Hyprland keybinds, or other Quickshell widgets.
+
+| Target | Command | Action |
+|--------|---------|--------|
+| `clockPill` | `showCalendar` | Open the ClockPill calendar popup |
+| `notificationBell` | `toggleDoNotDisturb` | Toggle SwayNC Do Not Disturb (same as right-clicking the bell) |
+
+**Examples**
+
+```bash
+qs ipc call clockPill showCalendar
+qs ipc call notificationBell toggleDoNotDisturb
+```
+
+**Hyprland keybind examples** (in `~/.config/hypr/config/keybindings.lua`):
+
+```
+SUPER + C   →   qs ipc call clockPill showCalendar
+SUPER + N   →   qs ipc call notificationBell toggleDoNotDisturb
+```
 
 ### Workspaces (`WorkspacesPill.qml` + `Config.qml`)
 

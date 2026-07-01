@@ -319,6 +319,11 @@ Rectangle {
         }
     }
 
+    // === Public API (show from shell IPC: qs ipc call clockPill showCalendar) ===
+    function showCalendar() {
+        showCalendarPopup()
+    }
+
     // Helper to position + show the calendar popup
     function showCalendarPopup() {
         var pos = root.mapToItem(barBg, root.width / 2, root.height)

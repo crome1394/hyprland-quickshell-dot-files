@@ -76,6 +76,11 @@ Rectangle {
         }
     }
 
+    // === Public API (toggle from shell IPC: qs ipc call notificationBell toggleDoNotDisturb) ===
+    function toggleDoNotDisturb() {
+        Quickshell.execDetached(["swaync-client", "-d", "-sw"])
+    }
+
     // === Behavior ===
     MouseArea {
         id: bellMouse
@@ -94,7 +99,7 @@ Rectangle {
 
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {
-                Quickshell.execDetached(["swaync-client", "-d", "-sw"])
+                root.toggleDoNotDisturb()
             } else if (mouse.button === Qt.LeftButton) {
                 Quickshell.execDetached(["swaync-client", "-t", "-sw"])
             }
