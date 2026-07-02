@@ -177,24 +177,31 @@ Rectangle {
         root.shownWorkspaces = result;
     }
 
+    // Match ~/.config/hypr/scripts/cycle-workspace.sh — cycle Hyprland workspaces
+    // directly, not the visible pill list (which shrinks with wsShowOnlyActive and
+    // breaks when magic is open: focus stayed on magic entry → only magic ↔ ws1).
     function switchToRelative(delta) {
-        if (!root.shownWorkspaces || root.shownWorkspaces.length === 0) return;
-
+        const onMagic = root.isSpecialWorkspaceActive();
         const focusedWs = Hyprland.focusedWorkspace;
-        let idx = -1;
-        for (let i = 0; i < root.shownWorkspaces.length; i++) {
-            if (workspaceMatchesFocus(root.shownWorkspaces[i], focusedWs)) {
-                idx = i;
-                break;
+        const wsId = (focusedWs && focusedWs.id > 0) ? focusedWs.id : 1;
+        const special = bar.wsSpecialName;
+
+        if (delta > 0) {
+            if (onMagic) {
+                Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + special + "')");
+                Hyprland.dispatch("hl.dsp.focus({ workspace = 1 })");
+            } else {
+                Hyprland.dispatch("hl.dsp.focus({ workspace = \"+1\" })");
+            }
+        } else {
+            if (onMagic) {
+                Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + special + "')");
+            } else if (wsId === 1) {
+                Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + special + "')");
+            } else {
+                Hyprland.dispatch("hl.dsp.focus({ workspace = \"-1\" })");
             }
         }
-        if (idx < 0) idx = 0;
-
-        let newIdx = idx + delta;
-        if (newIdx < 0) newIdx = 0;
-        if (newIdx >= root.shownWorkspaces.length) newIdx = root.shownWorkspaces.length - 1;
-
-        root.activateEntry(root.shownWorkspaces[newIdx]);
     }
 
     Connections {
