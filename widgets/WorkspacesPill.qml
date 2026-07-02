@@ -74,6 +74,14 @@ Rectangle {
         };
     }
 
+    // Magic is an overlay — focusedWorkspace often stays on the numbered ws below.
+    // focus(N) alone is a no-op when N is already focused, so magic never closes.
+    function closeMagicIfOpen() {
+        if (root.isSpecialWorkspaceActive()) {
+            Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + bar.wsSpecialName + "')");
+        }
+    }
+
     // Central activation path — plain JS model objects cannot keep function props.
     // Hyprland 0.55+ lua configs require hl.dsp.* dispatch strings (legacy
     // "workspace N" / "togglespecialworkspace" IPC is rejected by hl.dispatch).
@@ -86,6 +94,7 @@ Rectangle {
         }
 
         if (entry.id > 0) {
+            root.closeMagicIfOpen();
             Hyprland.dispatch("hl.dsp.focus({ workspace = " + entry.id + " })");
         }
     }
@@ -188,14 +197,15 @@ Rectangle {
 
         if (delta > 0) {
             if (onMagic) {
-                Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + special + "')");
+                // Right from magic: close overlay, then land on ws 1 (cycle-workspace.sh)
+                root.closeMagicIfOpen();
                 Hyprland.dispatch("hl.dsp.focus({ workspace = 1 })");
             } else {
                 Hyprland.dispatch("hl.dsp.focus({ workspace = \"+1\" })");
             }
         } else {
             if (onMagic) {
-                Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + special + "')");
+                root.closeMagicIfOpen();
             } else if (wsId === 1) {
                 Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + special + "')");
             } else {
