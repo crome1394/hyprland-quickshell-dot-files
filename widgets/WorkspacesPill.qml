@@ -99,16 +99,23 @@ Rectangle {
         }
     }
 
-    // Special workspace is an overlay — focusedWorkspace may stay on the last
-    // numbered ws while magic is visible. activeToplevel.workspace is reliable.
+    // Magic overlay visibility — use monitor specialWorkspace, NOT activeToplevel.
+    // When ws1 is empty, closing magic leaves Discord/Telegram as activeToplevel on
+    // special:magic while the user sees empty ws1; old checks trapped magic ↔ ws1.
+    function refreshMonitors() {
+        Hyprland.refreshMonitors()
+    }
+
     function isSpecialWorkspaceActive() {
-        const toplevel = Hyprland.activeToplevel;
-        if (toplevel && toplevel.workspace && bar.wsIsSpecialName(toplevel.workspace.name))
-            return true;
-        const hyprWs = root.findSpecialWorkspace();
-        if (hyprWs && (hyprWs.active || hyprWs.focused)) return true;
-        const focusedWs = Hyprland.focusedWorkspace;
-        return focusedWs && bar.wsIsSpecialName(focusedWs.name);
+        root.refreshMonitors()
+        const mon = Hyprland.focusedMonitor
+        if (!mon || !mon.lastIpcObject)
+            return false
+        const sw = mon.lastIpcObject.specialWorkspace
+        if (!sw)
+            return false
+        const name = sw.name || ""
+        return name.length > 0 && bar.wsIsSpecialName(name)
     }
 
     function findSpecialWorkspace() {
@@ -190,6 +197,7 @@ Rectangle {
     // directly, not the visible pill list (which shrinks with wsShowOnlyActive and
     // breaks when magic is open: focus stayed on magic entry → only magic ↔ ws1).
     function switchToRelative(delta) {
+        root.refreshMonitors()
         const onMagic = root.isSpecialWorkspaceActive();
         const focusedWs = Hyprland.focusedWorkspace;
         const wsId = (focusedWs && focusedWs.id > 0) ? focusedWs.id : 1;
@@ -220,7 +228,10 @@ Rectangle {
     }
     Connections {
         target: Hyprland
-        function onFocusedWorkspaceChanged() { root.updateShownWorkspaces(); }
+        function onFocusedWorkspaceChanged() {
+            root.refreshMonitors()
+            root.updateShownWorkspaces();
+        }
         function onActiveToplevelChanged() { root.updateShownWorkspaces(); }
     }
     Connections {
