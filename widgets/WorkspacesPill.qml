@@ -52,6 +52,13 @@ Rectangle {
     // ===== Workspace logic (tightly coupled to this widget) =====
     property var shownWorkspaces: []
 
+    // Live magic-overlay state. Do NOT snapshot this only into the model and hope
+    // focusedWorkspace/valuesChanged fires — special is an overlay, so focus often
+    // stays on the numbered workspace underneath and those signals never run.
+    // Also: lastIpcObject.specialWorkspace is stale until refreshMonitors() finishes
+    // asynchronously (see Quickshell HyprlandMonitor docs). Prefer activespecial events.
+    property bool specialActive: false
+
     function workspaceHasWindows(w) {
         if (!w || !w.toplevels) return false;
         if (typeof w.toplevels.count === "number") return w.toplevels.count > 0;
@@ -77,7 +84,7 @@ Rectangle {
     // Magic is an overlay — focusedWorkspace often stays on the numbered ws below.
     // focus(N) alone is a no-op when N is already focused, so magic never closes.
     function closeMagicIfOpen() {
-        if (root.isSpecialWorkspaceActive()) {
+        if (root.specialActive) {
             Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + bar.wsSpecialName + "')");
         }
     }
@@ -95,27 +102,55 @@ Rectangle {
 
         if (entry.id > 0) {
             root.closeMagicIfOpen();
+            // Guard: skip no-op focus when already on this workspace (reload-safe habits).
+            const focused = Hyprland.focusedWorkspace;
+            if (focused && focused.id === entry.id)
+                return;
             Hyprland.dispatch("hl.dsp.focus({ workspace = " + entry.id + " })");
         }
     }
 
-    // Magic overlay visibility — use monitor specialWorkspace, NOT activeToplevel.
-    // When ws1 is empty, closing magic leaves Discord/Telegram as activeToplevel on
-    // special:magic while the user sees empty ws1; old checks trapped magic ↔ ws1.
     function refreshMonitors() {
         Hyprland.refreshMonitors()
     }
 
-    function isSpecialWorkspaceActive() {
-        root.refreshMonitors()
+    // Read special workspace name from cached monitor IPC (may be stale until refresh).
+    function specialNameFromMonitorIpc() {
         const mon = Hyprland.focusedMonitor
         if (!mon || !mon.lastIpcObject)
-            return false
+            return ""
         const sw = mon.lastIpcObject.specialWorkspace
         if (!sw)
-            return false
-        const name = sw.name || ""
-        return name.length > 0 && bar.wsIsSpecialName(name)
+            return ""
+        return sw.name || ""
+    }
+
+    function isSpecialWorkspaceActive() {
+        return root.specialActive
+    }
+
+    // Apply special-active state; rebuild pills only when it actually flips.
+    function setSpecialActive(active) {
+        const next = !!active
+        if (root.specialActive === next)
+            return
+        root.specialActive = next
+        root.updateShownWorkspaces()
+    }
+
+    function setSpecialActiveFromName(name) {
+        const n = name || ""
+        root.setSpecialActive(n.length > 0 && bar.wsIsSpecialName(n))
+    }
+
+    // Fallback sync after async refreshMonitors() (lastIpcObject updates later).
+    function syncSpecialActiveFromMonitors() {
+        root.setSpecialActiveFromName(root.specialNameFromMonitorIpc())
+    }
+
+    function requestSpecialSync() {
+        root.refreshMonitors()
+        specialSyncTimer.restart()
     }
 
     function findSpecialWorkspace() {
@@ -130,7 +165,7 @@ Rectangle {
 
     function makeSpecialWorkspaceEntry() {
         const hyprWs = root.findSpecialWorkspace();
-        const specialActive = root.isSpecialWorkspaceActive();
+        const specialActive = root.specialActive;
 
         if (hyprWs) {
             return {
@@ -151,7 +186,8 @@ Rectangle {
 
     function workspaceMatchesFocus(entry, focusedWs) {
         if (!entry) return false;
-        if (entry.isSpecial) return root.isSpecialWorkspaceActive();
+        if (entry.isSpecial) return root.specialActive;
+        if (root.specialActive) return false;
         if (!focusedWs || focusedWs.id <= 0) return false;
         return entry.id === focusedWs.id;
     }
@@ -197,8 +233,7 @@ Rectangle {
     // directly, not the visible pill list (which shrinks with wsShowOnlyActive and
     // breaks when magic is open: focus stayed on magic entry → only magic ↔ ws1).
     function switchToRelative(delta) {
-        root.refreshMonitors()
-        const onMagic = root.isSpecialWorkspaceActive();
+        const onMagic = root.specialActive;
         const focusedWs = Hyprland.focusedWorkspace;
         const wsId = (focusedWs && focusedWs.id > 0) ? focusedWs.id : 1;
         const special = bar.wsSpecialName;
@@ -229,14 +264,57 @@ Rectangle {
     Connections {
         target: Hyprland
         function onFocusedWorkspaceChanged() {
-            root.refreshMonitors()
+            // Focus change can close magic without always pairing a useful valuesChanged.
+            root.requestSpecialSync()
             root.updateShownWorkspaces();
         }
         function onActiveToplevelChanged() { root.updateShownWorkspaces(); }
+        function onFocusedMonitorChanged() {
+            root.requestSpecialSync()
+            root.updateShownWorkspaces();
+        }
+        // Primary source of truth for magic open/close (Hyprland socket2).
+        // Event instance is reused after this handler returns — copy fields first.
+        function onRawEvent(event) {
+            const name = event.name
+            if (name === "activespecial" || name === "activespecialv2") {
+                const argc = name === "activespecialv2" ? 3 : 2
+                const args = event.parse(argc)
+                // activespecial:    WORKSPACENAME, MONNAME
+                // activespecialv2:  WORKSPACEID, WORKSPACENAME, MONNAME
+                const wsName = name === "activespecialv2" ? (args[1] || "") : (args[0] || "")
+                const monName = name === "activespecialv2" ? (args[2] || "") : (args[1] || "")
+                const mon = Hyprland.focusedMonitor
+                // Special is per-monitor; only the focused monitor drives the pill.
+                if (monName && mon && mon.name && monName !== mon.name)
+                    return
+                root.setSpecialActiveFromName(wsName)
+                // Keep lastIpcObject in sync for any other readers.
+                root.refreshMonitors()
+            }
+        }
+    }
+    // After refreshMonitors(), lastIpcObject updates asynchronously — re-sync then.
+    Connections {
+        target: Hyprland.focusedMonitor
+        function onLastIpcObjectChanged() {
+            root.syncSpecialActiveFromMonitors()
+        }
     }
     Connections {
         target: bar
         function onShowMagicWorkspacePillChanged() { root.updateShownWorkspaces(); }
+    }
+
+    // Brief delay so refreshMonitors() can populate lastIpcObject before we read it.
+    Timer {
+        id: specialSyncTimer
+        interval: 40
+        repeat: false
+        onTriggered: {
+            root.syncSpecialActiveFromMonitors()
+            root.updateShownWorkspaces()
+        }
     }
 
     property int _wsColdPollCount: 0
@@ -245,6 +323,7 @@ Rectangle {
         interval: 130
         repeat: true
         onTriggered: {
+            root.requestSpecialSync();
             root.updateShownWorkspaces();
             root._wsColdPollCount += 1;
             if (root._wsColdPollCount >= 7) {
@@ -255,6 +334,7 @@ Rectangle {
     }
 
     Component.onCompleted: {
+        root.requestSpecialSync();
         root.updateShownWorkspaces();
         wsColdStartPoller.start();
     }
@@ -279,7 +359,16 @@ Rectangle {
                 required property var modelData
                 required property int index
                 property bool isSpecial: !!(modelData && modelData.isSpecial)
-                property bool isActive: !!(modelData && (modelData.active || modelData.focused))
+                // Magic uses live root.specialActive (model snapshot was often stale).
+                // While magic is open, the numbered ws underneath still reports focused
+                // — don't light it as active so the 🪄 pill is the clear selection.
+                property bool isActive: {
+                    if (isSpecial)
+                        return root.specialActive
+                    if (root.specialActive)
+                        return false
+                    return !!(modelData && (modelData.active || modelData.focused))
+                }
                 property bool isHovered: wsMouse.containsMouse
 
                 width: bar.wsButtonWidth
