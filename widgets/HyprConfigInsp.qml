@@ -25,7 +25,7 @@ import Quickshell.Io as Io
 //   - runtime           → RuntimeOptionsView (hyprctl getoption)
 //   - cpu/gpu/memory/network/…  → SysMonService (scripts/sysmon-poller.sh, autoPoll when inspectorActive)
 //   - processes/audio/logs/services → dedicated *View components + shell pollers
-//   - system            → fastfetch (systemProcess, lazy until tab opened)
+//   - system            → fastfetch --logo cachyos (ANSI→HTML color; systemProcess, lazy until tab opened)
 //
 // Theming:
 //   - Config { id: th } is the single visual source (see config.qml HYPR CONFIG INSPECTOR).
@@ -260,8 +260,11 @@ Item {
     property var _parsedBinds: []
     property var _parsedEnv: []
 
-    // === System Info tab (fastfetch; lazy-loaded via systemDirty flag) ===
+    // === System Info tab (fastfetch --logo cachyos; lazy-loaded via systemDirty flag) ===
     property string systemOutput: ""
+    property string systemHtml: ""
+    property int systemDisplayVersion: 0
+    property real systemContentWidth: 320
     property bool systemDirty: true
     property var systemEntries: []
     property string copiedValue: ""
@@ -582,7 +585,11 @@ Item {
             const chars = body.length
             return lines + " lines (" + chars + " chars)  ·  " + tab.file + "  ·  bat" + mtimeSuffix(tab) + filterNote
         }
-        if (tab.view === "system") return filteredSystemEntries().length + " entries  ·  system info" + filterNote
+        if (tab.view === "system") {
+            const plain = stripAnsi(filteredSystemAnsi())
+            const lines = plain ? plain.split("\n").filter(function(l) { return l.trim().length > 0 }).length : 0
+            return lines + " lines  ·  fastfetch" + filterNote
+        }
         if (tab.view === "cpu") {
             const util = sysMonService.data.cpu ? (sysMonService.data.cpu.util || 0).toFixed(0) : "0"
             const cores = sysMonService.data.cpu_info && sysMonService.data.cpu_info.cores ? sysMonService.data.cpu_info.cores : "?"
@@ -872,6 +879,10 @@ Item {
         }
     }
 
+    // Parses hl.bind() lines annotated with trailing help comments:
+    //   --# description                 (uncategorized; legacy)
+    //   --#Category# description        (grouped under Category)
+    // Only active (non-commented) binds with a --# annotation are shown.
     function parseKeybinds(text) {
         if (!text) return []
         const lines = text.split("\n")
@@ -906,10 +917,18 @@ Item {
             keyExpr = keyExpr.replace(/\s+/g, " ").trim()
 
             let description = ""
-            const descMatch = originalLine.match(/--#\s*(.+)$/)
-            if (descMatch) description = descMatch[1].trim()
+            let category = ""
+            // Category form: --#Category# description  (category may contain spaces)
+            const catMatch = originalLine.match(/--#([^#\n]+)#\s*(.*)$/)
+            if (catMatch) {
+                category = catMatch[1].trim()
+                description = (catMatch[2] || "").trim()
+            } else {
+                const descMatch = originalLine.match(/--#\s*(.+)$/)
+                if (descMatch) description = descMatch[1].trim()
+            }
 
-            out.push({ key: keyExpr, action: description, comment: "" })
+            out.push({ key: keyExpr, action: description, comment: "", category: category })
         }
         return out
     }
@@ -940,9 +959,182 @@ Item {
         return out
     }
 
+    // ANSI helpers for System Info (same approach as BatSyntaxView; scoped here to avoid coupling)
+    function stripAnsi(text) {
+        if (!text) return ""
+        return text.replace(/\x1b\[[0-9;]*m/g, "")
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+    }
+
+    function colorToHex(color) {
+        if (typeof color === "string") return color
+        function hex(channel) {
+            const value = Math.round(channel * 255).toString(16)
+            return value.length === 1 ? "0" + value : value
+        }
+        return "#" + hex(color.r) + hex(color.g) + hex(color.b)
+    }
+
+    function rgbHex(r, g, b) {
+        function hex(n) {
+            const s = Math.round(n).toString(16)
+            return s.length === 1 ? "0" + s : s
+        }
+        return "#" + hex(r) + hex(g) + hex(b)
+    }
+
+    function ansi16(code) {
+        const palette = {
+            30: "#1e1e2e", 31: "#f38ba8", 32: "#a6e3a1", 33: "#f9e2af",
+            34: "#89b4fa", 35: "#cba6f7", 36: "#94e2de", 37: "#cdd6f4",
+            90: "#6c7086", 91: "#f38ba8", 92: "#a6e3a1", 93: "#f9e2af",
+            94: "#89b4fa", 95: "#cba6f7", 96: "#94e2de", 97: "#ffffff"
+        }
+        return palette[code] || null
+    }
+
+    function ansi256(code) {
+        if (code < 16) return ansi16(code < 8 ? 30 + code : 90 + (code - 8))
+        if (code >= 232) {
+            const gray = (code - 232) * 10 + 8
+            return rgbHex(gray, gray, gray)
+        }
+        const cc = code - 16
+        const r = Math.floor(cc / 36)
+        const g = Math.floor(cc / 6) % 6
+        const b = cc % 6
+        const levels = [0, 95, 135, 175, 215, 255]
+        return rgbHex(levels[r], levels[g], levels[b])
+    }
+
+    function applyAnsiCode(parts, state) {
+        const next = {
+            fg: state.fg,
+            bg: state.bg,
+            bold: state.bold
+        }
+        for (let i = 0; i < parts.length; i++) {
+            const p = parts[i]
+            if (p === 0 || p === "") {
+                next.fg = colorToHex(text)
+                next.bg = null
+                next.bold = false
+            } else if (p === 1) {
+                next.bold = true
+            } else if (p === 22) {
+                next.bold = false
+            } else if (p === 39) {
+                next.fg = colorToHex(text)
+            } else if (p === 49) {
+                next.bg = null
+            } else if (p >= 30 && p <= 37) {
+                next.fg = ansi16(p)
+            } else if (p >= 90 && p <= 97) {
+                next.fg = ansi16(p)
+            } else if (p >= 40 && p <= 47) {
+                next.bg = ansi16(p - 10)
+            } else if (p >= 100 && p <= 107) {
+                next.bg = ansi16(p - 10)
+            } else if (p === 38 && parts[i + 1] === 2 && i + 4 < parts.length) {
+                next.fg = rgbHex(parts[i + 2], parts[i + 3], parts[i + 4])
+                i += 4
+            } else if (p === 38 && parts[i + 1] === 5 && i + 2 < parts.length) {
+                next.fg = ansi256(parts[i + 2])
+                i += 2
+            } else if (p === 48 && parts[i + 1] === 2 && i + 4 < parts.length) {
+                next.bg = rgbHex(parts[i + 2], parts[i + 3], parts[i + 4])
+                i += 4
+            } else if (p === 48 && parts[i + 1] === 5 && i + 2 < parts.length) {
+                next.bg = ansi256(parts[i + 2])
+                i += 2
+            }
+        }
+        return next
+    }
+
+    function ansiToHtml(raw) {
+        if (!raw) return ""
+        const defaultHex = colorToHex(text)
+        const fontFamily = fontMono || "monospace"
+        const fontSize = 13
+        const lines = raw.split("\n")
+        const htmlLines = []
+
+        for (let li = 0; li < lines.length; li++) {
+            const line = lines[li]
+            let state = { fg: defaultHex, bg: null, bold: false }
+            let html = ""
+            let i = 0
+
+            while (i < line.length) {
+                if (line.charCodeAt(i) === 27 && line[i + 1] === "[") {
+                    let j = i + 2
+                    while (j < line.length && line[j] !== "m") j++
+                    const codes = line.substring(i + 2, j).split(";").map(function(v) {
+                        const n = parseInt(v, 10)
+                        return isNaN(n) ? v : n
+                    })
+                    state = applyAnsiCode(codes, state)
+                    i = j + 1
+                    continue
+                }
+
+                let j = i
+                while (j < line.length) {
+                    if (line.charCodeAt(j) === 27 && line[j + 1] === "[") break
+                    j++
+                }
+
+                if (j > i) {
+                    const chunk = escapeHtml(line.substring(i, j)).replace(/ /g, "&nbsp;")
+                    const weight = state.bold ? "font-weight:700;" : ""
+                    const bg = state.bg ? ("background-color:" + state.bg + ";") : ""
+                    html += '<span style="color:' + state.fg + ";" + weight + bg + '">' + chunk + "</span>"
+                }
+                i = j
+            }
+
+            htmlLines.push(html.length ? html : "&nbsp;")
+        }
+
+        return '<pre style="margin:0;font-family:' + fontFamily + ";font-size:" + fontSize
+            + "px;color:" + defaultHex + '">' + htmlLines.join("<br/>") + "</pre>"
+    }
+
+    function filteredSystemAnsi() {
+        if (!systemOutput) return ""
+        const q = filterQuery()
+        if (!q) return systemOutput
+        return systemOutput.split("\n").filter(function(line) {
+            return stripAnsi(line).toLowerCase().indexOf(q) !== -1
+        }).join("\n")
+    }
+
+    function rebuildSystemDisplay() {
+        const src = filteredSystemAnsi()
+        const plain = stripAnsi(src)
+        let maxLen = 40
+        if (plain) {
+            const lines = plain.split("\n")
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].length > maxLen) maxLen = lines[i].length
+            }
+        }
+        systemContentWidth = Math.max(320, Math.ceil(maxLen * 13 * 0.62) + 24)
+        systemHtml = ansiToHtml(src)
+        systemDisplayVersion++
+    }
+
     function parseFastfetchOutput(raw) {
         if (!raw) return []
-        const lines = raw.split("\n")
+        // Strip ANSI so key:value parsing works when logo/colors are present
+        const lines = stripAnsi(raw).split("\n")
         const entries = []
         for (let line of lines) {
             line = line.trim()
@@ -952,6 +1144,9 @@ Item {
             const idx = line.indexOf(":")
             if (idx > 0) {
                 const label = line.substring(0, idx).trim()
+                // Skip logo ASCII art (punctuation / decoration segments)
+                if (!/^[A-Za-z0-9]/.test(label)) continue
+                if (/[-*+=]{2,}/.test(label)) continue
                 let value = line.substring(idx + 1).trim()
                 const lower = label.toLowerCase()
                 if (lower === "terminal" || lower.includes("font")) continue
@@ -1085,22 +1280,28 @@ Item {
         }
     }
 
-    // === Background I/O: System Info tab (fastfetch; only when tab activated) ===
+    // === Background I/O: System Info tab (fastfetch + cachyos logo; only when tab activated) ===
+    // --pipe false forces ANSI colors even when stdout is not a TTY (Quickshell Process).
     Io.Process {
         id: systemProcess
-        command: ["fastfetch", "--logo", "none"]
+        command: ["fastfetch", "--logo", "cachyos", "--pipe", "false"]
         running: false
         stdout: Io.SplitParser {
             splitMarker: "\n"
             onRead: (line) => { systemOutput += line + "\n" }
         }
-        onStarted: systemOutput = ""
+        onStarted: {
+            systemOutput = ""
+            systemHtml = ""
+        }
         onExited: (code) => {
             if (code !== 0 && systemOutput.trim() === "") {
                 systemOutput = "Failed to collect system information (exit code " + code + ")"
+                systemEntries = []
             } else {
                 systemEntries = parseFastfetchOutput(systemOutput)
             }
+            rebuildSystemDisplay()
         }
     }
 
@@ -1121,8 +1322,39 @@ Item {
         return _parsedBinds.filter(function(b) {
             return (b.key && b.key.toLowerCase().indexOf(q) !== -1) ||
                    (b.action && b.action.toLowerCase().indexOf(q) !== -1) ||
-                   (b.comment && b.comment.toLowerCase().indexOf(q) !== -1)
+                   (b.comment && b.comment.toLowerCase().indexOf(q) !== -1) ||
+                   (b.category && b.category.toLowerCase().indexOf(q) !== -1)
         })
+    }
+
+    // Groups filtered binds by category for the Key Bindings tab.
+    // Order follows first appearance in keybindings.lua. When no bind has a
+    // category, returns a single header-less group so the UI stays flat.
+    // Uncategorized binds mixed with categorized ones land under "Other".
+    function groupedFilteredBinds() {
+        const binds = filteredBinds()
+        let hasCategory = false
+        for (let i = 0; i < binds.length; i++) {
+            if (binds[i].category && binds[i].category.length > 0) {
+                hasCategory = true
+                break
+            }
+        }
+        if (!hasCategory)
+            return [{ category: "", binds: binds }]
+
+        const groups = []
+        const indexByCat = ({})
+        for (let i = 0; i < binds.length; i++) {
+            const b = binds[i]
+            const cat = (b.category && b.category.length > 0) ? b.category : "Other"
+            if (indexByCat[cat] === undefined) {
+                indexByCat[cat] = groups.length
+                groups.push({ category: cat, binds: [] })
+            }
+            groups[indexByCat[cat]].binds.push(b)
+        }
+        return groups
     }
 
     function filteredEnv() {
@@ -1552,14 +1784,14 @@ Item {
                     Layout.fillHeight: true
                     color: "transparent"
 
-                    // Key Bindings
+                    // Key Bindings (optional categories via --#Category# description)
                     Flickable {
                         id: bindsFlickable
                         visible: root.currentTabInfo.view === "binds"
                         anchors.fill: parent
                         property int _bindsTick: root.fileContentsVersion
                         property string _filterTick: root.globalFilter
-                        contentHeight: Math.max(bindsGrid.implicitHeight + 20, 1)
+                        contentHeight: Math.max(bindsColumn.implicitHeight + 20, 1)
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         interactive: true
@@ -1584,58 +1816,138 @@ Item {
                             }
                         }
 
-                        GridLayout {
-                            id: bindsGrid
+                        Column {
+                            id: bindsColumn
                             width: parent.width
-                            columns: 2
-                            columnSpacing: 16
-                            rowSpacing: 2
+                            spacing: 10
+
+                            // Depend on cache/filter so the grouped model rebinds reliably
+                            property int _tick: bindsFlickable._bindsTick
+                            property string _filter: bindsFlickable._filterTick
+                            readonly property var groups: {
+                                // Touch deps so QML tracks file reload + search
+                                const _a = _tick
+                                const _b = _filter
+                                return root.groupedFilteredBinds()
+                            }
 
                             Repeater {
-                                model: root.filteredBinds()
-                                delegate: Rectangle {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: th.inspBindRowHeight
-                                    radius: th.inspRowRadius
-                                    color: rma.containsMouse ? root.inspRowHoverBg : "transparent"
+                                model: bindsColumn.groups
 
-                                    MouseArea { id: rma; anchors.fill: parent; hoverEnabled: true }
+                                delegate: Column {
+                                    width: bindsColumn.width
+                                    spacing: 4
 
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 8
-                                        anchors.rightMargin: 8
-                                        spacing: 8
+                                    // Category header (hidden when all binds are uncategorized)
+                                    Rectangle {
+                                        visible: modelData.category && modelData.category.length > 0
+                                        width: parent.width
+                                        height: visible ? 28 : 0
+                                        radius: th.inspRowRadius
+                                        color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.10)
 
-                                        Row {
-                                            spacing: 4
-                                            Repeater {
-                                                model: modelData.key.split(/\s*\+\s*/)
-                                                delegate: Rectangle {
-                                                    height: th.inspKeyPillHeight
-                                                    width: keyText.implicitWidth + th.inspKeyPillHPadding
-                                                    radius: th.inspKeyPillRadius
-                                                    color: keyPillColor(modelData)
+                                        // Left accent bar
+                                        Rectangle {
+                                            anchors.left: parent.left
+                                            anchors.top: parent.top
+                                            anchors.bottom: parent.bottom
+                                            anchors.margins: 4
+                                            width: 3
+                                            radius: 1.5
+                                            color: root.accent
+                                        }
 
-                                                    Text {
-                                                        id: keyText
-                                                        anchors.centerIn: parent
-                                                        text: modelData
-                                                        color: keyPillTextColor(modelData)
-                                                        font.pixelSize: th.inspKeyPillFontSize
-                                                        font.family: root.fontMono
-                                                        font.bold: true
-                                                    }
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 14
+                                            anchors.rightMargin: 10
+                                            spacing: 8
+
+                                            Text {
+                                                text: modelData.category
+                                                color: root.accent
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                                font.letterSpacing: 0.6
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+
+                                            // Bind count chip for this category
+                                            Rectangle {
+                                                visible: modelData.binds && modelData.binds.length > 0
+                                                Layout.preferredHeight: 18
+                                                Layout.preferredWidth: catCountText.implicitWidth + 10
+                                                radius: 9
+                                                color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.18)
+
+                                                Text {
+                                                    id: catCountText
+                                                    anchors.centerIn: parent
+                                                    text: modelData.binds ? modelData.binds.length : 0
+                                                    color: root.accent
+                                                    font.pixelSize: 10
+                                                    font.bold: true
+                                                    font.family: root.fontMono
                                                 }
                                             }
                                         }
+                                    }
 
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData.action
-                                            color: root.text
-                                            font.pixelSize: 13
-                                            elide: Text.ElideRight
+                                    GridLayout {
+                                        width: parent.width
+                                        columns: 2
+                                        columnSpacing: 16
+                                        rowSpacing: 2
+
+                                        Repeater {
+                                            model: modelData.binds
+                                            delegate: Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: th.inspBindRowHeight
+                                                radius: th.inspRowRadius
+                                                color: bindRowMa.containsMouse ? root.inspRowHoverBg : "transparent"
+
+                                                MouseArea { id: bindRowMa; anchors.fill: parent; hoverEnabled: true }
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 8
+                                                    spacing: 8
+
+                                                    Row {
+                                                        spacing: 4
+                                                        Repeater {
+                                                            model: modelData.key.split(/\s*\+\s*/)
+                                                            delegate: Rectangle {
+                                                                height: th.inspKeyPillHeight
+                                                                width: keyText.implicitWidth + th.inspKeyPillHPadding
+                                                                radius: th.inspKeyPillRadius
+                                                                color: keyPillColor(modelData)
+
+                                                                Text {
+                                                                    id: keyText
+                                                                    anchors.centerIn: parent
+                                                                    text: modelData
+                                                                    color: keyPillTextColor(modelData)
+                                                                    font.pixelSize: th.inspKeyPillFontSize
+                                                                    font.family: root.fontMono
+                                                                    font.bold: true
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.action
+                                                        color: root.text
+                                                        font.pixelSize: 13
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2038,7 +2350,7 @@ Item {
                         errorColor: th.gaugeHigh
                     }
 
-                    // System Info
+                    // System Info — colored fastfetch --logo cachyos; Service Documentation kept at bottom
                     Item {
                         visible: root.currentTabInfo.view === "system"
                         anchors.fill: parent
@@ -2048,27 +2360,61 @@ Item {
                             anchors.fill: parent
                             spacing: 10
 
-                            RowLayout {
+                            Flickable {
+                                id: systemFlickable
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 128
-                                spacing: 16
+                                Layout.fillHeight: true
+                                Layout.minimumHeight: 0
+                                clip: true
+                                property int _sysTick: root.systemDisplayVersion
+                                property string _filterTick: root.globalFilter
+                                on_FilterTickChanged: root.rebuildSystemDisplay()
+                                contentWidth: Math.max(width, root.systemContentWidth)
+                                contentHeight: Math.max(systemText.implicitHeight + 12, 1)
+                                boundsBehavior: Flickable.StopAtBounds
+                                interactive: true
+                                flickableDirection: Flickable.HorizontalAndVerticalFlick
 
-                                Text {
-                                    Layout.fillWidth: true
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: "crome@crome-dt"
-                                    font.pixelSize: 18
-                                    font.bold: true
-                                    color: root.accent
-                                    wrapMode: Text.Wrap
+                                WheelHandler {
+                                    onWheel: function(event) {
+                                        const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
+                                        if (delta === 0) return
+                                        root.flickableWheelScroll(systemFlickable, delta)
+                                        event.accepted = true
+                                    }
                                 }
 
-                                Image {
-                                    source: "/home/crome/.config/quickshell/cachyos-linux.svg"
-                                    Layout.preferredWidth: 120
-                                    Layout.preferredHeight: 120
-                                    Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
-                                    fillMode: Image.PreserveAspectFit
+                                ScrollBar.vertical: ScrollBar {
+                                    id: systemScrollBar
+                                    policy: systemFlickable.contentHeight > systemFlickable.height + 1
+                                        ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                    contentItem: Rectangle {
+                                        implicitWidth: root.inspScrollBarWidth
+                                        radius: root.inspScrollBarRadius
+                                        color: systemScrollBar.pressed ? root.accent : root.inspScrollBarIdle
+                                    }
+                                }
+
+                                ScrollBar.horizontal: ScrollBar {
+                                    id: systemHScrollBar
+                                    policy: systemFlickable.contentWidth > systemFlickable.width + 1
+                                        ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                    contentItem: Rectangle {
+                                        implicitHeight: 6
+                                        radius: 3
+                                        color: systemHScrollBar.pressed ? root.accent : root.inspScrollBarIdle
+                                    }
+                                }
+
+                                Text {
+                                    id: systemText
+                                    width: Math.max(systemFlickable.width - 8, root.systemContentWidth)
+                                    text: root.systemHtml
+                                    textFormat: Text.RichText
+                                    color: root.text
+                                    font.pixelSize: 13
+                                    font.family: root.fontMono
+                                    wrapMode: Text.NoWrap
                                 }
                             }
 
@@ -2082,6 +2428,7 @@ Item {
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: serviceDocInner.implicitHeight + 14
+                                Layout.maximumHeight: parent.height * 0.45
                                 radius: 6
                                 color: root.surface
                                 border.width: 1
@@ -2148,91 +2495,6 @@ Item {
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: root.openDocumentationUrl(modelData.url)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 1
-                                color: root.inspWindowBorder
-                                opacity: 0.5
-                            }
-
-                            Flickable {
-                                id: systemFlickable
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                Layout.minimumHeight: 0
-                                clip: true
-                                property int _sysTick: root.systemEntries.length
-                                property string _filterTick: root.globalFilter
-                                contentHeight: Math.max(sysList.implicitHeight, 1)
-                                boundsBehavior: Flickable.StopAtBounds
-                                interactive: true
-
-                                WheelHandler {
-                                    onWheel: function(event) {
-                                        const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
-                                        if (delta === 0) return
-                                        root.flickableWheelScroll(systemFlickable, delta)
-                                        event.accepted = true
-                                    }
-                                }
-
-                                ScrollBar.vertical: ScrollBar {
-                                    id: systemScrollBar
-                                    policy: systemFlickable.contentHeight > systemFlickable.height + 1
-                                        ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-                                    contentItem: Rectangle {
-                                        implicitWidth: root.inspScrollBarWidth
-                                        radius: root.inspScrollBarRadius
-                                        color: systemScrollBar.pressed ? root.accent : root.inspScrollBarIdle
-                                    }
-                                }
-
-                                Column {
-                                    id: sysList
-                                    width: parent.width
-                                    spacing: 2
-
-                                    Repeater {
-                                        model: root.filteredSystemEntries()
-                                        delegate: Rectangle {
-                                            width: parent.width
-                                            height: 24
-                                            color: valueMa.containsMouse ? root.inspRowHoverBgStrong : "transparent"
-
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 4
-                                                anchors.rightMargin: 8
-                                                spacing: 12
-
-                                                Text {
-                                                    Layout.preferredWidth: 210
-                                                    text: modelData.label + ":"
-                                                    color: root.accent
-                                                    font.pixelSize: 13
-                                                    font.family: root.fontMono
-                                                }
-                                                Text {
-                                                    Layout.fillWidth: true
-                                                    text: modelData.value
-                                                    color: root.text
-                                                    font.pixelSize: 13
-                                                    font.family: root.fontMono
-
-                                                    MouseArea {
-                                                        id: valueMa
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: root.copyToClipboard(modelData.value)
-                                                    }
-                                                }
                                             }
                                         }
                                     }

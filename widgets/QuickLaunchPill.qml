@@ -12,7 +12,8 @@ import Quickshell
 //   Config.qml (search QUICK LAUNCH — quickLaunchApps).
 //
 // Theme Properties Consumed:
-//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.pillRadius, bar.pillBg, bar.pillBorder, bar.accent
+//   - bar.iconHoverBg, bar.workspaceRadius  (per-icon hover; Config.qml)
 //   - bar.quickLaunchIcon, bar.quickLaunchSpacing, bar.quickLaunchPaddingH
 //   - bar.quickLaunchApps, bar.fontFamily, bar.controlBorderWidth, bar.tooltipDelay
 // =============================================================================
@@ -27,9 +28,9 @@ Rectangle {
     Layout.alignment: Qt.AlignVCenter
 
     radius: bar.pillRadius
-    color: appsHover.containsMouse ? bar.glassHover : bar.pillBg
+    color: bar.pillBg
     border.width: bar.controlBorderWidth
-    border.color: appsHover.containsMouse ? bar.accent : bar.pillBorder
+    border.color: bar.pillBorder
 
     function launchEntry(entry) {
         if (!entry || entry.command === undefined || entry.command === null)
@@ -58,14 +59,6 @@ Rectangle {
         return entry && (!entry.icon || entry.icon.length === 0) && entry.glyph && entry.glyph.length > 0
     }
 
-    MouseArea {
-        id: appsHover
-        anchors.fill: parent
-        z: -1
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
-    }
-
     Row {
         id: appsRow
         anchors.centerIn: parent
@@ -74,12 +67,17 @@ Rectangle {
         Repeater {
             model: bar.quickLaunchApps
 
-            Item {
+            // Per-icon hover (same idea as WorkspacesPill buttons)
+            Rectangle {
                 required property var modelData
                 required property int index
 
-                width: bar.quickLaunchIcon
-                height: bar.quickLaunchIcon
+                width: bar.quickLaunchIcon + 8
+                height: bar.quickLaunchIcon + 8
+                radius: bar.workspaceRadius
+                color: launchClick.containsMouse ? bar.iconHoverBg : "transparent"
+
+                Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
                 Image {
                     visible: !root.entryUsesGlyph(modelData)

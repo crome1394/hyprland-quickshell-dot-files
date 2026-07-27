@@ -13,7 +13,8 @@ import Quickshell.Widgets
 //   (avoids native GTK/Qt menus that clash with the bar theme on Blueman etc.).
 //
 // Theme Properties Consumed:
-//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.pillRadius, bar.pillBg, bar.pillBorder, bar.accent
+//   - bar.iconHoverBg, bar.workspaceRadius  (per-icon hover; Config.qml)
 //   - bar.iconSizeTray, bar.controlBorderWidth
 //   - bar.popupRadius, bar.glassPopupBg, bar.glassPopupBorder,
 //     bar.glassPopupHighlight, bar.popupHeaderHighlightHeight,
@@ -43,15 +44,9 @@ Rectangle {
     Layout.preferredWidth: visible ? (trayContent.implicitWidth + 14) : 0
     Layout.preferredHeight: bar.pillHeight
     radius: bar.pillRadius
-    color: trayHover.containsMouse ? bar.glassHover : bar.pillBg
+    color: bar.pillBg
     border.width: bar.controlBorderWidth
-    border.color: trayHover.containsMouse ? bar.accent : bar.pillBorder
-
-    MouseArea {
-        id: trayHover
-        anchors.fill: parent
-        hoverEnabled: true
-    }
+    border.color: bar.pillBorder
 
     Item {
         id: trayContent
@@ -61,16 +56,21 @@ Rectangle {
 
         Row {
             id: trayIconsRow
-            spacing: 8
+            spacing: 4
             anchors.centerIn: parent
 
             Repeater {
                 model: SystemTray.items.values
-                delegate: Item {
+                // Per-icon hover (same idea as WorkspacesPill buttons)
+                delegate: Rectangle {
                     id: trayIconItem
                     required property var modelData
-                    width: bar.iconSizeTray + 2
-                    height: bar.iconSizeTray + 2
+                    width: bar.iconSizeTray + 8
+                    height: bar.iconSizeTray + 8
+                    radius: bar.workspaceRadius
+                    color: trayIconMa.containsMouse ? bar.iconHoverBg : "transparent"
+
+                    Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
                     IconImage {
                         anchors.centerIn: parent
@@ -80,6 +80,7 @@ Rectangle {
                     }
 
                     MouseArea {
+                        id: trayIconMa
                         anchors.fill: parent
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton | Qt.RightButton

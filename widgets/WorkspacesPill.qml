@@ -19,7 +19,7 @@ import Quickshell.Hyprland
 //   - bar.wsButtonWidth, bar.wsButtonHeight, bar.workspaceRadius
 //   - bar.wsSpacing, bar.wsIconSize, bar.wsNumberSize
 //   - bar.wsActiveBg, bar.wsActiveBorder, bar.wsActiveText
-//   - bar.wsHoverYellow, bar.clock, bar.fontFamily
+//   - bar.iconHoverBg, bar.clock, bar.fontFamily
 //
 // IPC (runtime magic pill toggle):
 //   qs ipc call shell setShowMagicWorkspacePill false
@@ -29,6 +29,8 @@ import Quickshell.Hyprland
 //   - Workspace icons live in config.qml (wsIcon1…wsIcon10, wsIconSpecial).
 //   - Activation uses root.activateEntry() — do not store functions on model
 //     objects (QML Repeater strips them from plain JS objects).
+//   - After DPMS/idle, property signals can stall: raw socket2 events + a light
+//     heartbeat (refreshWorkspaces) keep the pill in sync without a full qs restart.
 // =============================================================================
 
 Rectangle {
@@ -273,7 +275,6 @@ Rectangle {
             root.requestSpecialSync()
             root.updateShownWorkspaces();
         }
-        // Primary source of truth for magic open/close (Hyprland socket2).
         // Event instance is reused after this handler returns — copy fields first.
         function onRawEvent(event) {
             const name = event.name
@@ -291,6 +292,17 @@ Rectangle {
                 root.setSpecialActiveFromName(wsName)
                 // Keep lastIpcObject in sync for any other readers.
                 root.refreshMonitors()
+                return
+            }
+            // If property signals stall after DPMS/idle, socket2 events still recover the UI.
+            if (name === "workspace" || name === "workspacev2"
+                || name === "focusedmon" || name === "focusedmonv2"
+                || name === "createworkspace" || name === "createworkspacev2"
+                || name === "destroyworkspace" || name === "destroyworkspacev2"
+                || name === "moveworkspace" || name === "moveworkspacev2"
+                || name === "activewindow" || name === "activewindowv2"
+                || name === "openwindow" || name === "closewindow") {
+                root.updateShownWorkspaces()
             }
         }
     }
@@ -330,6 +342,23 @@ Rectangle {
                 stop();
                 root._wsColdPollCount = 0;
             }
+        }
+    }
+
+    // Heartbeat: after long idle/DPMS, Hyprland property signals can go quiet while
+    // the process stays up. Soft-refresh workspace state every few seconds so the
+    // pill cannot stay permanently stuck (cheap vs. full bar restart).
+    Timer {
+        id: wsHeartbeat
+        interval: 2500
+        running: true
+        repeat: true
+        onTriggered: {
+            try {
+                Hyprland.refreshWorkspaces()
+            } catch (e) {}
+            root.syncSpecialActiveFromMonitors()
+            root.updateShownWorkspaces()
         }
     }
 
@@ -375,7 +404,7 @@ Rectangle {
                 height: bar.wsButtonHeight
                 radius: bar.workspaceRadius
                 color: isActive ? bar.wsActiveBg :
-                       (isHovered ? bar.wsHoverYellow : "transparent")
+                       (isHovered ? bar.iconHoverBg : "transparent")
                 border.width: isActive ? bar.controlBorderWidth : 0
                 border.color: isActive ? bar.wsActiveBorder : bar.dividerStrong
 
@@ -399,7 +428,7 @@ Rectangle {
                               : bar.wsIconForId(modelData ? modelData.id : 0)
                         font.pixelSize: bar.wsIconSize
                         color: isActive ? bar.wsActiveText :
-                               (isHovered ? "#111111" : bar.clock)
+                               (isHovered ? bar.accent : bar.clock)
                         font.family: bar.fontFamily
                         font.bold: true
                     }
@@ -409,7 +438,7 @@ Rectangle {
                         font.pixelSize: bar.wsNumberSize || 15
                         font.bold: true
                         color: isActive ? bar.wsActiveText :
-                               (isHovered ? "#111111" : bar.clock)
+                               (isHovered ? bar.accent : bar.clock)
                     }
                 }
             }

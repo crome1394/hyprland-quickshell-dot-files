@@ -11,7 +11,9 @@
 // IPC:
 //   - qs ipc call hyprConfigInsp toggle
 //   - qs ipc call freshRss toggle / refresh / show / hide
+//   - qs ipc call radar toggle / refresh / show / hide
 //   - qs ipc call shell setShowFreshRssPill true / toggleShowFreshRssPill
+//   - qs ipc call shell setShowRadarPill true / toggleShowRadarPill
 //   - qs ipc call shell setShowMediaWidget true
 //   - qs ipc call shell setShowStatsWidget false
 //   - qs ipc call shell toggleShowMediaWidget
@@ -123,6 +125,7 @@ ShellRoot {
     property bool showPowerPill: true
     property bool showKillTargetPill: false
     property bool showFreshRssPill: true
+    property bool showRadarPill: true
     property bool showMagicWorkspacePill: true   // Magic pill inside WorkspacesPill (wsShowSpecialPill)
 
     // Workspace behavior (config defaults in Config.qml; IPC overrides until qs restart)
@@ -211,6 +214,7 @@ ShellRoot {
             root.showPowerPill = cfg.showPowerPill
             root.showKillTargetPill = cfg.showKillTargetPill
             root.showFreshRssPill = cfg.showFreshRssPill
+            root.showRadarPill = cfg.showRadarPill
             root.showMagicWorkspacePill = cfg.wsShowSpecialPill
             root.wsMinimumShown = cfg.wsMinimumShown
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
@@ -690,7 +694,7 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showQuickLaunchPill && root.showFreshRssPill
+                        visible: root.showQuickLaunchPill && (root.showFreshRssPill || root.showRadarPill)
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -706,7 +710,23 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showFreshRssPill && root.showMediaWidget
+                        visible: root.showFreshRssPill && root.showRadarPill
+                        Layout.preferredWidth: bar.dividerThickness
+                        Layout.preferredHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
+                        color: bar.divider
+                    }
+
+                    // ─ NWS Radar ─
+                    RadarPill {
+                        id: radarPill
+                        visible: root.showRadarPill
+                        bar: bar
+                    }
+
+                    // ── divider ──
+                    Rectangle {
+                        visible: (root.showFreshRssPill || root.showRadarPill) && root.showMediaWidget
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -915,6 +935,26 @@ ShellRoot {
             function hide() {
                 if (freshRssPill && freshRssPill.hide)
                     freshRssPill.hide()
+            }
+        }
+
+        Io.IpcHandler {
+            target: "radar"
+            function toggle() {
+                if (radarPill && radarPill.toggle)
+                    radarPill.toggle()
+            }
+            function refresh() {
+                if (radarPill && radarPill.refresh)
+                    radarPill.refresh()
+            }
+            function show() {
+                if (radarPill && radarPill.show)
+                    radarPill.show()
+            }
+            function hide() {
+                if (radarPill && radarPill.hide)
+                    radarPill.hide()
             }
         }
 
@@ -1248,6 +1288,12 @@ ShellRoot {
         }
         function toggleShowFreshRssPill(): void {
             root.showFreshRssPill = !root.showFreshRssPill
+        }
+        function setShowRadarPill(enabled: bool): void {
+            root.showRadarPill = enabled
+        }
+        function toggleShowRadarPill(): void {
+            root.showRadarPill = !root.showRadarPill
         }
         function toggleShowKillTargetPill(): void {
             root.showKillTargetPill = !root.showKillTargetPill

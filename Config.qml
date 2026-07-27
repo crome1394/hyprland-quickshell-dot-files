@@ -370,6 +370,38 @@ QtObject {
     readonly property bool showPowerPill:           true   // PowerMenu.qml
     readonly property bool showKillTargetPill:    false  // KillTargetPill.qml (click-to-kill picker)
     readonly property bool showFreshRssPill:       true   // FreshRssPill.qml (FreshRSS reader)
+    readonly property bool showRadarPill:          true   // RadarPill.qml (NWS radar)
+
+    // =========================================================================
+    // NWS RADAR (widgets/RadarPill.qml + scripts/radar-fetch.sh)
+    // =========================================================================
+    // Native map window (not a browser). Radar from NOAA OpenGeo WMS; basemap
+    // from Esri World Street Map. No background polling of new frames.
+    //
+    // Defaults match a radar.weather.gov bookmark centered on Ohio:
+    //   center [-83.201, 40.326], zoom ~7.086, local mosaic view
+    //
+    // radarOverscan: each fetch loads this many viewport-widths of area so you
+    // can pan a long distance before a reload. Scale is isotropic (same X/Y) so
+    // the buffer matches the window aspect and does not stretch the map.
+    // Auto-refresh runs after pan/zoom settles only when the view leaves that
+    // buffer (or zoom changes a lot).
+    //
+    // IPC:
+    //   qs ipc call radar toggle | refresh | show | hide
+    //
+    // product: "cref" (composite reflectivity) or "bref" (base reflectivity)
+
+    readonly property real   radarDefaultLon:     -83.201
+    readonly property real   radarDefaultLat:      40.326
+    readonly property real   radarDefaultZoom:     7.086
+    readonly property string radarDefaultProduct:  "cref"
+    readonly property real   radarOverscan:        3.0    // 3× viewport coverage per fetch
+    readonly property int    radarSettleMs:        420    // debounce before edge auto-reload
+    readonly property int    radarWidth:           980
+    readonly property int    radarHeight:          680
+    readonly property int    radarMinWidth:        560
+    readonly property int    radarMinHeight:       400
 
     // =========================================================================
     // FRESHRSS READER (widgets/FreshRssPill.qml + scripts/freshrss-api.sh)

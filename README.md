@@ -24,7 +24,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 
 | Zone | Widgets (left → right) |
 |------|-------------------------|
-| **Left** | App Launcher, Quick Launch, FreshRSS, Media Player |
+| **Left** | App Launcher, Quick Launch, FreshRSS, NWS Radar, Media Player |
 | **Center** | Workspaces |
 | **Right** | System Stats, System Tray, Network, Bluetooth, Audio, Clock, Notifications, Power |
 
@@ -35,6 +35,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **App Launcher** | `shell.qml` (inline) | Opens the Rofi app drawer (`~/.local/bin/rofi-app-drawer`) |
 | **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps. Add or edit apps in `Config.qml` (search **QUICK LAUNCH** — `quickLaunchApps`: `icon`, `command`, `tooltip` per entry) |
 | **FreshRSS** | `FreshRssPill.qml` | Local FreshRSS reader window (list + article body, open browser / play in `mpv`). See [FreshRSS reader](#freshrss-reader) below |
+| **NWS Radar** | `RadarPill.qml` | Native weather radar window (NOAA WMS + dark basemap). Manual refresh only; drag to pan, wheel to zoom. See [NWS Radar](#nws-radar) below |
 | **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
 | **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
@@ -48,6 +49,50 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Power** | `PowerMenu.qml` | Left-click opens the full session menu; right-click opens a compact quick menu. Actions and commands are configured in `Config.qml` (search **POWER MENU**) |
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
+
+### NWS Radar
+
+Native map window for [NWS radar](https://radar.weather.gov) data — not a browser embed. Opens from the **Radar** bar pill or IPC. There is **no background polling**; the image updates only on open (first time) and when you press **Refresh**.
+
+| Piece | Path |
+|-------|------|
+| Bar pill + window | `widgets/RadarPill.qml` |
+| Fetch / composite / geocode | `scripts/radar-fetch.sh` |
+| Defaults (center, zoom, size) | `Config.qml` (search **NWS RADAR**) |
+
+**Defaults** match a local mosaic bookmark centered on Ohio (`lon=-83.201`, `lat=40.326`, zoom `~7.086`).
+
+| Control | Action |
+|---------|--------|
+| Drag | Pan within the loaded buffer (no download until the edge) |
+| Mouse wheel | Zoom; auto-reloads after settle if zoom changed enough |
+| Double-click | Center on point and refresh |
+| Search box / `/` / `Ctrl+F` | City + state or ZIP → center, set zoom, refresh |
+| **Refresh** / `R` / `Ctrl+R` | Force re-download for the **visible** view |
+| **Home** / `H` | Restore Config default center/zoom and refresh |
+| **Product** / `P` | Toggle CREF (composite) ↔ BREF (base) reflectivity |
+| Escape | Close window (when search field not focused) |
+
+Each fetch loads an **overscanned** area (`Config.radarOverscan`, default **3×** the window). You can pan a long way (e.g. regional view from Orrville toward Chicago) without reloading. When pan/zoom **settles**, the widget auto-refreshes only if you left that buffer or changed zoom significantly.
+
+**Data sources**
+
+- Radar: NOAA OpenGeo WMS (`conus_cref_qcd` / `conus_bref_qcd`)
+- Basemap: Esri **World Street Map** (standard street map with place names)
+- Search: OpenStreetMap **Nominatim** (US city/state and ZIP)
+
+**IPC**
+
+```bash
+qs ipc call radar toggle
+qs ipc call radar show
+qs ipc call radar hide
+qs ipc call radar refresh
+qs ipc call shell setShowRadarPill true
+qs ipc call shell toggleShowRadarPill
+```
+
+Requires `curl`, `jq`, `python3`, and Pillow.
 
 ### FreshRSS reader
 

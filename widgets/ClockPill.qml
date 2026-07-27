@@ -11,7 +11,8 @@ import Quickshell
 //   with month/year navigation and a 42-cell grid.
 //
 // Theme Properties Consumed:
-//   - bar.pillRadius, bar.pillBg, bar.glassHover, bar.pillBorder, bar.accent
+//   - bar.pillRadius, bar.pillBg, bar.pillBorder, bar.accent
+//   - bar.iconHoverBg, bar.workspaceRadius  (content hover; Config.qml)
 //   - bar.clock, bar.fontClock, bar.fontMono, bar.fontTiny
 //   - bar.popupRadius, bar.glassPopupBg, bar.glassPopupBorder, bar.glassPopupHighlight
 //   - bar.popupHeaderHighlightHeight, bar.popupSpacing, bar.popupTitleSize,
@@ -44,32 +45,42 @@ Rectangle {
 
     // === Appearance via Theme ===
     radius: bar.pillRadius
-    color: clockArea.containsMouse ? bar.glassHover : bar.pillBg
+    color: bar.pillBg
     border.width: bar.controlBorderWidth
-    border.color: clockArea.containsMouse ? bar.accent : bar.pillBorder
+    border.color: bar.pillBorder
 
-    // === Content ===
-    Text {
-        id: clockLabel
+    // Content chip: per-item hover (same token as QuickLaunch / SysStats)
+    Rectangle {
+        id: clockChip
         anchors.centerIn: parent
-        text: Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")  //HH:mm:ss
-        color: bar.clock
-        font.pixelSize: bar.fontClock
-        font.family: bar.fontMono
-        font.bold: true
-    }
+        width: clockLabel.implicitWidth + 16
+        height: parent.height - 8
+        radius: bar.workspaceRadius
+        color: clockArea.containsMouse ? bar.iconHoverBg : "transparent"
 
-    // === Behavior ===
-    MouseArea {
-        id: clockArea
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            if (calendarPopup.visible) {
-                calendarPopup.visible = false
-            } else {
-                showCalendarPopup()
+        Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+
+        Text {
+            id: clockLabel
+            anchors.centerIn: parent
+            text: Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")  //HH:mm:ss
+            color: bar.clock
+            font.pixelSize: bar.fontClock
+            font.family: bar.fontMono
+            font.bold: true
+        }
+
+        MouseArea {
+            id: clockArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if (calendarPopup.visible) {
+                    calendarPopup.visible = false
+                } else {
+                    showCalendarPopup()
+                }
             }
         }
     }

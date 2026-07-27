@@ -16,7 +16,8 @@ import "../components"
 //   Automatically hides when media is playing.
 //
 // Theme Properties Consumed:
-//   - bar.glassPillBg, bar.glassHover, bar.glassBorder, bar.glassHighlight
+//   - bar.glassPillBg, bar.glassBorder, bar.glassHighlight
+//   - bar.iconHoverBg, bar.workspaceRadius  (per-section hover; Config.qml)
 //   - bar.glassPopupBg, bar.glassPopupBorder, bar.glassPopupHighlight
 //   - bar.pillRadius, bar.popupRadius, bar.controlBorderWidth, bar.accent, bar.subtext, bar.text
 //   - bar.statGaugeWidth, bar.statGaugeHeight, bar.statGaugeRadius, bar.statTrack
@@ -54,9 +55,9 @@ Rectangle {
     implicitWidth: bar.statPillWidth
     implicitHeight: bar.pillHeight
     radius: bar.pillRadius
-    color: sysHover.containsMouse ? bar.glassHover : bar.glassPillBg
+    color: bar.glassPillBg
     border.width: bar.controlBorderWidth
-    border.color: sysHover.containsMouse ? bar.accent : bar.glassBorder
+    border.color: bar.glassBorder
 
     readonly property bool metricsPopupOpen: cpuMetricsPopup.visible || memMetricsPopup.visible || gpuMetricsPopup.visible
     property bool cpuLiveUpdates: true
@@ -302,12 +303,6 @@ Rectangle {
         radius: parent.radius
     }
 
-    MouseArea {
-        id: sysHover
-        anchors.fill: parent
-        hoverEnabled: true
-    }
-
     Row {
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
@@ -317,10 +312,14 @@ Rectangle {
         spacing: bar.statPillSpacing
 
         // ----- CPU -----
-        Item {
+        Rectangle {
             id: cpuSection
             width: bar.statPillSectionWidth
             height: 26
+            radius: bar.workspaceRadius
+            color: cpuClick.containsMouse ? bar.iconHoverBg : "transparent"
+
+            Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
             MouseArea {
                 id: cpuClick
@@ -415,10 +414,14 @@ Rectangle {
         }
 
         // ----- Memory -----
-        Item {
+        Rectangle {
             id: memSection
             width: bar.statPillSectionWidth
             height: 26
+            radius: bar.workspaceRadius
+            color: memClick.containsMouse ? bar.iconHoverBg : "transparent"
+
+            Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
             MouseArea {
                 id: memClick
@@ -513,10 +516,14 @@ Rectangle {
         }
 
         // ----- GPU -----
-        Item {
+        Rectangle {
             id: gpuSection
             width: bar.statPillSectionWidth
             height: 26
+            radius: bar.workspaceRadius
+            color: gpuClick.containsMouse ? bar.iconHoverBg : "transparent"
+
+            Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
             MouseArea {
                 id: gpuClick
