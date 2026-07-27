@@ -10,6 +10,8 @@
 //
 // IPC:
 //   - qs ipc call hyprConfigInsp toggle
+//   - qs ipc call freshRss toggle / refresh / show / hide
+//   - qs ipc call shell setShowFreshRssPill true / toggleShowFreshRssPill
 //   - qs ipc call shell setShowMediaWidget true
 //   - qs ipc call shell setShowStatsWidget false
 //   - qs ipc call shell toggleShowMediaWidget
@@ -120,6 +122,7 @@ ShellRoot {
     property bool showNotificationPill: true
     property bool showPowerPill: true
     property bool showKillTargetPill: false
+    property bool showFreshRssPill: true
     property bool showMagicWorkspacePill: true   // Magic pill inside WorkspacesPill (wsShowSpecialPill)
 
     // Workspace behavior (config defaults in Config.qml; IPC overrides until qs restart)
@@ -207,6 +210,7 @@ ShellRoot {
             root.showNotificationPill = cfg.showNotificationPill
             root.showPowerPill = cfg.showPowerPill
             root.showKillTargetPill = cfg.showKillTargetPill
+            root.showFreshRssPill = cfg.showFreshRssPill
             root.showMagicWorkspacePill = cfg.wsShowSpecialPill
             root.wsMinimumShown = cfg.wsMinimumShown
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
@@ -686,7 +690,23 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showQuickLaunchPill && root.showMediaWidget
+                        visible: root.showQuickLaunchPill && root.showFreshRssPill
+                        Layout.preferredWidth: bar.dividerThickness
+                        Layout.preferredHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
+                        color: bar.divider
+                    }
+
+                    // ─ FreshRSS ─
+                    FreshRssPill {
+                        id: freshRssPill
+                        visible: root.showFreshRssPill
+                        bar: bar
+                    }
+
+                    // ── divider ──
+                    Rectangle {
+                        visible: root.showFreshRssPill && root.showMediaWidget
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -875,6 +895,26 @@ ShellRoot {
             target: "hyprConfigInsp"
             function toggle() {
                 if (hyprConfigInsp && hyprConfigInsp.toggle) hyprConfigInsp.toggle()
+            }
+        }
+
+        Io.IpcHandler {
+            target: "freshRss"
+            function toggle() {
+                if (freshRssPill && freshRssPill.toggle)
+                    freshRssPill.toggle()
+            }
+            function refresh() {
+                if (freshRssPill && freshRssPill.refresh)
+                    freshRssPill.refresh()
+            }
+            function show() {
+                if (freshRssPill && freshRssPill.show)
+                    freshRssPill.show()
+            }
+            function hide() {
+                if (freshRssPill && freshRssPill.hide)
+                    freshRssPill.hide()
             }
         }
 
@@ -1202,6 +1242,12 @@ ShellRoot {
         }
         function setShowKillTargetPill(enabled: bool): void {
             root.showKillTargetPill = enabled
+        }
+        function setShowFreshRssPill(enabled: bool): void {
+            root.showFreshRssPill = enabled
+        }
+        function toggleShowFreshRssPill(): void {
+            root.showFreshRssPill = !root.showFreshRssPill
         }
         function toggleShowKillTargetPill(): void {
             root.showKillTargetPill = !root.showKillTargetPill

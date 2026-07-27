@@ -51,69 +51,102 @@ The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a b
 
 ### FreshRSS reader
 
-Floating reader for a local FreshRSS server (default `http://10.74.10.8`).
+Floating reader for a local FreshRSS server (default `http://10.74.10.8`). Opens from a bar pill or IPC.
 
 | Piece | Path |
 |-------|------|
 | Bar pill + window | `widgets/FreshRssPill.qml` |
-| API / RSS client | `scripts/freshrss-api.sh` |
+| API client | `scripts/freshrss-api.sh` |
 | Secrets (gitignored) | `secrets/freshrss.env` |
 | Example secrets | `secrets/freshrss.env.example` |
-| Theme / size | `Config.qml` (search **FRESHRSS**) |
+| Theme / limits | `Config.qml` (search **FRESHRSS**) |
 
 **How auth works**
 
-- FreshRSS **Authentication** settings (form login, anonymous reading, allow API) are *server policy* — they do **not** contain an API password field.
-- The **API password** is under **Login → Profile** (after you sign in as `admin` via the **Login** link in the FreshRSS UI). It is separate from the web form password.
-- If you only open the server by IP without logging in, anonymous reading shows articles but no Profile / settings controls. That is expected.
+- FreshRSS **Authentication** (form login, anonymous reading, allow API) is *server policy* — it does **not** hold the API password.
+- The **API password** is under **Login → Profile** after signing in as your user. It is separate from the web form password.
+- Anonymous IP browsing can show articles without Profile controls; that is expected.
 
-**Modes**
+**Data backends**
 
-| Mode | When | Capabilities |
-|------|------|----------------|
-| **RSS (default)** | No `FRESHRSS_API_PASSWORD` in secrets | List articles from public RSS, read body in-window, open browser, play videos in `mpv`. **Read-only** (no mark-read / star). |
-| **Fever** | `FRESHRSS_API_PASSWORD` set to Profile API password | Unread list, mark read/unread, star/unstar, plus browser/mpv. |
+| Scope chip | Backend | Notes |
+|------------|---------|--------|
+| **All** / **Read** | Google Reader API, **per feed** (parallel) | Every subscription is represented (quiet channels included). Read+unread for All; read-only for Read. |
+| **Unread** / **Starred** | Fever API id lists | True unread/starred sets from the server. |
+| (no API password) | Public RSS ` /i/?a=rss` | Read-only fallback. |
 
-**Setup (read-only, works with your current anonymous settings)**
+Unread badge uses Google Reader `unread-count` (same total as FreshRSS’s `(N)` title).
+
+**Setup**
+
+1. Enable **Allow API access** and set **Profile → API password**.
+2. Create secrets (gitignored):
 
 ```bash
-# secrets/freshrss.env already points at 10.74.10.8
+cp ~/.config/quickshell/secrets/freshrss.env.example \
+   ~/.config/quickshell/secrets/freshrss.env
+# edit: FRESHRSS_BASE_URL, FRESHRSS_USER, FRESHRSS_API_PASSWORD
+chmod 600 ~/.config/quickshell/secrets/freshrss.env
+```
+
+3. Smoke test:
+
+```bash
 ~/.config/quickshell/scripts/freshrss-api.sh status
-~/.config/quickshell/scripts/freshrss-api.sh items 5 | jq .
+# expect: "unread":N matching FreshRSS, "source":"greader"
+~/.config/quickshell/scripts/freshrss-api.sh items 80 all 12 | jq '{count,feeds,ms,workers}'
 ```
 
-**Setup (optional full API later)**
+**Defaults (reader window)**
 
-1. In a browser: `http://10.74.10.8` → **Login** (not just anonymous view).
-2. Open **Profile** (user menu) → set **API password**.
-3. Put it in `secrets/freshrss.env`:
+| Setting | Default |
+|---------|---------|
+| Scope | **All** (read + unread) |
+| Date filter | **All dates** |
+| Categories | **Collapsed** (expand feeds you care about) |
+| Category order | **A–Z** |
+| Inside a feed | Grouped by **date** (Today / Yesterday / full date), newest first |
 
-```bash
-FRESHRSS_BASE_URL=http://10.74.10.8
-FRESHRSS_USER=admin
-FRESHRSS_API_PASSWORD=your-api-password-here
-```
+**Reader UI**
 
-4. Confirm: `freshrss-api.sh status` reports `"mode":"fever","auth":true,"writable":true`.
+- Expand a feed → **date sub-groups** (collapsible); articles under each day.
+- Scope: Unread · **All** · Read · Starred.
+- Date chips: All dates · Today · 7 days.
+- Type: Any type · Video.
+- **Per feed / max items** steppers + presets (reloads from server).
+- Search (`/` or `Ctrl+F`) over title, feed, author, summary (not full HTML).
+- **Play in mpv** for YouTube/direct media (`yt-dlp` on `PATH`, e.g. `~/.local/bin/yt-dlp`). Body video links open in mpv too.
+- Mark read / star when API password is configured.
+
+**Shortcuts:** `j`/`k` navigate · `/` or `Ctrl+F` search · `o` browser · `v` mpv · `r` refresh · `Esc` close · (`m` mark read · `s` star when writable). Double-click: video → mpv, else browser.
 
 **IPC / keybind**
 
 ```bash
 qs ipc call freshRss toggle
 qs ipc call freshRss refresh
+qs ipc call freshRss show
 qs ipc call shell setShowFreshRssPill false
 ```
 
-Optional Hyprland bind: `bind = SUPER, R, exec, qs ipc call freshRss toggle`
+Optional Hyprland: `bind = SUPER, R, exec, qs ipc call freshRss toggle`
 
-**Reader UI**
+**Config tokens** (`Config.qml`)
 
-- Articles are **grouped by feed title** (channel/source), with the newest group and newest articles on top.
-- **Search** box filters title, feed, author, body (`/` or `Ctrl+F`).
-- **Date filters:** All dates · **Today** · 7 days; plus All / Video type chips.
-- **YouTube / video:** Play in `mpv` (requires `yt-dlp` on `PATH`, installed at `~/.local/bin/yt-dlp` if needed). Links in the article body that look like YouTube also open in mpv, not the browser.
+| Token | Default | Role |
+|-------|---------|------|
+| `showFreshRssPill` | `true` | Bar pill visibility |
+| `freshRssPollIntervalMs` | `60000` | Unread badge poll |
+| `freshRssItemLimit` | `80` | Max Unread/Starred ids |
+| `freshRssPerFeedLimit` | `12` | Articles per feed for All/Read |
+| `freshRssWidth` / `Height` | `980` / `640` | Floating window size |
 
-**Shortcuts inside the window:** `j`/`k` next/prev · `/` or `Ctrl+F` search · `o` browser · `v` mpv · `r` refresh · `Esc` close · (`m` mark read / `s` star when Fever is enabled). Double-click a row: video → mpv, otherwise browser.
+**Performance (implementation notes)**
+
+- All/Read fetch streams **in parallel** (thread pool); GReader auth cached under `~/.cache/quickshell/freshrss-greader.auth` (~25 min).
+- List JSON **truncates** HTML/text so QML does not parse multi‑MB bodies for hundreds of rows.
+- Categories **start collapsed** so the list paints feed headers only until expanded.
+- Search avoids scanning full article HTML.
 
 ### Bar widget visibility (`Config.qml` + IPC)
 

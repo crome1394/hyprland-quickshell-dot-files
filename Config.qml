@@ -369,6 +369,32 @@ QtObject {
     readonly property bool showNotificationPill:     true   // NotificationBell.qml
     readonly property bool showPowerPill:           true   // PowerMenu.qml
     readonly property bool showKillTargetPill:    false  // KillTargetPill.qml (click-to-kill picker)
+    readonly property bool showFreshRssPill:       true   // FreshRssPill.qml (FreshRSS reader)
+
+    // =========================================================================
+    // FRESHRSS READER (widgets/FreshRssPill.qml + scripts/freshrss-api.sh)
+    // =========================================================================
+    // Server: set FRESHRSS_BASE_URL in secrets/freshrss.env (default http://10.74.10.8).
+    // Without FRESHRSS_API_PASSWORD the client uses public RSS (anonymous, read-only).
+    // With API password (Profile → API password, not web login) Fever mode enables mark/star.
+    //
+    // Reader defaults (in FreshRssPill.qml):
+    //   readScope = "all" (read + unread), dateFilter = "all", categories start collapsed.
+    //
+    // IPC:
+    //   qs ipc call freshRss toggle
+    //   qs ipc call freshRss refresh
+
+    readonly property int freshRssPollIntervalMs:  60000  // badge poll while bar is up
+    readonly property int freshRssItemLimit:       80     // max unread/starred ids to load
+    // For All/Read scopes: recent articles pulled from *each* feed so quiet channels
+    // (Dark Journalist, JRE, It's FOSS, …) still appear, not only high-volume feeds.
+    readonly property int freshRssPerFeedLimit:    12
+    readonly property int freshRssWidth:           980
+    readonly property int freshRssHeight:          640
+    readonly property int freshRssMinWidth:        640
+    readonly property int freshRssMinHeight:       420
+    readonly property int freshRssListWidth:       320
 
     // =========================================================================
     // NOTIFICATION BELL (widgets/NotificationBell.qml)

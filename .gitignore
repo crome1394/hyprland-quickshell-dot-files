@@ -1,0 +1,7 @@
+# Local secrets (API passwords, tokens) — never commit
+secrets/
+!secrets/*.example
+
+# Runtime prefs / local noise
+echo-cancel.pref
+state/
