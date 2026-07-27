@@ -394,7 +394,10 @@ QtObject {
     readonly property int freshRssHeight:          640
     readonly property int freshRssMinWidth:        640
     readonly property int freshRssMinHeight:       420
-    readonly property int freshRssListWidth:       320
+    readonly property int freshRssListWidth:       320   // default list pane width (SplitView)
+    readonly property int freshRssListMinWidth:    180   // drag limit — list pane
+    readonly property int freshRssListMaxWidth:    720
+    readonly property int freshRssDetailMinWidth:  260   // drag limit — article pane
 
     // =========================================================================
     // NOTIFICATION BELL (widgets/NotificationBell.qml)

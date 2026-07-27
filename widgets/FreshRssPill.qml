@@ -60,6 +60,12 @@ Rectangle {
     readonly property var perFeedChoices: [5, 8, 10, 12, 15, 20, 25, 30]
     readonly property var itemLimitChoices: [20, 40, 50, 80, 100, 150, 200]
 
+    // Resizable list pane width (SplitView); default from Config.freshRssListWidth
+    property int listPaneWidth: th.freshRssListWidth || 320
+    readonly property int listPaneMinWidth: th.freshRssListMinWidth || 180
+    readonly property int listPaneMaxWidth: th.freshRssListMaxWidth || 720
+    readonly property int detailPaneMinWidth: th.freshRssDetailMinWidth || 260
+
     // Collapsed category titles → true. Reassign whole object + bump version so listRows rebinds.
     property var collapsedCategories: ({})
     property int collapseVersion: 0
@@ -1596,16 +1602,41 @@ Rectangle {
                     }
                 }
 
-                // Body split
-                RowLayout {
+                // Body split — drag the handle to resize list vs article panes
+                SplitView {
+                    id: bodySplit
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    spacing: 10
+                    orientation: Qt.Horizontal
+                    handle: Rectangle {
+                        implicitWidth: 10
+                        color: "transparent"
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: SplitHandle.pressed || SplitHandle.hovered ? 4 : 2
+                            height: Math.min(parent.height - 16, 80)
+                            radius: 2
+                            color: SplitHandle.pressed
+                                   ? bar.accent
+                                   : (SplitHandle.hovered
+                                      ? Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.7)
+                                      : (bar.divider || bar.pillBorder))
+                            Behavior on width { NumberAnimation { duration: 80 } }
+                        }
+                    }
 
                     // List (grouped by feed/category title, newest sections & items on top)
                     Rectangle {
-                        Layout.preferredWidth: th.freshRssListWidth
-                        Layout.fillHeight: true
+                        id: listPane
+                        SplitView.preferredWidth: root.listPaneWidth
+                        SplitView.minimumWidth: root.listPaneMinWidth
+                        SplitView.maximumWidth: root.listPaneMaxWidth
+                        // Keep preferred width in sync when user drags the handle
+                        onWidthChanged: {
+                            if (Math.abs(width - root.listPaneWidth) > 1)
+                                root.listPaneWidth = Math.round(width)
+                        }
                         radius: 8
                         color: Qt.rgba(0, 0, 0, 0.18)
                         border.width: 1
@@ -1836,8 +1867,9 @@ Rectangle {
 
                     // Detail
                     Rectangle {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        id: detailPane
+                        SplitView.fillWidth: true
+                        SplitView.minimumWidth: root.detailPaneMinWidth
                         radius: 8
                         color: Qt.rgba(0, 0, 0, 0.12)
                         border.width: 1
