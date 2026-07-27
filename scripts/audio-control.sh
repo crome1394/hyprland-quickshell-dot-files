@@ -14,6 +14,9 @@ usage() {
     echo "       audio-control.sh list-card-profiles <card-name>" >&2
     echo "       audio-control.sh set-card-profile <card-name> <profile-name>" >&2
     echo "       audio-control.sh echo-cancel-status|echo-cancel-on|echo-cancel-off|echo-cancel-force-off|echo-cancel-apply" >&2
+    echo "       audio-control.sh list-streams" >&2
+    echo "       audio-control.sh restart-audio" >&2
+    echo "       audio-control.sh bt-battery [mac|all]" >&2
 }
 
 # ---------------------------------------------------------------------------
@@ -39,8 +42,12 @@ usage() {
 # ---------------------------------------------------------------------------
 EC_SOURCE_NAME="qs_ec_source"
 EC_SINK_NAME="qs_ec_sink"
-EC_STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/quickshell"
-EC_STATE_FILE="${EC_STATE_DIR}/audio-echo-cancel.state"
+# Runtime state lives on tmpfs (RAM), never the HD:
+#   XDG_RUNTIME_DIR is already a tmpfs (/run/user/$UID) on systemd systems.
+# Stream polls do not write any files — only stdout over the process pipe.
+EC_STATE_DIR="${XDG_RUNTIME_DIR:-/dev/shm}/quickshell-audio"
+EC_STATE_FILE="${EC_STATE_DIR}/echo-cancel.state"
+# Sticky preference is tiny and only rewritten on On/Off (not on stream poll).
 EC_PREF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell"
 EC_PREF_FILE="${EC_PREF_DIR}/echo-cancel.pref"
 
@@ -342,6 +349,269 @@ EOF
     ec_status
 }
 
+# ---------------------------------------------------------------------------
+# Active app streams (sink-inputs / source-outputs) for AudioPill summary
+# ---------------------------------------------------------------------------
+# Emits one JSON object:
+#   { "playback": [ {app, media, device, mute, volume_pct, corked}, ... ],
+#     "recording": [ ... ] }
+list_streams() {
+    # Build index→description maps as JSON objects (gawk only — avoids fragile jq -R).
+    device_map_json() {
+        local kind="$1"  # Sink | Source
+        local plural="$2"
+        pactl list "$plural" 2>/dev/null | gawk -v kind="$kind" '
+        function jesc(s) {
+            gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s
+        }
+        BEGIN { idx=""; n=0 }
+        $0 ~ ("^" kind " #") {
+            idx=$2; sub(/^#/,"",idx); desc=""; name=""; next
+        }
+        /^[\t ]*Name: / {
+            name=$2; for (i=3;i<=NF;i++) name=name" "$i; next
+        }
+        /^[\t ]*Description: / {
+            desc=substr($0, index($0,":")+2); sub(/^[ \t]+/,"",desc)
+            if (idx!="") {
+                n++
+                k[n]=idx
+                v[n]=(desc!=""?desc:name)
+            }
+            next
+        }
+        END {
+            printf "{"
+            for (i=1;i<=n;i++) {
+                if (i>1) printf ","
+                printf "\"%s\":\"%s\"", jesc(k[i]), jesc(v[i])
+            }
+            printf "}"
+        }
+        '
+    }
+
+    parse_streams() {
+        local header="$1"  # Sink Input | Source Output
+        local plural="$2"  # sink-inputs | source-outputs
+        local dev_field="$3"  # Sink | Source
+        pactl list "$plural" 2>/dev/null | gawk -v header="$header" -v dev_field="$dev_field" '
+        function jesc(s) {
+            gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s)
+            gsub(/\t/, "\\t", s); gsub(/\r/, "", s); gsub(/\n/, "\\n", s)
+            return s
+        }
+        function strip_q(s) {
+            sub(/^"/, "", s); sub(/"$/, "", s); return s
+        }
+        BEGIN { idx=""; n=0 }
+        $0 ~ ("^" header " #") {
+            if (idx != "") flush()
+            idx = $3; sub(/^#/, "", idx)
+            app=""; binary=""; media=""; mute="false"; vol=0; corked="false"; dev=""
+            next
+        }
+        /^[\t ]*application\.name = / {
+            app = strip_q(substr($0, index($0,"=")+2)); sub(/^[ \t]+/, "", app); next
+        }
+        /^[\t ]*application\.process\.binary = / {
+            binary = strip_q(substr($0, index($0,"=")+2)); sub(/^[ \t]+/, "", binary); next
+        }
+        /^[\t ]*media\.name = / {
+            media = strip_q(substr($0, index($0,"=")+2)); sub(/^[ \t]+/, "", media); next
+        }
+        /^[\t ]*Mute: / { mute = ($2=="yes"?"true":"false"); next }
+        /^[\t ]*Corked: / { corked = ($2=="yes"?"true":"false"); next }
+        /^[\t ]*Volume:/ {
+            if (match($0, /[[:space:]]([0-9]+)%/, m)) vol = m[1]+0
+            next
+        }
+        $0 ~ ("^[\t ]*" dev_field ": ") { dev = $2; next }
+        END { if (idx != "") flush() }
+        function flush() {
+            if (app=="" && binary!="") app=binary
+            if (app=="") app="Unknown"
+            if (media=="") media="-"
+            printf "{\"index\":%s,\"app\":\"%s\",\"media\":\"%s\",\"device_index\":\"%s\",\"mute\":%s,\"volume_pct\":%d,\"corked\":%s}\n",
+                idx, jesc(app), jesc(media), jesc(dev), mute, vol, corked
+        }
+        ' | jq -s '.'
+    }
+
+    local sink_map source_map playback recording
+    sink_map="$(device_map_json Sink sinks)"
+    source_map="$(device_map_json Source sources)"
+    [[ -n "$sink_map" ]] || sink_map='{}'
+    [[ -n "$source_map" ]] || source_map='{}'
+
+    playback="$(parse_streams "Sink Input" "sink-inputs" "Sink")"
+    recording="$(parse_streams "Source Output" "source-outputs" "Source")"
+    [[ -n "$playback" ]] || playback='[]'
+    [[ -n "$recording" ]] || recording='[]'
+
+    # Filter noise that is not real app media:
+    #  - Quickshell Peak Detect (VU meters while popup Level is On)
+    #  - corked/paused streams (browser tab paused, etc.)
+    #  - empty placeholders
+    # -c: one compact line so QML/collectors never only see a trailing "}"
+    jq -nc \
+        --argjson playback "$playback" \
+        --argjson recording "$recording" \
+        --argjson sinks "$sink_map" \
+        --argjson sources "$source_map" '
+        def is_internal:
+            # Hide graph plumbing that is not real app media:
+            #  - Quickshell Peak Detect (VU meters while Level is On)
+            #  - Echo-cancel capture/playback legs (qs_ec_* filter)
+            ((.app // "") | test("peak detect|Peak Detect|Quickshell Peak|echo-?cancel"; "i"))
+            or ((.media // "") | test("peak detect|Peak Detect|echo-?cancel"; "i"));
+        def is_active:
+            # corked = paused/stopped by the app (e.g. YouTube pause); hide those.
+            # Keep muted streams visible so users can still see who holds the device.
+            (.corked != true) and (is_internal | not);
+        def enrich($list; $map):
+            [ $list[]
+              | select(is_active)
+              | . as $s
+              | ($map[$s.device_index] // ("#" + ($s.device_index // "?"))) as $dev
+              | $s + {
+                  device: $dev,
+                  label: (
+                      $s.app
+                      + (if ($s.media != null and $s.media != "" and $s.media != "-")
+                         then " · " + $s.media else "" end)
+                      + " → " + $dev
+                  )
+              }
+            ];
+        {
+            playback: enrich($playback; $sinks),
+            recording: enrich($recording; $sources)
+        }
+        '
+}
+
+# ---------------------------------------------------------------------------
+# Bluetooth battery via bluetoothctl (process-isolated — never touches BlueZ
+# from QML during device disconnect, which caused qs segfaults).
+# ---------------------------------------------------------------------------
+# Output (one line JSON):
+#   all:  {"devices":{"A0:0C:E2:66:FB:7D":80,...}}
+#   mac:  {"mac":"A0:…","percent":80,"connected":true}
+# Missing/unknown battery → percent -1 or omitted from map.
+bt_battery() {
+    local want="${1:-all}"
+    if ! command -v bluetoothctl >/dev/null 2>&1; then
+        if [[ "$want" == "all" ]]; then
+            echo '{"devices":{}}'
+        else
+            printf '{"mac":"%s","percent":-1,"connected":false}\n' "$(json_esc "$want")"
+        fi
+        return 0
+    fi
+
+    # Parse `bluetoothctl devices` + `info` for connected devices with Battery Percentage.
+    # Runs entirely in a subprocess so BlueZ D-Bus teardown cannot crash qs.
+    local out
+    out="$(
+        bluetoothctl devices 2>/dev/null | awk '{print $2}' | while read -r mac; do
+            [[ -z "$mac" ]] && continue
+            info="$(bluetoothctl info "$mac" 2>/dev/null || true)"
+            connected="$(printf '%s\n' "$info" | awk -F': ' '/Connected:/{print $2; exit}')"
+            [[ "$connected" != "yes" ]] && continue
+            # "Battery Percentage: 0x50 (80)" or "Battery Percentage: 80"
+            pct="$(printf '%s\n' "$info" | awk '
+                /Battery Percentage:/ {
+                    if (match($0, /\(([0-9]+)\)/, m)) { print m[1]; next }
+                    if (match($0, /Battery Percentage:[[:space:]]*(0x[0-9a-fA-F]+|[[:digit:]]+)/, m)) {
+                        v = m[1]
+                        if (v ~ /^0x/) { print strtonum(v); next }
+                        print v+0
+                    }
+                }')"
+            [[ -z "$pct" ]] && pct="-1"
+            # Normalize MAC to uppercase colon form
+            mac_u="$(printf '%s' "$mac" | tr 'a-f' 'A-F')"
+            printf '%s\t%s\n' "$mac_u" "$pct"
+        done
+    )"
+
+    if [[ "$want" == "all" ]]; then
+        printf '%s\n' "$out" | gawk -F'\t' '
+        BEGIN { printf "{\"devices\":{" }
+        NF >= 2 {
+            if (n++) printf ","
+            mac = $1; pct = $2 + 0
+            printf "\"%s\":%d", mac, pct
+        }
+        END { printf "}}\n" }
+        '
+        return 0
+    fi
+
+    # Single MAC lookup (accept colon or underscore form)
+    local want_u
+    want_u="$(printf '%s' "$want" | tr '_' ':' | tr 'a-f' 'A-F')"
+    local hit
+    hit="$(printf '%s\n' "$out" | awk -F'\t' -v w="$want_u" 'toupper($1)==w { print $2; exit }')"
+    if [[ -n "$hit" ]]; then
+        printf '{"mac":"%s","percent":%d,"connected":true}\n' "$(json_esc "$want_u")" "$hit"
+    else
+        printf '{"mac":"%s","percent":-1,"connected":false}\n' "$(json_esc "$want_u")"
+    fi
+}
+
+# Full PipeWire stack restart (user session). Re-applies sticky echo cancel after.
+restart_audio() {
+    # Keep errors soft so we always return a parseable JSON line for the UI.
+    set +e
+
+    # Restart the user audio stack in a safe order. Sockets stay up; services recycle.
+    systemctl --user restart pipewire.service 2>/dev/null
+    systemctl --user restart pipewire-pulse.service 2>/dev/null
+    systemctl --user restart wireplumber.service 2>/dev/null
+
+    local ok=0 i
+    for i in $(seq 1 50); do
+        if pactl info >/dev/null 2>&1; then
+            ok=1
+            break
+        fi
+        sleep 0.2
+    done
+
+    if [[ $ok -ne 1 ]]; then
+        printf '{"ok":false,"error":"PipeWire did not come back after restart"}\n'
+        set -e
+        return 1
+    fi
+
+    # Stale module ids from before the restart are invalid — clear runtime state.
+    ec_clear_state
+
+    # Give nodes a moment to re-enumerate before reloading echo cancel.
+    sleep 0.4
+
+    local ec_enabled=false
+    if ec_pref_get; then
+        # apply mode: do not flip preferred; rebuild qs_ec_* if wanted.
+        # Capture only the last JSON line in case anything else leaks to stdout.
+        local ec_out
+        ec_out="$(ec_on apply 2>/dev/null)"
+        if [[ -z "$ec_out" ]]; then
+            ec_out="$(ec_status 2>/dev/null)"
+        fi
+        if printf '%s' "$ec_out" | jq -e '.enabled == true' >/dev/null 2>&1; then
+            ec_enabled=true
+        fi
+    fi
+
+    # Simple response — avoid nested --argjson (was failing under some shells/values).
+    printf '{"ok":true,"error":"","echo_cancel_enabled":%s}\n' "$ec_enabled"
+    set -e
+    return 0
+}
+
 if [[ -z "$ACTION" ]]; then
     usage
     exit 2
@@ -514,6 +784,19 @@ case "$ACTION" in
         # Login / shell start: enable only if sticky preference is true.
         ec_apply
         exit $?
+        ;;
+    list-streams)
+        list_streams
+        exit 0
+        ;;
+    restart-audio)
+        restart_audio
+        exit $?
+        ;;
+    bt-battery)
+        # TARGET optional: MAC or "all" (default all)
+        bt_battery "${TARGET:-all}"
+        exit 0
         ;;
     *)
         echo "invalid action: $ACTION" >&2

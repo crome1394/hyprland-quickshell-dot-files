@@ -34,6 +34,8 @@ Item {
     property var onSet: function(v){}
     property bool dragging: false
     property real localValue: value
+    // When false, bar is display-only (wheel can still be handled by a parent WheelHandler).
+    property bool interactive: true
 
     // === SLIDER STYLING FROM THEME (hybrid access) ===
     // Primary path: values from bar (preferred for consistency with the rest of the UI).
@@ -99,6 +101,8 @@ Item {
     // === Behavior ===
     MouseArea {
         anchors.fill: parent
+        enabled: root.interactive
+        visible: root.interactive
         cursorShape: Qt.PointingHandCursor
         preventStealing: true
         onPressed: (m) => {

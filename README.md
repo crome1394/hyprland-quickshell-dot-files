@@ -24,7 +24,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 
 | Zone | Widgets (left → right) |
 |------|-------------------------|
-| **Left** | App Launcher, Quick Launch, Media Player |
+| **Left** | App Launcher, Quick Launch, FreshRSS, Media Player |
 | **Center** | Workspaces |
 | **Right** | System Stats, System Tray, Network, Bluetooth, Audio, Clock, Notifications, Power |
 
@@ -34,19 +34,86 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 |--------|------|-------------|
 | **App Launcher** | `shell.qml` (inline) | Opens the Rofi app drawer (`~/.local/bin/rofi-app-drawer`) |
 | **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps. Add or edit apps in `Config.qml` (search **QUICK LAUNCH** — `quickLaunchApps`: `icon`, `command`, `tooltip` per entry) |
+| **FreshRSS** | `FreshRssPill.qml` | Local FreshRSS reader window (list + article body, open browser / play in `mpv`). See [FreshRSS reader](#freshrss-reader) below |
 | **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
 | **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
 | **Network** | `NetworkPill.qml` | NetworkManager manager (nm-applet replacement): two-column popup (Adapters + Connections \| WiFi), traffic graph, radio toggles, connection info, optional nm-applet tray. Left-click opens the popup; right-click toggles WiFi radio. See [Network pill](#network-pill-networkpillqml) |
 | **Bluetooth** | `BluetoothPill.qml` | Adapter power, scan/pair, connect/disconnect, trust/block/remove, battery, device info, and BlueZ **audio profiles** (A2DP/HFP via `audio-control.sh`). Left-click opens the popup; right-click toggles adapter power. See [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
-| **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, L/R channel balance, real-time VU meters, and optional **echo cancel** (PipeWire AEC). Right-click opens the full popup. See [Audio pill](#audio-pill-audiopillqml) |
+| **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, collapsible L/R balance, real-time VU meters, BT battery, and optional **echo cancel** (PipeWire AEC). **Left-click** opens the full popup; right-click cycles speaker / mic / dual. See [Audio pill](#audio-pill-audiopillqml) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
 | **Notifications** | `NotificationBell.qml` | Bell with count badge and red DND styling. Polls your daemon's CLI from `Config.qml` (defaults: SwayNC / `swaync-client`) via timer sync + optional live subscribe — state and `Io.Process` polling live in this widget, not `shell.qml`. Left-click toggles panel; right-click opens menu (DND, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
 | **Kill Target** | `KillTargetPill.qml` | xkill-style window picker (hidden by default). Click the pill to arm pick mode (crosshair on all monitors), then click a window to send **SIGTERM** to its process. Escape, right-click, empty click, or a second pill click cancels. Uses `window-at-point.sh` + `process-control.sh` (user-owned processes only). IPC: `qs ipc call killTargetPill activatePickMode` |
 | **Power** | `PowerMenu.qml` | Left-click opens the full session menu; right-click opens a compact quick menu. Actions and commands are configured in `Config.qml` (search **POWER MENU**) |
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
+
+### FreshRSS reader
+
+Floating reader for a local FreshRSS server (default `http://10.74.10.8`).
+
+| Piece | Path |
+|-------|------|
+| Bar pill + window | `widgets/FreshRssPill.qml` |
+| API / RSS client | `scripts/freshrss-api.sh` |
+| Secrets (gitignored) | `secrets/freshrss.env` |
+| Example secrets | `secrets/freshrss.env.example` |
+| Theme / size | `Config.qml` (search **FRESHRSS**) |
+
+**How auth works**
+
+- FreshRSS **Authentication** settings (form login, anonymous reading, allow API) are *server policy* — they do **not** contain an API password field.
+- The **API password** is under **Login → Profile** (after you sign in as `admin` via the **Login** link in the FreshRSS UI). It is separate from the web form password.
+- If you only open the server by IP without logging in, anonymous reading shows articles but no Profile / settings controls. That is expected.
+
+**Modes**
+
+| Mode | When | Capabilities |
+|------|------|----------------|
+| **RSS (default)** | No `FRESHRSS_API_PASSWORD` in secrets | List articles from public RSS, read body in-window, open browser, play videos in `mpv`. **Read-only** (no mark-read / star). |
+| **Fever** | `FRESHRSS_API_PASSWORD` set to Profile API password | Unread list, mark read/unread, star/unstar, plus browser/mpv. |
+
+**Setup (read-only, works with your current anonymous settings)**
+
+```bash
+# secrets/freshrss.env already points at 10.74.10.8
+~/.config/quickshell/scripts/freshrss-api.sh status
+~/.config/quickshell/scripts/freshrss-api.sh items 5 | jq .
+```
+
+**Setup (optional full API later)**
+
+1. In a browser: `http://10.74.10.8` → **Login** (not just anonymous view).
+2. Open **Profile** (user menu) → set **API password**.
+3. Put it in `secrets/freshrss.env`:
+
+```bash
+FRESHRSS_BASE_URL=http://10.74.10.8
+FRESHRSS_USER=admin
+FRESHRSS_API_PASSWORD=your-api-password-here
+```
+
+4. Confirm: `freshrss-api.sh status` reports `"mode":"fever","auth":true,"writable":true`.
+
+**IPC / keybind**
+
+```bash
+qs ipc call freshRss toggle
+qs ipc call freshRss refresh
+qs ipc call shell setShowFreshRssPill false
+```
+
+Optional Hyprland bind: `bind = SUPER, R, exec, qs ipc call freshRss toggle`
+
+**Reader UI**
+
+- Articles are **grouped by feed title** (channel/source), with the newest group and newest articles on top.
+- **Search** box filters title, feed, author, body (`/` or `Ctrl+F`).
+- **Date filters:** All dates · **Today** · 7 days; plus All / Video type chips.
+- **YouTube / video:** Play in `mpv` (requires `yt-dlp` on `PATH`, installed at `~/.local/bin/yt-dlp` if needed). Links in the article body that look like YouTube also open in mpv, not the browser.
+
+**Shortcuts inside the window:** `j`/`k` next/prev · `/` or `Ctrl+F` search · `o` browser · `v` mpv · `r` refresh · `Esc` close · (`m` mark read / `s` star when Fever is enabled). Double-click a row: video → mpv, otherwise browser.
 
 ### Bar widget visibility (`Config.qml` + IPC)
 
@@ -56,6 +123,7 @@ Every bar pill can be hidden or shown. Defaults live in `Config.qml` (search for
 |-----------------|---------|----------------------|--------|
 | `showLauncherPill` | `true` | `setShowLauncherPill` / `toggleShowLauncherPill` | App Launcher (inline) |
 | `showQuickLaunchPill` | `true` | `setShowQuickLaunchPill` / `toggleShowQuickLaunchPill` | Quick Launch |
+| `showFreshRssPill` | `true` | `setShowFreshRssPill` / `toggleShowFreshRssPill` | FreshRSS |
 | `showMediaPill` | `false` | `setShowMediaWidget` / `toggleShowMediaWidget` | Media Player |
 | `showWorkspacesPill` | `true` | `setShowWorkspacesPill` / `toggleShowWorkspacesPill` | Workspaces strip |
 | `showStatsPill` | `true` | `setShowStatsWidget` / `toggleShowStatsWidget` | System Stats |
@@ -333,19 +401,49 @@ qs ipc call bluetoothPill toggleApplet
 
 ### Audio pill (`AudioPill.qml`)
 
-Bar pill (left-click cycles speaker / mic / dual; middle-click mute; scroll on bars adjusts volume). **Right-click** opens the full popup.
+Bar pill for speaker + mic control (default view is **dual**: both bars with percent labels).
+
+| Input | Action |
+|-------|--------|
+| **Left-click** | Open / close the full **Audio Controls** popup |
+| **Right-click** | Cycle pill layout: speaker only → mic only → dual |
+| **Middle-click** | Mute (speaker in dual/speaker view; mic in mic-only view) |
+| **Scroll on a bar** | Step that device’s volume (swayosd-style feedback via `audio-osd.sh`) |
+
+Pill volume bars are display + wheel only (no click-drag). Volume % and mute state are **cached** and refreshed on a short timer so the bar never holds a live binding into a dying PipeWire node.
 
 #### Popup controls
 
 | Area | Controls |
 |------|----------|
-| **Playback** | Default sink device, card **profile** dropdown, master volume, mute, **L/R** channel sliders (stereo only), real-time **Level** VU meter |
-| **Recording** | Default source device, card **profile** dropdown, master volume, mute, **L/R** channel sliders, **Level** VU meter, **Echo cancel** On/Off |
+| **Header** | Active app streams summary, **pw-top**, **Restart audio** |
+| **Playback** | Device picker (transport icon + optional BT battery), card **Profile**, master **Volume** + mute, collapsible **L/R**, **Level** VU meter |
+| **Recording** | Same pattern; headset **Profile** when the input device exposes card profiles; collapsible **Echo cancel** |
 
-- **L/R** — per-channel volumes via PipeWire `PwNodeAudio.volumes`, with a `pactl` multi-volume write for reliability (same idea as the Bluetooth master-volume workaround).
-- **Level** — `PwNodePeakMonitor` peak meter (`components/AudioLevelMeter.qml`). Sampling runs only while the popup is open.
-- **Profile** — PipeWire/Pulse card profiles for the current device’s ALSA card (`audio-control.sh list-card-profiles` / `set-card-profile`). Hidden when no card/profiles exist (e.g. some Bluetooth devices).
+- **Device** — selecting a device makes it the **live system default** (PipeWire preferred default + routing). Device and profile flyouts anchor to the row you clicked (over Playback / Recording), not the bottom of the screen.
+- **Profile** — PipeWire/Pulse card profiles via `audio-control.sh list-card-profiles` / `set-card-profile`. Playback profiles show for cards with sinks; recording profiles show for headset-style inputs. Hidden when no card/profiles exist.
+- **Volume / Level** — slightly extra vertical gap under Device/Profile so the bars don’t feel cramped. Level uses `PwNodePeakMonitor` + `components/AudioLevelMeter.qml`; sampling runs only while the popup is open and the section Level switch is On.
+- **L/R** — stereo balance only (`PwNodeAudio.volumes` + `pactl` multi-channel write). **Collapsed by default**; click `▸ L/R` (summary shows `L% / R%`) to expand dual sliders, or `▾` to collapse again. Hidden for mono devices.
+- **Echo cancel** — **Collapsed by default**; header shows On/Off status. Expand for the toggle + sticky-preference hint.
+- **BT battery** — polled via `audio-control.sh bt-battery` (BlueZ Battery1), shown on the pill and in the popup when available. Name/MAC based — no live BlueZ property bindings in the UI path.
 - Popup size: `popupAudioWidth` / `popupAudioHeight` in `Config.qml`.
+
+#### Stability (Bluetooth disconnect)
+
+BT headsets (e.g. OpenRun Pro 2) destroy their PipeWire nodes and the default sink on disconnect. A live QML binding to `Pipewire.defaultAudioSink` during that teardown used to segfault Quickshell (`Default configured sink destroyed`).
+
+Hardening approach:
+
+| Practice | Detail |
+|----------|--------|
+| **Name-based selection** | Popup selection is stored as sink/source **names**, re-resolved from the current device list |
+| **No live default bindings** | Bar `speaker` / `mic` are plain properties assigned only after a debounced device refresh from the safe list — never a continuous binding to `Pipewire.defaultAudio*` |
+| **Immediate drop on default change** | On default sink/source change, clear held `PwNode` refs and device arrays, then resync after settle (`deviceRefreshDebounce` + `pwResyncTimer`) |
+| **Volume cache** | Pill % / mute / popup master volume read from cache, not from a dying node mid-notification |
+| **Peak monitors gated** | `PwNodePeakMonitor.node` is null unless the popup is open, Level is On, and a resolved node exists |
+| **Battery by name** | BT battery display uses node **names** / MACs only (process-isolated `bt-battery`), not live D-Bus bindings on the node |
+
+If `qs` ever crashes on disconnect again, check `~/.cache/quickshell/crashes/*/report.txt` and the log tail for `Default configured sink destroyed`.
 
 #### Echo cancel (system AEC)
 
@@ -363,12 +461,12 @@ Meet, Telegram, and Discord follow system defaults, so they pick up `qs_ec_*` wh
 | `echo-cancel.pref` | Sticky preference `{"preferred":true\|false}` under this config dir (not committed; per-machine) |
 | `scripts/audio-control.sh` | `echo-cancel-status` / `on` / `off` / `force-off` / `apply` |
 | `quickshell-echo-cancel.service` | User systemd unit (under `~/.config/systemd/user/`) runs `echo-cancel-apply` after PipeWire at login |
-| AudioPill + IPC | UI toggle and `qs ipc call audioPill …` (same sticky on/off) |
+| AudioPill + IPC | Collapsible UI toggle and `qs ipc call audioPill …` (same sticky on/off) |
 
 **Enable / disable**
 
 ```bash
-# UI: right-click audio pill → Echo cancel On/Off
+# UI: left-click audio pill → expand Echo cancel → On/Off
 
 # IPC (sticky across reboot when On)
 qs ipc call audioPill enableEchoCancel
@@ -402,10 +500,11 @@ No permanent PipeWire `conf.d` is written; everything is reversible.
 
 | Path | Role |
 |------|------|
-| `widgets/AudioPill.qml` | Bar pill + popup |
+| `widgets/AudioPill.qml` | Bar pill + popup + IPC |
 | `components/AudioLevelMeter.qml` | VU / peak meter visuals |
 | `components/VolumeBar.qml` / `MiniVolumeBar.qml` | Volume sliders |
-| `scripts/audio-control.sh` | Devices, profiles, channel volume, echo cancel |
+| `scripts/audio-control.sh` | Profiles, channel volume, echo cancel, BT battery |
+| `scripts/audio-osd.sh` | Volume OSD helper for wheel steps |
 | `Config.qml` | `popupAudioWidth`, `popupAudioHeight`, volume color tiers |
 
 ### Workspaces (`WorkspacesPill.qml` + `Config.qml`)

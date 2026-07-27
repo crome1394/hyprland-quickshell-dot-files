@@ -11,13 +11,15 @@ import "../components"
 // =============================================================================
 //
 // Purpose:
-//   Multi-view audio pill (speaker only / mic only / dual compact) with full
-//   device selection popup, volume controls, mute, and wheel support.
+//   Multi-view audio pill (default dual: speaker + mic with % labels).
+//   Left-click opens the full popup. Scroll-wheel on a bar adjusts that
+//   device’s volume and shows swayosd feedback. No click-drag volume on the pill.
 //
-// Popup extras (right-click — do not affect the compact bar pill):
+// Popup extras (left-click):
 //   - L/R channel volume sliders for stereo playback and recording devices
 //   - Real-time VU peak meters via PwNodePeakMonitor (enabled only while open)
 //   - Card profile dropdowns (PipeWire/Pulse profiles via audio-control.sh)
+//   - Active streams, pw-top, restart audio
 //
 // Theme Properties Consumed:
 //   - bar.audioViewContentWidth, bar.audioViewSidePadding
@@ -47,7 +49,8 @@ import "../components"
 //   - scripts/audio-control.sh (card profile list/set; L/R pactl fallback)
 //
 // Notes:
-//   - Bar pill views (speaker / mic / dual) are intentionally unchanged.
+//   - Default viewMode is dual (2). Right-click cycles speaker / mic / dual.
+//   - Pill volume bars are display-only (interactive: false); wheel still works.
 //   - Peak monitors are disabled when the popup is closed (CPU / PipeWire load).
 //   - L/R and profile rows hide gracefully for mono / profile-less devices.
 // =============================================================================
@@ -69,32 +72,150 @@ Rectangle {
     border.width: bar.controlBorderWidth
     border.color: bar.pillBorder
 
-    // ===== AUDIO STATE (logic preserved exactly) =====
+    // ===== AUDIO STATE =====
+    // Track only our debounced speaker/mic refs — NEVER bind PwObjectTracker to
+    // Pipewire.defaultAudioSink/Source directly. Those fire "Default configured
+    // sink destroyed" mid-teardown and re-evaluating that binding segfaults qs.
     PwObjectTracker {
         id: audioTracker
-        objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource].filter(function(n){ return !!n; })
+        objects: [audio.speaker, audio.mic].filter(function(n){ return !!n; })
     }
 
     // Path to the shared pactl helper (profiles + optional channel-volume fallback).
     readonly property string audioControlScript: "/home/crome/.config/quickshell/scripts/audio-control.sh"
+    readonly property string audioOsdScript: "/home/crome/.config/quickshell/scripts/audio-osd.sh"
+
+    // Debounced swayosd feedback for wheel volume changes (same helper as AudioMonitorView).
+    property var _pendingOsd: null
+    Timer {
+        id: volumeOsdTimer
+        interval: 40
+        repeat: false
+        onTriggered: root.flushVolumeOsd()
+    }
+    function notifyVolumeOsd(kind, percent, muted) {
+        root._pendingOsd = {
+            kind: kind || "sink",
+            percent: Math.max(0, Math.min(150, Math.round(percent))),
+            muted: !!muted
+        }
+        volumeOsdTimer.restart()
+    }
+    function flushVolumeOsd() {
+        if (!root._pendingOsd) return
+        var osd = root._pendingOsd
+        root._pendingOsd = null
+        Quickshell.execDetached([
+            root.audioOsdScript,
+            osd.kind,
+            String(osd.percent),
+            osd.muted ? "1" : "0"
+        ])
+    }
 
     QtObject {
         id: audio
-        property int viewMode: 0  // 0=speaker, 1=mic, 2=dual
+        property int viewMode: 2  // 0=speaker, 1=mic, 2=dual (default both)
 
         property var sinks: []
         property var sources: []
 
-        readonly property var speaker: Pipewire.defaultAudioSink
-        readonly property var mic: Pipewire.defaultAudioSource
+        // System-default nodes for the bar pill. These are PLAIN properties
+        // assigned only from refreshDevices() / ensureSelection() after settle —
+        // never a live binding to Pipewire.defaultAudioSink (that crashes qs on
+        // BT disconnect when the default is destroyed mid-notification).
+        property var speaker: null
+        property var mic: null
+        // Stable names of the live system defaults (updated with speaker/mic).
+        property string liveSinkName: ""
+        property string liveSourceName: ""
 
-        readonly property real speakerVolume: (speaker && speaker.audio) ? speaker.audio.volume : 0.0
-        readonly property bool speakerMuted: (speaker && speaker.audio) ? speaker.audio.muted : false
-        readonly property real micVolume: (mic && mic.audio) ? mic.audio.volume : 0.0
-        readonly property bool micMuted: (mic && mic.audio) ? mic.audio.muted : false
+        // Popup selection by stable name only (never store long-lived PwNode
+        // pointers outside the sinks/sources arrays rebuilt on refresh).
+        property string selectedSinkName: ""
+        property string selectedSourceName: ""
+
+        // Bump when device set changes OR we intentionally drop all live refs
+        // (disconnect) so selected*/popup* re-resolve to null immediately.
+        property int deviceListEpoch: 0
+        property string _lastSinkSig: ""
+        property string _lastSourceSig: ""
+
+        // Resolve selected name → live node from current list only.
+        readonly property var selectedSink: {
+            var _ = deviceListEpoch
+            return resolveNodeByName(selectedSinkName, true)
+        }
+        readonly property var selectedSource: {
+            var _ = deviceListEpoch
+            return resolveNodeByName(selectedSourceName, false)
+        }
+
+        // Popup controls operate on the selected device (fall back to system default)
+        readonly property var popupSpeaker: {
+            var _ = deviceListEpoch
+            return selectedSink || speaker
+        }
+        readonly property var popupMic: {
+            var _ = deviceListEpoch
+            return selectedSource || mic
+        }
+
+        // Popup is expensive; many bindings skip work when closed.
+        readonly property bool popupOpen: audioPopup.visible
+
+        // Cached volume/mute for the bar — updated on a timer / after resync, NOT via
+        // live bindings to speaker.audio (those re-enter during node destroy → segfault).
+        property real speakerVolume: 0.0
+        property bool speakerMuted: false
+        property real micVolume: 0.0
+        property bool micMuted: false
 
         readonly property int speakerPercent: Math.round(speakerVolume * 100)
         readonly property int micPercent: Math.round(micVolume * 100)
+
+        // Popup volume cache (selected device)
+        property real popupSpeakerVolume: 0.0
+        property bool popupSpeakerMuted: false
+        property real popupMicVolume: 0.0
+        property bool popupMicMuted: false
+        readonly property int popupSpeakerPercent: Math.round(popupSpeakerVolume * 100)
+        readonly property int popupMicPercent: Math.round(popupMicVolume * 100)
+
+        // Read volume only from our held node refs (speaker/mic/popup*), never
+        // from Pipewire.defaultAudio* — those can be mid-destroy when a timer fires.
+        function syncVolumeCache() {
+            try {
+                var s = speaker;
+                if (s && s.audio) {
+                    speakerVolume = s.audio.volume;
+                    speakerMuted = !!s.audio.muted;
+                }
+            } catch (e) { /* keep last known */ }
+            try {
+                var m = mic;
+                if (m && m.audio) {
+                    micVolume = m.audio.volume;
+                    micMuted = !!m.audio.muted;
+                }
+            } catch (e2) {}
+            if (popupOpen) {
+                try {
+                    var ps = popupSpeaker;
+                    if (ps && ps.audio) {
+                        popupSpeakerVolume = ps.audio.volume;
+                        popupSpeakerMuted = !!ps.audio.muted;
+                    }
+                } catch (e3) {}
+                try {
+                    var pm = popupMic;
+                    if (pm && pm.audio) {
+                        popupMicVolume = pm.audio.volume;
+                        popupMicMuted = !!pm.audio.muted;
+                    }
+                } catch (e4) {}
+            }
+        }
 
         property bool deviceListForSink: true
 
@@ -110,55 +231,486 @@ Rectangle {
         property string profileListCard: ""
         property var profileListItems: []
 
-        // ---- Master volume (unchanged behaviour + wpctl BT workaround) ----
+        // ---- Master volume (wpctl BT workaround) — all node access try/catch for disconnect ----
         function setVolume(node, v) {
-            if (node && node.audio) node.audio.volume = Math.max(0.0, Math.min(1.0, v));
-            // Workaround for Quickshell#807: on many Bluetooth (bluez) sinks, the device route
-            // lacks a "volumeStep" param, so direct PwNodeAudio.volume writes only update local
-            // QML state and do not reach the PipeWire backend. wpctl uses the reliable control
-            // path (works for BT + all other devices, and is what pavucontrol/wpctl users rely on).
-            if (node && node.id !== undefined) {
-                var pct = Math.round(v * 100);
-                Quickshell.execDetached(["wpctl", "set-volume", String(node.id), pct + "%"]);
-            }
+            if (!node) return;
+            try {
+                if (node.audio)
+                    node.audio.volume = Math.max(0.0, Math.min(1.0, v));
+                if (node.id !== undefined) {
+                    var pct = Math.round(v * 100);
+                    Quickshell.execDetached(["wpctl", "set-volume", String(node.id), pct + "%"]);
+                }
+                volumeCacheTimer.restart();
+            } catch (e) {}
         }
-        function stepVolume(node, delta) {
-            if (!node || !node.audio) return;
-            var nv = Math.max(0.0, Math.min(1.0, node.audio.volume + delta));
-            node.audio.volume = nv;
-            if (node.id !== undefined) {
-                // Use absolute target for the wpctl call. This way:
-                // - Good devices: local .volume= already applied the delta; wpctl sets the *same* target (harmless)
-                // - Bluetooth (buggy in Quickshell): local is ignored by backend, wpctl applies the correct target
+        // isSink: true = speaker/playback (OSD sink icons), false = mic (OSD mic icons)
+        function stepVolume(node, delta, isSink) {
+            if (!node) return;
+            try {
+                if (!node.audio) return;
+                var nv = Math.max(0.0, Math.min(1.0, node.audio.volume + delta));
+                node.audio.volume = nv;
                 var pct = Math.round(nv * 100);
-                Quickshell.execDetached(["wpctl", "set-volume", String(node.id), pct + "%"]);
-            }
+                if (node.id !== undefined)
+                    Quickshell.execDetached(["wpctl", "set-volume", String(node.id), pct + "%"]);
+                root.notifyVolumeOsd(isSink ? "sink" : "source", pct, !!node.audio.muted);
+                // Optimistic cache update for snappy bar
+                if (isSink) {
+                    speakerVolume = nv;
+                    if (popupOpen) popupSpeakerVolume = nv;
+                } else {
+                    micVolume = nv;
+                    if (popupOpen) popupMicVolume = nv;
+                }
+            } catch (e) {}
         }
         function toggleMute(node) {
-            if (node && node.audio) node.audio.muted = !node.audio.muted;
+            if (!node) return;
+            try {
+                if (node.audio)
+                    node.audio.muted = !node.audio.muted;
+                volumeCacheTimer.restart();
+            } catch (e) {}
         }
         function cycleView() { viewMode = (viewMode + 1) % 3; }
 
-        function refreshDevices() {
-            var s = [], r = [];
-            var vals = (Pipewire.nodes && Pipewire.nodes.values) ? Pipewire.nodes.values : [];
-            for (var i = 0; i < vals.length; i++) {
-                var n = vals[i];
-                if (!n || !n.audio) continue;
-                var nm = n.description || n.name || n.nickname || "Device";
-                if (n.isSink && !n.isStream) s.push({node: n, name: nm});
-                else if (!n.isSink && !n.isStream) r.push({node: n, name: nm});
-            }
-            var cmp = function(a,b){ return a.name.localeCompare(b.name); };
-            s.sort(cmp); r.sort(cmp);
-            audio.sinks = s;
-            audio.sources = r;
+        // Safe property readers — destroyed PwNodes must never throw into QML bindings.
+        function safeName(node) {
+            if (!node) return "";
+            try { return String(node.name || ""); } catch (e) { return ""; }
+        }
+        function safeDesc(node) {
+            if (!node) return "";
+            try { return String(node.description || ""); } catch (e) { return ""; }
+        }
+        function safeId(node) {
+            if (!node) return undefined;
+            try { return node.id; } catch (e) { return undefined; }
+        }
+        function safeHasAudio(node) {
+            if (!node) return false;
+            try { return !!node.audio; } catch (e) { return false; }
         }
 
-        function getCurrentDeviceName(isSink) {
-            var def = isSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource;
-            if (!def) return "Default";
-            return def.description || def.name || def.nickname || "Device";
+        function refreshDevices() {
+            var s = [], r = [];
+            var sinkSigParts = [], sourceSigParts = [];
+            try {
+                var vals = (Pipewire.nodes && Pipewire.nodes.values) ? Pipewire.nodes.values : [];
+                for (var i = 0; i < vals.length; i++) {
+                    var n = vals[i];
+                    if (!n) continue;
+                    try {
+                        if (!n.audio) continue;
+                        if (n.isStream) continue;
+                        if (isVirtualEcNode(n)) continue;
+                        var rawName = safeName(n);
+                        if (!rawName || rawName.indexOf(".monitor") >= 0) continue;
+                        var label = safeDesc(n) || rawName || "Device";
+                        try {
+                            if (n.nickname) label = n.description || n.nickname || rawName;
+                        } catch (e2) {}
+                        if (n.isSink) {
+                            s.push({ node: n, name: label, nodeName: rawName });
+                            sinkSigParts.push(rawName);
+                        } else {
+                            r.push({ node: n, name: label, nodeName: rawName });
+                            sourceSigParts.push(rawName);
+                        }
+                    } catch (e1) {
+                        // Node vanished mid-iteration (BT disconnect) — skip
+                        continue;
+                    }
+                }
+            } catch (e) {
+                // Registry churn during disconnect
+            }
+            var cmp = function(a, b) { return a.name.localeCompare(b.name); };
+            s.sort(cmp); r.sort(cmp);
+            sinkSigParts.sort();
+            sourceSigParts.sort();
+            var sinkSig = sinkSigParts.join("\n");
+            var sourceSig = sourceSigParts.join("\n");
+            var changed = (sinkSig !== _lastSinkSig) || (sourceSig !== _lastSourceSig);
+
+            // Always refresh node object pointers when the name set is unchanged
+            // but objects may have been rebound — still assign arrays.
+            audio.sinks = s;
+            audio.sources = r;
+            if (changed) {
+                audio._lastSinkSig = sinkSig;
+                audio._lastSourceSig = sourceSig;
+                audio.deviceListEpoch += 1;
+            }
+
+            // Assign bar speaker/mic ONLY from the rebuilt list (never store a raw
+            // Pipewire.default* pointer that can be destroyed out from under us).
+            var defSinkName = "";
+            var defSourceName = "";
+            try {
+                defSinkName = safeName(Pipewire.defaultAudioSink);
+            } catch (eDs) { defSinkName = ""; }
+            try {
+                defSourceName = safeName(Pipewire.defaultAudioSource);
+            } catch (eDm) { defSourceName = ""; }
+            // Prefer non-EC hardware when default is echo-cancel virtual node
+            try {
+                var rawDef = Pipewire.defaultAudioSink;
+                if (rawDef && isVirtualEcNode(rawDef)) {
+                    var prefS = Pipewire.preferredDefaultAudioSink;
+                    var prefSn = safeName(prefS);
+                    if (prefSn && !isVirtualEcNode(prefS))
+                        defSinkName = prefSn;
+                }
+            } catch (eEc) {}
+            try {
+                var rawMic = Pipewire.defaultAudioSource;
+                if (rawMic && isVirtualEcNode(rawMic)) {
+                    var prefM = Pipewire.preferredDefaultAudioSource;
+                    var prefMn = safeName(prefM);
+                    if (prefMn && !isVirtualEcNode(prefM))
+                        defSourceName = prefMn;
+                }
+            } catch (eEc2) {}
+
+            liveSinkName = defSinkName;
+            liveSourceName = defSourceName;
+            speaker = resolveNodeByName(defSinkName, true);
+            mic = resolveNodeByName(defSourceName, false);
+            // If name not in list yet (registry lag), leave null — next refresh will fill.
+
+            // After refresh: force live defaults when popup closed; soft-fix when open
+            ensureSelection(!audioPopup.visible);
+            // Keep epoch in lockstep with node pointer identity changes even if names match
+            deviceListEpoch += 1;
+        }
+
+        // Coalesce rapid PipeWire registry events (BT disconnect floods valuesChanged).
+        function scheduleRefreshDevices() {
+            root._deviceRefreshPending = true;
+            // restart() extends the quiet window so a flood collapses to one scan
+            deviceRefreshDebounce.restart();
+        }
+
+        // Resolve a stored name to a live node from the current device list only.
+        function resolveNodeByName(nodeName, isSink) {
+            if (!nodeName || nodeName.length === 0) return null;
+            var list = isSink ? sinks : sources;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].nodeName === nodeName)
+                    return list[i].node;
+            }
+            return null;
+        }
+
+        // Cached names only — do not touch Pipewire.default* (unsafe mid-disconnect).
+        function liveDefaultName(isSink) {
+            return isSink ? (liveSinkName || "") : (liveSourceName || "");
+        }
+
+        // True if a node is one of our virtual echo-cancel devices (not real hardware).
+        function isVirtualEcNode(node) {
+            var n = safeName(node);
+            if (!n) return false;
+            return n === "qs_ec_sink" || n === "qs_ec_source"
+                || n.indexOf("echo-cancel") >= 0 || n.indexOf("Echo Cancel") >= 0
+                || n.indexOf("echo_cancel") >= 0;
+        }
+
+        // Transport kind for icons: bluetooth | usb | hdmi | internal
+        function deviceTransport(node) {
+            if (!node) return "internal";
+            try {
+                var nm = safeName(node).toLowerCase();
+                if (!nm) return "internal";
+                var p = {};
+                try { p = node.properties || {}; } catch (e) { p = {}; }
+                var api = String(p["device.api"] || "").toLowerCase();
+                var bus = String(p["device.bus"] || "").toLowerCase();
+                if (nm.indexOf("bluez") === 0 || api.indexOf("bluez") >= 0 || bus === "bluetooth")
+                    return "bluetooth";
+                if (nm.indexOf("hdmi") >= 0 || nm.indexOf("displayport") >= 0 || nm.indexOf("dp-") >= 0)
+                    return "hdmi";
+                if (bus === "usb" || nm.indexOf("usb-") >= 0 || nm.indexOf(".usb-") >= 0)
+                    return "usb";
+                if (bus === "pci" || nm.indexOf("pci-") >= 0)
+                    return "internal";
+            } catch (e) {}
+            return "internal";
+        }
+
+        function deviceKindIcon(node) {
+            var t = deviceTransport(node);
+            if (t === "bluetooth")
+                return (bar && bar.iconAudioBluetooth) ? bar.iconAudioBluetooth : "󰂯";
+            if (t === "usb")
+                return (bar && bar.iconAudioUsb) ? bar.iconAudioUsb : "󰕓";
+            if (t === "hdmi")
+                return (bar && bar.iconAudioHdmi) ? bar.iconAudioHdmi : "󰡁";
+            return (bar && bar.iconAudioInternal) ? bar.iconAudioInternal : "󰓃";
+        }
+
+        // ---- Bluetooth battery (Quickshell.Bluetooth → BlueZ Battery1) ----
+        // Extract MAC from PipeWire bluez node names so we can match BluetoothDevice.address.
+        function btMacFromNode(node) {
+            var nm = safeName(node);
+            if (!nm) return "";
+            try {
+                if (nm.indexOf("bluez_output.") === 0) {
+                    var bout = nm.substring("bluez_output.".length);
+                    bout = bout.replace(/\.[0-9]+$/, ""); // strip profile index
+                    return bout.replace(/_/g, ":").toUpperCase();
+                }
+                if (nm.indexOf("bluez_input.") === 0) {
+                    var bin = nm.substring("bluez_input.".length);
+                    return bin.replace(/_/g, ":").toUpperCase();
+                }
+            } catch (e) {}
+            return "";
+        }
+
+        function normalizeMac(addr) {
+            return String(addr || "").replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+        }
+
+        // BT battery is polled out-of-process (bluetoothctl) into this map.
+        // NEVER bind live to Quickshell.Bluetooth during disconnect — that crashed qs
+        // when BlueZ removed Battery1 mid-signal (crash n15x2touit).
+        property var btBatteryByMac: ({})
+
+        function batteryPercentForMac(mac) {
+            var m = normalizeMac(mac);
+            if (!m) return -1;
+            var map = btBatteryByMac;
+            if (map && map[m] !== undefined && map[m] !== null)
+                return Number(map[m]);
+            // Also try colon form keys from script
+            if (map) {
+                for (var k in map) {
+                    if (normalizeMac(k) === m)
+                        return Number(map[k]);
+                }
+            }
+            return -1;
+        }
+
+        // Returns 0–100, or -1 if unknown / not BT / no battery report.
+        function batteryPercentForNode(node) {
+            return batteryPercentForMac(btMacFromNode(node));
+        }
+
+        function batteryColor(pct) {
+            if (pct < 0) return bar ? bar.subtext : "#a6adc8";
+            if (pct <= 15) return "#EF4444";
+            if (pct <= 30) return "#F59E0B";
+            return "#10B981";
+        }
+
+        // Polled integers (updated by btBatteryProcess) — not live D-Bus bindings.
+        property int speakerBtBattery: -1
+        property int micBtBattery: -1
+        property int popupSpeakerBtBattery: -1
+        property int popupMicBtBattery: -1
+
+        function recomputeBtBatteryDisplay() {
+            try {
+                // Name-only lookup — never touch speaker/mic PwNode here (disconnect race).
+                var sMac = normalizeMac(
+                    btMacFromNodeName(selectedSinkName)
+                    || btMacFromNodeName(liveSinkName)
+                );
+                var mMac = normalizeMac(
+                    btMacFromNodeName(selectedSourceName)
+                    || btMacFromNodeName(liveSourceName)
+                );
+                speakerBtBattery = batteryPercentForMac(sMac);
+                micBtBattery = batteryPercentForMac(mMac);
+                if (popupOpen) {
+                    popupSpeakerBtBattery = batteryPercentForMac(
+                        normalizeMac(btMacFromNodeName(selectedSinkName) || sMac)
+                    );
+                    popupMicBtBattery = batteryPercentForMac(
+                        normalizeMac(btMacFromNodeName(selectedSourceName) || mMac)
+                    );
+                } else {
+                    popupSpeakerBtBattery = -1;
+                    popupMicBtBattery = -1;
+                }
+            } catch (e) {
+                speakerBtBattery = -1;
+                micBtBattery = -1;
+                popupSpeakerBtBattery = -1;
+                popupMicBtBattery = -1;
+            }
+        }
+
+        function btMacFromNodeName(nm) {
+            nm = String(nm || "");
+            if (nm.indexOf("bluez_output.") === 0) {
+                var bout = nm.substring("bluez_output.".length).replace(/\.[0-9]+$/, "");
+                return bout.replace(/_/g, ":").toUpperCase();
+            }
+            if (nm.indexOf("bluez_input.") === 0) {
+                return nm.substring("bluez_input.".length).replace(/_/g, ":").toUpperCase();
+            }
+            return "";
+        }
+
+        // True if any current audio path looks like Bluetooth (by name only).
+        function anyBluezSelected() {
+            try {
+                if (selectedSinkName.indexOf("bluez_") === 0) return true;
+                if (selectedSourceName.indexOf("bluez_") === 0) return true;
+            } catch (e) {}
+            return false;
+        }
+
+        // Headset-like (Bluetooth or form-factor) — used for recording profile visibility.
+        function isHeadsetNode(node) {
+            if (!node) return false;
+            try {
+                if (deviceTransport(node) === "bluetooth") return true;
+                var p = {};
+                try { p = node.properties || {}; } catch (e) { return false; }
+                var form = String(p["device.form_factor"] || p["bluez5.form-factor"] || "").toLowerCase();
+                var icon = String(p["device.icon-name"] || "").toLowerCase();
+                return form.indexOf("headset") >= 0 || form.indexOf("headphone") >= 0
+                    || icon.indexOf("headset") >= 0 || icon.indexOf("headphone") >= 0;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        // Recording profile row: only for headsets that expose input-capable card profiles.
+        // Skip evaluation when popup is closed.
+        readonly property bool showRecordingHeadsetProfile: {
+            if (!popupOpen) return false;
+            var n = popupMic;
+            var _ = micCard;
+            var __ = micProfiles;
+            var ___ = deviceListEpoch;
+            if (!n || !isHeadsetNode(n)) return false;
+            if (!micCard || micCard.length === 0) return false;
+            var list = filteredProfiles(false);
+            return list && list.length > 0;
+        }
+
+        function nodesMatch(a, b) {
+            if (!a || !b) return false;
+            try {
+                if (a === b) return true;
+                var aid = safeId(a), bid = safeId(b);
+                if (aid !== undefined && bid !== undefined && aid === bid) return true;
+                var an = safeName(a), bn = safeName(b);
+                if (an && bn && an === bn) return true;
+                var ad = safeDesc(a), bd = safeDesc(b);
+                if (ad && bd && ad === bd) return true;
+            } catch (e) {}
+            return false;
+        }
+
+        // Live system default device (what PipeWire is actually using right now).
+        // Prefer defaultAudioSink/Source over preferredDefault* — preferred can be
+        // stale across qs restarts while the session default has moved (e.g. BT headset).
+        // When echo-cancel is active, default may be qs_ec_*; fall back to preferred.
+        function hardwareDefault(isSink) {
+            var def = null;
+            var pref = null;
+            try {
+                def = isSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource;
+            } catch (e) { def = null; }
+            try {
+                pref = isSink ? Pipewire.preferredDefaultAudioSink : Pipewire.preferredDefaultAudioSource;
+            } catch (e2) { pref = null; }
+
+            if (def && !isVirtualEcNode(def) && safeName(def)) return def;
+            if (pref && !isVirtualEcNode(pref) && safeName(pref)) return pref;
+            // Fall back to first listed hardware device
+            var list = isSink ? sinks : sources;
+            if (list && list.length > 0 && list[0].node) return list[0].node;
+            return null;
+        }
+
+        function nameStillListed(nodeName, isSink) {
+            if (!nodeName || nodeName.length === 0) return false;
+            var list = isSink ? sinks : sources;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].nodeName === nodeName) return true;
+            }
+            return false;
+        }
+
+        // Ensure selected*Name track listed hardware.
+        // forceLive=true: always snap to the current system defaults (startup / reopen / disconnect).
+        // forceLive=false: only fix empty or vanished selections (preserve in-popup picks).
+        function ensureSelection(forceLive) {
+            var liveSink = hardwareDefault(true);
+            var liveSource = hardwareDefault(false);
+            var liveSinkName = safeName(liveSink);
+            var liveSourceName = safeName(liveSource);
+
+            if (forceLive || !selectedSinkName || !nameStillListed(selectedSinkName, true))
+                selectedSinkName = liveSinkName;
+            if (forceLive || !selectedSourceName || !nameStillListed(selectedSourceName, false))
+                selectedSourceName = liveSourceName;
+        }
+
+        // Called when PipeWire defaults change (BT connect/disconnect, etc.).
+        // MUST NOT read Pipewire/Bluetooth objects here — only drop local refs and
+        // arm delayed timers. Crash ct11cwpuit: "Default configured sink destroyed"
+        // + live defaultAudioSink bindings → segfault in QML binding update.
+        // Also: root.pwResyncTimer was undefined (Timer ids are not root props), so
+        // the settle path never ran after disconnect.
+        function onSystemDefaultChanged() {
+            // Immediately drop every live PwNode we hold so peak monitors / tracker
+            // / volume cache cannot touch a dying OpenRun (or any BT) node.
+            try {
+                speaker = null;
+                mic = null;
+                sinks = [];
+                sources = [];
+                liveSinkName = "";
+                liveSourceName = "";
+                deviceListEpoch += 1;
+            } catch (e) {}
+            root._deviceRefreshPending = true;
+            deviceRefreshDebounce.restart();
+            // Longer settle window after default destroy before force-select.
+            pwResyncTimer.restart();
+        }
+
+        // Name of the device currently selected in the popup (not necessarily default).
+        // Never call hardwareDefault() here — that reads Pipewire.default* and can
+        // race a BT disconnect from a binding.
+        function getSelectedDeviceName(isSink) {
+            var node = isSink ? (selectedSink || speaker) : (selectedSource || mic);
+            if (node) {
+                var label = safeDesc(node) || safeName(node);
+                if (label) return label;
+            }
+            var nm = isSink ? (selectedSinkName || liveSinkName)
+                            : (selectedSourceName || liveSourceName);
+            if (nm && nm.length) return nm;
+            return "No device";
+        }
+
+        function isSelectedSystemDefault(isSink) {
+            var selName = isSink ? selectedSinkName : selectedSourceName;
+            var liveName = liveDefaultName(isSink);
+            if (selName && liveName)
+                return selName === liveName;
+            // Fallback: compare held node pointers from our safe list only
+            return nodesMatch(
+                isSink ? selectedSink : selectedSource,
+                isSink ? speaker : mic
+            );
+        }
+
+        // Select a device for popup controls AND make it the live system default.
+        function selectDevice(node, forSink) {
+            if (!node) return;
+            root.setDefaultAudioDevice(node, forSink);
         }
 
         // ---- L/R channel helpers (stereo devices only) ----
@@ -203,77 +755,102 @@ Rectangle {
             return vols[idx] || 0.0;
         }
 
-        // Bindings touch .volumes / .channels directly so QML re-evaluates on
-        // volumesChanged / channelsChanged (function-only bindings often miss notifies).
-        readonly property real speakerLeftVolume: {
-            var _ = speaker && speaker.audio ? speaker.audio.volumes : null
-            var __ = speaker && speaker.audio ? speaker.audio.channels : null
-            return channelVolume(speaker, true)
+        // Popup L/R + stereo — only evaluate while popup is open (bar dual view
+        // does not use per-channel bars, so skip that work when closed).
+        readonly property real popupSpeakerLeftVolume: {
+            if (!popupOpen) return 0
+            var n = popupSpeaker
+            try {
+                var _ = n && n.audio ? n.audio.volumes : null
+                var __ = n && n.audio ? n.audio.channels : null
+                return channelVolume(n, true)
+            } catch (e) { return 0 }
         }
-        readonly property real speakerRightVolume: {
-            var _ = speaker && speaker.audio ? speaker.audio.volumes : null
-            var __ = speaker && speaker.audio ? speaker.audio.channels : null
-            return channelVolume(speaker, false)
+        readonly property real popupSpeakerRightVolume: {
+            if (!popupOpen) return 0
+            var n = popupSpeaker
+            try {
+                var _ = n && n.audio ? n.audio.volumes : null
+                var __ = n && n.audio ? n.audio.channels : null
+                return channelVolume(n, false)
+            } catch (e) { return 0 }
         }
-        readonly property real micLeftVolume: {
-            var _ = mic && mic.audio ? mic.audio.volumes : null
-            var __ = mic && mic.audio ? mic.audio.channels : null
-            return channelVolume(mic, true)
+        readonly property real popupMicLeftVolume: {
+            if (!popupOpen) return 0
+            var n = popupMic
+            try {
+                var _ = n && n.audio ? n.audio.volumes : null
+                var __ = n && n.audio ? n.audio.channels : null
+                return channelVolume(n, true)
+            } catch (e) { return 0 }
         }
-        readonly property real micRightVolume: {
-            var _ = mic && mic.audio ? mic.audio.volumes : null
-            var __ = mic && mic.audio ? mic.audio.channels : null
-            return channelVolume(mic, false)
+        readonly property real popupMicRightVolume: {
+            if (!popupOpen) return 0
+            var n = popupMic
+            try {
+                var _ = n && n.audio ? n.audio.volumes : null
+                var __ = n && n.audio ? n.audio.channels : null
+                return channelVolume(n, false)
+            } catch (e) { return 0 }
         }
-        readonly property bool speakerHasStereo: {
-            var _ = speaker && speaker.audio ? speaker.audio.volumes : null
-            var __ = speaker && speaker.audio ? speaker.audio.channels : null
-            return hasStereoChannels(speaker)
+        readonly property bool popupSpeakerHasStereo: {
+            if (!popupOpen) return false
+            var n = popupSpeaker
+            try {
+                var _ = n && n.audio ? n.audio.volumes : null
+                var __ = n && n.audio ? n.audio.channels : null
+                return hasStereoChannels(n)
+            } catch (e) { return false }
         }
-        readonly property bool micHasStereo: {
-            var _ = mic && mic.audio ? mic.audio.volumes : null
-            var __ = mic && mic.audio ? mic.audio.channels : null
-            return hasStereoChannels(mic)
+        readonly property bool popupMicHasStereo: {
+            if (!popupOpen) return false
+            var n = popupMic
+            try {
+                var _ = n && n.audio ? n.audio.volumes : null
+                var __ = n && n.audio ? n.audio.channels : null
+                return hasStereoChannels(n)
+            } catch (e) { return false }
         }
 
         // Set one channel (L or R) while preserving the other.
         // Writes native volumes + pactl multi-channel set for backend reliability
         // (same class of issue as the master-volume wpctl workaround).
         function setChannelVolume(node, isLeft, v, isSink) {
-            if (!node || !node.audio) return;
-            if (!hasStereoChannels(node)) return;
-
-            var clamped = Math.max(0.0, Math.min(1.0, v));
-            var li = leftChannelIndex(node);
-            var ri = rightChannelIndex(node);
-            // Snapshot peer channel before write so we can send a full L/R pair.
-            var leftVol = isLeft ? clamped : channelVolume(node, true);
-            var rightVol = isLeft ? channelVolume(node, false) : clamped;
-
-            var vols = _volumes(node);
-            var next = [];
-            for (var i = 0; i < vols.length; i++)
-                next.push(vols[i]);
-            if (li >= 0 && li < next.length) next[li] = leftVol;
-            if (ri >= 0 && ri < next.length) next[ri] = rightVol;
-
-            // Native Quickshell write (updates UI-bound state immediately).
+            if (!node) return;
             try {
-                node.audio.volumes = next;
-            } catch (e) {
-                // Some nodes reject partial channel writes; fall through to pactl.
-            }
+                if (!node.audio) return;
+                if (!hasStereoChannels(node)) return;
 
-            // Backend write via pactl (L% R%) — reliable across ALSA/BT/USB.
-            if (node.name) {
-                var lPct = Math.round(leftVol * 100);
-                var rPct = Math.round(rightVol * 100);
-                var kind = isSink ? "sink" : "source";
-                Quickshell.execDetached([
-                    root.audioControlScript, "set-channel-volume",
-                    kind, String(node.name), String(lPct), String(rPct)
-                ]);
-            }
+                var clamped = Math.max(0.0, Math.min(1.0, v));
+                var li = leftChannelIndex(node);
+                var ri = rightChannelIndex(node);
+                var leftVol = isLeft ? clamped : channelVolume(node, true);
+                var rightVol = isLeft ? channelVolume(node, false) : clamped;
+
+                var vols = _volumes(node);
+                var next = [];
+                for (var i = 0; i < vols.length; i++)
+                    next.push(vols[i]);
+                if (li >= 0 && li < next.length) next[li] = leftVol;
+                if (ri >= 0 && ri < next.length) next[ri] = rightVol;
+
+                try {
+                    node.audio.volumes = next;
+                } catch (e) {
+                    // Some nodes reject partial channel writes; fall through to pactl.
+                }
+
+                var nm = safeName(node);
+                if (nm) {
+                    var lPct = Math.round(leftVol * 100);
+                    var rPct = Math.round(rightVol * 100);
+                    var kind = isSink ? "sink" : "source";
+                    Quickshell.execDetached([
+                        root.audioControlScript, "set-channel-volume",
+                        kind, String(nm), String(lPct), String(rPct)
+                    ]);
+                }
+            } catch (e2) {}
         }
 
         // ---- Card / profile helpers ----
@@ -284,23 +861,39 @@ Rectangle {
 
         function cardNameForNode(node) {
             if (!node) return "";
-            var p = node.properties || {};
-            // Prefer an explicit card id when present (Pulse-compat props).
-            if (p["device.name"] && String(p["device.name"]).indexOf("alsa_card.") === 0)
-                return String(p["device.name"]);
+            try {
+                var p = {};
+                try { p = node.properties || {}; } catch (e) { p = {}; }
+                // Prefer an explicit card id when present (Pulse-compat props).
+                if (p["device.name"]) {
+                    var dn = String(p["device.name"]);
+                    if (dn.indexOf("alsa_card.") === 0 || dn.indexOf("bluez_card.") === 0)
+                        return dn;
+                }
 
-            // Derive from ALSA node name:
-            //   alsa_output.<card-id>.<profile>  →  alsa_card.<card-id>
-            //   alsa_input.<card-id>.<profile>   →  alsa_card.<card-id>
-            // Profile is the final dotted segment (e.g. analog-stereo, hdmi-stereo).
-            var nm = node.name || "";
-            if (nm.indexOf("alsa_output.") === 0 || nm.indexOf("alsa_input.") === 0) {
-                var rest = nm.replace(/^alsa_(output|input)\./, "");
-                var lastDot = rest.lastIndexOf(".");
-                if (lastDot > 0)
-                    return "alsa_card." + rest.substring(0, lastDot);
-            }
-            // Bluetooth / virtual nodes: no stable alsa_card id — hide profile row.
+                var nm = safeName(node);
+                if (!nm) return "";
+
+                // ALSA: alsa_output.<card-id>.<profile> → alsa_card.<card-id>
+                if (nm.indexOf("alsa_output.") === 0 || nm.indexOf("alsa_input.") === 0) {
+                    var rest = nm.replace(/^alsa_(output|input)\./, "");
+                    var lastDot = rest.lastIndexOf(".");
+                    if (lastDot > 0)
+                        return "alsa_card." + rest.substring(0, lastDot);
+                }
+
+                // Bluetooth: bluez_output.AA_BB_….N → bluez_card.AA_BB_…
+                //            bluez_input.AA:BB:…   → bluez_card.AA_BB_…  (normalize : to _)
+                if (nm.indexOf("bluez_output.") === 0) {
+                    var bout = nm.substring("bluez_output.".length);
+                    bout = bout.replace(/\.[0-9]+$/, "");
+                    return "bluez_card." + bout.replace(/:/g, "_");
+                }
+                if (nm.indexOf("bluez_input.") === 0) {
+                    var bin = nm.substring("bluez_input.".length);
+                    return "bluez_card." + bin.replace(/:/g, "_");
+                }
+            } catch (e2) {}
             return "";
         }
 
@@ -353,36 +946,166 @@ Rectangle {
         }
     }
 
-    // Real-time peak meters (PipeWire). Enabled ONLY while the audio popup is
-    // open so we never sample peaks for a closed UI (cheap + less wire load).
+    // Per-section Level meter switches (popup UI). Default on; Off stops sampling
+    // for that path so peak monitors stay cheap when the user does not need them.
+    property bool speakerLevelMeterOn: true
+    property bool micLevelMeterOn: true
+
+    // Collapsible secondary controls in the left-click popup (default collapsed).
+    property bool speakerLrExpanded: false
+    property bool micLrExpanded: false
+    property bool echoCancelExpanded: false
+
+    // Peak meters: bind node only when actively sampling so we never hold a
+    // destroyed BT node, and avoid PipeWire peak work when Level is Off / popup closed.
+    // Also require a non-empty live/selected name so a mid-disconnect nulling of
+    // speaker/mic forces node:null before the dying PwNode is unbound.
     PwNodePeakMonitor {
         id: speakerPeakMon
-        node: audio.speaker
-        enabled: audioPopup.visible && !!audio.speaker
+        node: (audioPopup.visible && root.speakerLevelMeterOn && audio.popupSpeaker)
+              ? audio.popupSpeaker : null
+        enabled: audioPopup.visible && root.speakerLevelMeterOn && !!audio.popupSpeaker
     }
     PwNodePeakMonitor {
         id: micPeakMon
-        node: audio.mic
-        enabled: audioPopup.visible && !!audio.mic
+        node: (audioPopup.visible && root.micLevelMeterOn && audio.popupMic)
+              ? audio.popupMic : null
+        enabled: audioPopup.visible && root.micLevelMeterOn && !!audio.popupMic
+    }
+
+    // Debounce device list rebuilds under PipeWire registry floods (BT disconnect).
+    property bool _deviceRefreshPending: false
+    Timer {
+        id: deviceRefreshDebounce
+        interval: 220
+        repeat: false
+        onTriggered: {
+            if (!root._deviceRefreshPending) return;
+            root._deviceRefreshPending = false;
+            try {
+                audio.refreshDevices();
+                audio.syncVolumeCache();
+            } catch (e) {}
+        }
+    }
+
+    // After default sink/source destruction, wait longer before force-syncing
+    // selection — registry + defaults must fully settle.
+    Timer {
+        id: pwResyncTimer
+        interval: 450
+        repeat: false
+        onTriggered: {
+            try {
+                audio.refreshDevices();
+                audio.ensureSelection(true);
+                audio.syncVolumeCache();
+                // Refresh battery after BT drop (map may be empty now)
+                root.pollBtBatteries();
+            } catch (e) {}
+        }
+    }
+
+    // Periodic volume cache refresh for the bar (replaces live speaker.audio bindings).
+    Timer {
+        id: volumeCacheTimer
+        interval: 350
+        repeat: true
+        running: true
+        onTriggered: {
+            try { audio.syncVolumeCache(); } catch (e) {}
+        }
+    }
+
+    // ---- Bluetooth battery poll (process-isolated; no live BlueZ QML bindings) ----
+    function pollBtBatteries() {
+        // Skip work when no bluez path is involved (USB-only sessions).
+        if (!audio.anyBluezSelected() && !audioPopup.visible) {
+            // Clear stale levels when nothing BT is active
+            if (audio.speakerBtBattery >= 0 || audio.micBtBattery >= 0) {
+                audio.btBatteryByMac = ({});
+                audio.recomputeBtBatteryDisplay();
+            }
+            return;
+        }
+        if (btBatteryProcess.running)
+            return;
+        btBatteryProcess.command = [root.audioControlScript, "bt-battery", "all"];
+        btBatteryProcess.running = true;
+    }
+
+    Io.Process {
+        id: btBatteryProcess
+        running: false
+        stdout: Io.StdioCollector { id: btBatteryStdout }
+        onExited: (code) => {
+            if (code !== 0) return;
+            try {
+                var data = root._parseProfileJson(btBatteryStdout.text);
+                if (data && data.devices)
+                    audio.btBatteryByMac = data.devices;
+                else
+                    audio.btBatteryByMac = ({});
+                audio.recomputeBtBatteryDisplay();
+            } catch (e) {
+                audio.btBatteryByMac = ({});
+                audio.recomputeBtBatteryDisplay();
+            }
+        }
+    }
+
+    // Poll BT battery slowly; also when popup opens. Never reactive on BlueZ signals.
+    Timer {
+        id: btBatteryPollTimer
+        interval: 8000
+        repeat: true
+        running: true
+        onTriggered: root.pollBtBatteries()
     }
 
     // Async profile fetch — separate processes for sink/source so stdout never
     // interleaves and either side can refresh independently.
+    // Parse JSON from process stdout. Handles both compact one-liners and
+    // pretty-printed multi-line objects (list-streams used to fail on the latter
+    // when only the last line "}" was parsed).
     function _parseProfileJson(text) {
         var t = (text || "").trim();
         if (!t.length) return null;
-        // Prefer the last non-empty line in case a collector retained prior output.
+
+        // 1) Whole buffer (pretty multi-line or single object)
+        try {
+            return JSON.parse(t);
+        } catch (e1) {
+            // fall through
+        }
+
+        // 2) Last non-empty line (compact JSON; also last object if collector accumulated)
         var lines = t.split("\n");
         var last = "";
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i].trim();
-            if (line.length) last = line;
+            if (line.length)
+                last = line;
         }
-        try {
-            return JSON.parse(last);
-        } catch (e) {
-            return null;
+        if (last.length) {
+            try {
+                return JSON.parse(last);
+            } catch (e2) {
+                // fall through
+            }
         }
+
+        // 3) Last balanced {...} slice in the buffer (robust against prefix junk)
+        var start = t.lastIndexOf("{");
+        if (start >= 0) {
+            var slice = t.substring(start);
+            try {
+                return JSON.parse(slice);
+            } catch (e3) {
+                return null;
+            }
+        }
+        return null;
     }
 
     Io.Process {
@@ -420,7 +1143,8 @@ Rectangle {
     }
 
     function _startProfileFetch(isSink) {
-        var node = isSink ? audio.speaker : audio.mic;
+        // Profiles follow the device selected in the popup
+        var node = isSink ? audio.popupSpeaker : audio.popupMic;
         var card = audio.cardNameForNode(node);
         if (!card || card.length === 0) {
             audio.applyProfilePayload(isSink, { card: "", active: "", profiles: [] });
@@ -588,26 +1312,153 @@ Rectangle {
 
     Component.onCompleted: {
         echoCancelApplyTimer.start();
+        // First battery poll after a short settle (avoid race with PW/BT bring-up)
+        Qt.callLater(function() { root.pollBtBatteries(); });
+    }
+
+    // =========================================================================
+    // Active streams summary + audio tools (popup header)
+    // =========================================================================
+    property var streamPlayback: []
+    property var streamRecording: []
+    property bool audioRestartBusy: false
+    property string audioToolsStatus: ""
+
+    function openPwTop() {
+        // Same pattern as SysStatsPill btop/nvtop — dedicated kitty window.
+        Quickshell.execDetached(["kitty", "-e", "pw-top"]);
+    }
+
+    function restartSoundSystem() {
+        if (audioRestartBusy) return;
+        audioRestartBusy = true;
+        audioToolsStatus = "Restarting audio…";
+        if (audioRestartProcess.running)
+            audioRestartProcess.running = false;
+        audioRestartProcess.command = [root.audioControlScript, "restart-audio"];
+        audioRestartProcess.running = true;
+    }
+
+    function refreshStreams() {
+        if (!audioPopup.visible) return;
+        // Don't thrash: skip if a poll is already in flight
+        if (streamListProcess.running) return;
+        streamListProcess.command = [root.audioControlScript, "list-streams"];
+        streamListProcess.running = true;
+    }
+
+    function applyStreamsPayload(data) {
+        if (!data) return;
+        streamPlayback = data.playback || [];
+        streamRecording = data.recording || [];
+    }
+
+    Io.Process {
+        id: streamListProcess
+        running: false
+        stdout: Io.StdioCollector { id: streamListStdout }
+        onExited: (code) => {
+            if (code !== 0) return;
+            var data = root._parseProfileJson(streamListStdout.text);
+            if (data)
+                root.applyStreamsPayload(data);
+        }
+    }
+
+    Io.Process {
+        id: audioRestartProcess
+        running: false
+        stdout: Io.StdioCollector { id: audioRestartStdout }
+        onExited: (code) => {
+            root.audioRestartBusy = false;
+            var data = root._parseProfileJson(audioRestartStdout.text);
+            if (code === 0 && data && data.ok) {
+                var ecNote = data.echo_cancel_enabled ? " · echo cancel re-applied" : "";
+                root.audioToolsStatus = "Audio restarted" + ecNote;
+                // Refresh devices, profiles, streams, echo-cancel status after graph rebuild.
+                audio.refreshDevices();
+                root.refreshProfiles();
+                root.refreshEchoCancelStatus();
+                root.refreshStreams();
+            } else {
+                var err = (data && data.error) ? data.error : "Audio restart failed";
+                root.audioToolsStatus = err;
+            }
+            audioToolsStatusClear.restart();
+        }
+    }
+
+    Timer {
+        id: audioToolsStatusClear
+        interval: 4000
+        onTriggered: root.audioToolsStatus = ""
+    }
+
+    // Poll active streams only while the popup is open (pactl parse is non-trivial).
+    Timer {
+        id: streamPollTimer
+        interval: 2000
+        repeat: true
+        running: audioPopup.visible
+        onTriggered: root.refreshStreams()
+    }
+
+    Connections {
+        target: audioPopup
+        function onVisibleChanged() {
+            if (audioPopup.visible)
+                root.refreshStreams();
+        }
+    }
+
+    // When the default sink/source changes (BT connect/disconnect, qs start):
+    // ONLY restart timers — zero PipeWire object access in the signal handler.
+    // (Crash n15x2touit: lookupSingletonProperty during "Default configured sink destroyed".)
+    Connections {
+        target: Pipewire
+        function onDefaultAudioSinkChanged() {
+            audio.onSystemDefaultChanged();
+        }
+        function onDefaultAudioSourceChanged() {
+            audio.onSystemDefaultChanged();
+        }
+        // Do NOT handle defaultConfigured*Changed — those fire while the configured
+        // node is being destroyed and are unsafe to react to in QML.
+        function onReadyChanged() {
+            // Arm delayed resync only; no immediate PipeWire property reads.
+            if (Pipewire.ready)
+                pwResyncTimer.restart();
+        }
     }
 
     Connections {
         target: Pipewire.nodes
         function onValuesChanged() {
-            audio.refreshDevices();
+            // Coalesce registry floods; no work in this stack frame.
+            audio.scheduleRefreshDevices();
         }
     }
 
-    // When the default sink/source changes (device switch or profile change),
-    // refresh card profiles if the popup is open so labels stay accurate.
-    Connections {
-        target: Pipewire
-        function onDefaultAudioSinkChanged() {
-            if (audioPopup.visible)
-                root._startProfileFetch(true);
-        }
-        function onDefaultAudioSourceChanged() {
-            if (audioPopup.visible)
-                root._startProfileFetch(false);
+    // PipeWire nodes / defaults can arrive after the bar first loads — re-sync a few times.
+    Timer {
+        id: audioStartupSyncTimer
+        interval: 500
+        repeat: true
+        property int ticks: 0
+        running: true
+        onTriggered: {
+            ticks += 1;
+            audio.scheduleRefreshDevices();
+            audio.ensureSelection(true);
+            // Stop after defaults look real, or after ~4s
+            var sinkOk = false, sourceOk = false, selOk = false;
+            try {
+                sinkOk = !!(audio.speaker && audio.safeName(audio.speaker));
+                sourceOk = !!(audio.mic && audio.safeName(audio.mic));
+                selOk = audio.selectedSinkName.length > 0 || audio.selectedSourceName.length > 0;
+            } catch (e) {}
+            if ((sinkOk && sourceOk && selOk) || ticks >= 8)
+                running = false;
         }
     }
 
@@ -631,19 +1482,21 @@ Rectangle {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-            // Let volume sliders / wheel handlers receive input; clicks still bubble
-            // for empty areas. VolumeBar has its own drag handling.
+            // Bars are non-interactive (display + wheel only). Clicks open popup / mute / cycle.
+            // z below content so WheelHandlers on the bars still receive scroll.
             z: -1
 
             onClicked: (mouse) => {
                 if (mouse.button === Qt.LeftButton) {
-                    audio.cycleView();
+                    // Full audio menu (was right-click)
+                    showAudioPopup();
                 } else if (mouse.button === Qt.MiddleButton) {
                     if (audio.viewMode === 0) audio.toggleMute(audio.speaker);
                     else if (audio.viewMode === 1) audio.toggleMute(audio.mic);
                     else audio.toggleMute(audio.speaker);
                 } else if (mouse.button === Qt.RightButton) {
-                    showAudioPopup();
+                    // Cycle speaker / mic / dual views
+                    audio.cycleView();
                 }
             }
         }
@@ -676,6 +1529,7 @@ Rectangle {
                     id: spkBar
                     anchors.centerIn: parent
                     bar: bar
+                    interactive: false
                     onSet: function(v){ audio.setVolume(audio.speaker, v); }
                 }
                 Binding {
@@ -693,7 +1547,7 @@ Rectangle {
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     onWheel: (e) => {
                         const d = (e.angleDelta.y > 0) ? 0.05 : -0.05;
-                        audio.stepVolume(audio.speaker, d);
+                        audio.stepVolume(audio.speaker, d, true);
                     }
                 }
             }
@@ -704,6 +1558,33 @@ Rectangle {
                 font.bold: true
                 color: audio.speakerMuted ? bar.muted : bar.audioSpeakerUtilColor(audio.speakerPercent)
                 anchors.verticalCenter: parent.verticalCenter
+            }
+            // vol% | 󰂯 bat%
+            Row {
+                visible: audio.speakerBtBattery >= 0
+                spacing: 4
+                anchors.verticalCenter: parent.verticalCenter
+                Text {
+                    text: "|"
+                    font.pixelSize: 11
+                    color: bar.overlay
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: (bar && bar.iconAudioBluetooth) ? bar.iconAudioBluetooth : "󰂯"
+                    font.pixelSize: 12
+                    font.family: bar.fontFamily
+                    color: audio.batteryColor(audio.speakerBtBattery)
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: audio.speakerBtBattery + "%"
+                    font.pixelSize: 11
+                    font.bold: true
+                    font.family: bar.fontFamily
+                    color: audio.batteryColor(audio.speakerBtBattery)
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
         }
 
@@ -735,6 +1616,7 @@ Rectangle {
                     id: micBar
                     anchors.centerIn: parent
                     bar: bar
+                    interactive: false
                     onSet: function(v){ audio.setVolume(audio.mic, v); }
                 }
                 Binding {
@@ -752,7 +1634,7 @@ Rectangle {
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     onWheel: (e) => {
                         const d = (e.angleDelta.y > 0) ? 0.05 : -0.05;
-                        audio.stepVolume(audio.mic, d);
+                        audio.stepVolume(audio.mic, d, false);
                     }
                 }
             }
@@ -764,99 +1646,228 @@ Rectangle {
                 color: audio.micMuted ? bar.muted : bar.audioMicUtilColor(audio.micPercent)
                 anchors.verticalCenter: parent.verticalCenter
             }
+            Row {
+                visible: audio.micBtBattery >= 0
+                spacing: 4
+                anchors.verticalCenter: parent.verticalCenter
+                Text {
+                    text: "|"
+                    font.pixelSize: 11
+                    color: bar.overlay
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: (bar && bar.iconAudioBluetooth) ? bar.iconAudioBluetooth : "󰂯"
+                    font.pixelSize: 12
+                    font.family: bar.fontFamily
+                    color: audio.batteryColor(audio.micBtBattery)
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: audio.micBtBattery + "%"
+                    font.pixelSize: 11
+                    font.bold: true
+                    font.family: bar.fontFamily
+                    color: audio.batteryColor(audio.micBtBattery)
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
         }
 
-        // DUAL VIEW
+        // DUAL VIEW (default) — wider: icon + bar + % for speaker and mic
         Item {
             visible: audio.viewMode === 2
             anchors.fill: parent
 
             Row {
-                anchors.left: parent.left
-                anchors.leftMargin: bar.audioViewSidePadding
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 3
+                anchors.centerIn: parent
+                spacing: 10
 
-                Item {
-                    width: bar.iconSizeTray
-                    height: bar.iconSizeTray
+                // --- Speaker half ---
+                Row {
+                    spacing: 4
                     anchors.verticalCenter: parent.verticalCenter
 
+                    Item {
+                        width: bar.iconSizeTray
+                        height: bar.iconSizeTray
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
+                            font.pixelSize: bar.iconSizeTray
+                            font.family: bar.fontFamily
+                            color: audio.speakerMuted ? bar.audioSpeakerIconMuted : bar.audioSpeakerIcon
+                        }
+                    }
+                    Item {
+                        width: bar.audioDualBarWidth || 72
+                        height: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        MiniVolumeBar {
+                            id: spkMiniBar
+                            anchors.centerIn: parent
+                            width: parent.width
+                            bar: bar
+                            interactive: false
+                            onSet: function(v){ audio.setVolume(audio.speaker, v); }
+                        }
+                        Binding {
+                            target: spkMiniBar
+                            property: "fill"
+                            value: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
+                        }
+                        Binding {
+                            target: spkMiniBar
+                            property: "value"
+                            value: audio.speakerVolume
+                        }
+                        WheelHandler {
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            onWheel: (e) => {
+                                const d = (e.angleDelta.y > 0) ? 0.05 : -0.05;
+                                audio.stepVolume(audio.speaker, d, true);
+                            }
+                        }
+                    }
                     Text {
-                        anchors.centerIn: parent
-                        text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
-                        font.pixelSize: bar.iconSizeTray
+                        width: bar.audioDualPercentWidth || 34
+                        text: audio.speakerPercent + "%"
+                        font.pixelSize: bar.fontPillLabel
+                        font.bold: true
                         font.family: bar.fontFamily
-                        color: audio.speakerMuted ? bar.audioSpeakerIconMuted : bar.audioSpeakerIcon
+                        color: audio.speakerMuted ? bar.muted : bar.audioSpeakerUtilColor(audio.speakerPercent)
+                        anchors.verticalCenter: parent.verticalCenter
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    // BT battery (playback): vol% | 󰂯 bat%
+                    Row {
+                        visible: audio.speakerBtBattery >= 0
+                        spacing: 3
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text {
+                            text: "|"
+                            font.pixelSize: 10
+                            color: bar.overlay
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: (bar && bar.iconAudioBluetooth) ? bar.iconAudioBluetooth : "󰂯"
+                            font.pixelSize: 11
+                            font.family: bar.fontFamily
+                            color: audio.batteryColor(audio.speakerBtBattery)
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: audio.speakerBtBattery + "%"
+                            font.pixelSize: 10
+                            font.bold: true
+                            font.family: bar.fontFamily
+                            color: audio.batteryColor(audio.speakerBtBattery)
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
                     }
                 }
-                Item {
-                    width: 58; height: 16
+
+                // Subtle divider between speaker and mic
+                Rectangle {
+                    width: 1
+                    height: 14
                     anchors.verticalCenter: parent.verticalCenter
-                    MiniVolumeBar {
-                        id: spkMiniBar
-                        anchors.centerIn: parent
-                        bar: bar
-                        onSet: function(v){ audio.setVolume(audio.speaker, v); }
-                    }
-                    Binding {
-                        target: spkMiniBar
-                        property: "fill"
-                        value: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
-                    }
-                    Binding {
-                        target: spkMiniBar
-                        property: "value"
-                        value: audio.speakerVolume
-                    }
-                    WheelHandler {
-                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                        onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.speaker, d); }
-                    }
+                    color: bar.dividerStrong
+                    opacity: 0.7
                 }
-            }
 
-            Row {
-                anchors.right: parent.right
-                anchors.rightMargin: bar.audioViewSidePadding
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 3
-
-                Item {
-                    width: bar.iconSizeTray
-                    height: bar.iconSizeTray
+                // --- Mic half ---
+                Row {
+                    spacing: 4
                     anchors.verticalCenter: parent.verticalCenter
 
+                    Item {
+                        width: bar.iconSizeTray
+                        height: bar.iconSizeTray
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
+                            font.pixelSize: bar.iconSizeTray
+                            font.family: bar.fontFamily
+                            color: audio.micMuted ? bar.audioMicIconMuted : bar.audioMicIcon
+                        }
+                    }
+                    Item {
+                        width: bar.audioDualBarWidth || 72
+                        height: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        MiniVolumeBar {
+                            id: micMiniBar
+                            anchors.centerIn: parent
+                            width: parent.width
+                            bar: bar
+                            interactive: false
+                            onSet: function(v){ audio.setVolume(audio.mic, v); }
+                        }
+                        Binding {
+                            target: micMiniBar
+                            property: "fill"
+                            value: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
+                        }
+                        Binding {
+                            target: micMiniBar
+                            property: "value"
+                            value: audio.micVolume
+                        }
+                        WheelHandler {
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            onWheel: (e) => {
+                                const d = (e.angleDelta.y > 0) ? 0.05 : -0.05;
+                                audio.stepVolume(audio.mic, d, false);
+                            }
+                        }
+                    }
                     Text {
-                        anchors.centerIn: parent
-                        text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
-                        font.pixelSize: bar.iconSizeTray
+                        width: bar.audioDualPercentWidth || 34
+                        text: audio.micPercent + "%"
+                        font.pixelSize: bar.fontPillLabel
+                        font.bold: true
                         font.family: bar.fontFamily
-                        color: audio.micMuted ? bar.audioMicIconMuted : bar.audioMicIcon
+                        color: audio.micMuted ? bar.muted : bar.audioMicUtilColor(audio.micPercent)
+                        anchors.verticalCenter: parent.verticalCenter
+                        horizontalAlignment: Text.AlignRight
                     }
-                }
-                Item {
-                    width: 58; height: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    MiniVolumeBar {
-                        id: micMiniBar
-                        anchors.centerIn: parent
-                        bar: bar
-                        onSet: function(v){ audio.setVolume(audio.mic, v); }
-                    }
-                    Binding {
-                        target: micMiniBar
-                        property: "fill"
-                        value: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
-                    }
-                    Binding {
-                        target: micMiniBar
-                        property: "value"
-                        value: audio.micVolume
-                    }
-                    WheelHandler {
-                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                        onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.mic, d); }
+                    // BT battery (recording) — hide if same MAC already shown on speaker side
+                    // (name-based MAC compare — never touch live speaker/mic PwNode in a binding)
+                    Row {
+                        visible: audio.micBtBattery >= 0
+                                 && !(audio.speakerBtBattery >= 0
+                                      && audio.btMacFromNodeName(audio.liveSinkName || audio.selectedSinkName)
+                                         === audio.btMacFromNodeName(audio.liveSourceName || audio.selectedSourceName)
+                                      && audio.btMacFromNodeName(audio.liveSinkName || audio.selectedSinkName).length > 0)
+                        spacing: 3
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text {
+                            text: "|"
+                            font.pixelSize: 10
+                            color: bar.overlay
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: (bar && bar.iconAudioBluetooth) ? bar.iconAudioBluetooth : "󰂯"
+                            font.pixelSize: 11
+                            font.family: bar.fontFamily
+                            color: audio.batteryColor(audio.micBtBattery)
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: audio.micBtBattery + "%"
+                            font.pixelSize: 10
+                            font.bold: true
+                            font.family: bar.fontFamily
+                            color: audio.batteryColor(audio.micBtBattery)
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
                     }
                 }
             }
@@ -893,9 +1904,11 @@ Rectangle {
                 anchors.margins: bar.popupSpacing
                 spacing: 16
 
-                // Header
+                // Header + tools (top-right: pw-top, restart audio)
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: 8
+
                     Text {
                         text: "Audio Controls"
                         color: bar.text
@@ -903,12 +1916,196 @@ Rectangle {
                         font.bold: true
                         font.family: bar.fontFamily
                     }
+
                     Item { Layout.fillWidth: true }
+
+                    // Optional status from restart / tools
                     Text {
-                        text: "right-click pill or outside to close"
-                        color: bar.overlay
-                        font.pixelSize: bar.popupHintSize
+                        visible: root.audioToolsStatus.length > 0
+                        text: root.audioToolsStatus
+                        color: bar.subtext
+                        font.pixelSize: 11
                         font.family: bar.fontFamily
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 140
+                    }
+
+                    // Open pw-top in a terminal (live PipeWire graph)
+                    Rectangle {
+                        width: pwTopLabel.implicitWidth + 16
+                        height: 24
+                        radius: bar.smallButtonRadius
+                        color: pwTopMa.containsMouse ? bar.popupButtonHoverBg : bar.surface
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
+
+                        Text {
+                            id: pwTopLabel
+                            anchors.centerIn: parent
+                            text: "pw-top"
+                            color: bar.text
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: bar.fontFamily
+                        }
+                        MouseArea {
+                            id: pwTopMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openPwTop()
+                        }
+                    }
+
+                    // Full PipeWire / WirePlumber restart (re-applies sticky echo cancel)
+                    Rectangle {
+                        width: restartLabel.implicitWidth + 16
+                        height: 24
+                        radius: bar.smallButtonRadius
+                        opacity: root.audioRestartBusy ? 0.6 : 1.0
+                        color: restartMa.containsMouse ? bar.accent : bar.surface
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
+
+                        Text {
+                            id: restartLabel
+                            anchors.centerIn: parent
+                            text: root.audioRestartBusy ? "Restarting…" : "Restart audio"
+                            color: restartMa.containsMouse ? bar.bg : bar.text
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: bar.fontFamily
+                        }
+                        MouseArea {
+                            id: restartMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: !root.audioRestartBusy
+                            cursorShape: root.audioRestartBusy ? Qt.BusyCursor : Qt.PointingHandCursor
+                            onClicked: root.restartSoundSystem()
+                        }
+                    }
+                }
+
+                // -------------------------------------------------------------
+                // Active streams (apps currently playing / recording)
+                // Between title and Playback — easy to scan at a glance.
+                // -------------------------------------------------------------
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: "Active streams"
+                        color: bar.accent
+                        font.pixelSize: bar.popupSectionSize
+                        font.bold: true
+                        font.family: bar.fontFamily
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(120, Math.max(52, streamCol.implicitHeight + 12))
+                        radius: bar.buttonRadius
+                        color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
+                        clip: true
+
+                        Flickable {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            contentHeight: streamCol.implicitHeight
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            interactive: contentHeight > height
+
+                            ColumnLayout {
+                                id: streamCol
+                                width: parent.width
+                                spacing: 3
+
+                                // Playback streams
+                                Repeater {
+                                    model: root.streamPlayback
+                                    delegate: RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        required property var modelData
+
+                                        Text {
+                                            text: modelData.corked ? "‖" : "▶"
+                                            color: modelData.mute ? bar.muted : "#10B981"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            Layout.preferredWidth: 14
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.label
+                                                  || (modelData.app + (modelData.media ? (" · " + modelData.media) : ""))
+                                            color: modelData.mute ? bar.muted : bar.text
+                                            font.pixelSize: 12
+                                            font.family: bar.fontFamily
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            text: modelData.mute ? "muted"
+                                                  : ((modelData.volume_pct !== undefined ? modelData.volume_pct : 0) + "%")
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            Layout.preferredWidth: 42
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+                                    }
+                                }
+
+                                // Recording streams
+                                Repeater {
+                                    model: root.streamRecording
+                                    delegate: RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        required property var modelData
+
+                                        Text {
+                                            text: "●"
+                                            color: modelData.mute ? bar.muted : "#89b4fa"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            Layout.preferredWidth: 14
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "REC · " + (modelData.label
+                                                  || (modelData.app + (modelData.media ? (" · " + modelData.media) : "")))
+                                            color: modelData.mute ? bar.muted : bar.text
+                                            font.pixelSize: 12
+                                            font.family: bar.fontFamily
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            text: modelData.mute ? "muted"
+                                                  : ((modelData.volume_pct !== undefined ? modelData.volume_pct : 0) + "%")
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            Layout.preferredWidth: 42
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: root.streamPlayback.length === 0
+                                             && root.streamRecording.length === 0
+                                    text: "No active app streams (paused & level-meters hidden)"
+                                    color: bar.overlay
+                                    font.pixelSize: 11
+                                    font.italic: true
+                                    font.family: bar.fontFamily
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -924,95 +2121,153 @@ Rectangle {
                         font.bold: true
                     }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 28
-                        radius: bar.buttonRadius
-                        color: outDevMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
-                        border.width: bar.controlBorderWidth
-                        border.color: bar.dividerStrong
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 6
-                            Text {
-                                Layout.fillWidth: true
-                                text: audio.getCurrentDeviceName(true)
-                                color: bar.text
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                            }
-                            Text {
-                                text: "▼"
-                                color: bar.subtext
-                                font.pixelSize: 11
-                            }
-                        }
-
-                        MouseArea {
-                            id: outDevMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: openAudioDeviceList(true, outDevMouse)
-                        }
-                    }
-
-                    // Playback card profile dropdown (hidden when card/profiles unavailable)
-                    Rectangle {
-                        visible: audio.speakerCard.length > 0 && audio.speakerProfiles.length > 0
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 26
-                        radius: bar.buttonRadius
-                        color: outProfMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.45)
-                        border.width: bar.controlBorderWidth
-                        border.color: bar.dividerStrong
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 6
-                            Text {
-                                text: "Profile"
-                                color: bar.subtext
-                                font.pixelSize: 11
-                                font.family: bar.fontFamily
-                            }
-                            Text {
-                                Layout.fillWidth: true
-                                text: audio.getProfileLabel(true)
-                                color: bar.text
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                            }
-                            Text {
-                                text: "▼"
-                                color: bar.subtext
-                                font.pixelSize: 11
-                            }
-                        }
-
-                        MouseArea {
-                            id: outProfMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: openAudioProfileList(true)
-                        }
-                    }
-
+                    // Device picker with transport icon (Bluetooth / USB / HDMI / internal)
                     RowLayout {
                         Layout.fillWidth: true
+                        spacing: 6
+
+                        Text {
+                            text: "Device"
+                            color: bar.subtext
+                            font.pixelSize: 11
+                            font.family: bar.fontFamily
+                            Layout.preferredWidth: 48
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 28
+                            radius: bar.buttonRadius
+                            color: outDevMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
+                            border.width: bar.controlBorderWidth
+                            border.color: bar.dividerStrong
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 6
+                                Text {
+                                    text: audio.deviceKindIcon(audio.popupSpeaker)
+                                    color: bar.subtext
+                                    font.pixelSize: 14
+                                    font.family: bar.fontFamily
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: audio.getSelectedDeviceName(true)
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                // Bluetooth battery (BlueZ Battery1 via Quickshell.Bluetooth)
+                                Row {
+                                    visible: audio.popupSpeakerBtBattery >= 0
+                                    spacing: 3
+                                    Text {
+                                        text: (bar && bar.iconAudioBattery) ? bar.iconAudioBattery : "󰁹"
+                                        color: audio.batteryColor(audio.popupSpeakerBtBattery)
+                                        font.pixelSize: 13
+                                        font.family: bar.fontFamily
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: audio.popupSpeakerBtBattery + "%"
+                                        color: audio.batteryColor(audio.popupSpeakerBtBattery)
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                Text {
+                                    text: "▼"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            MouseArea {
+                                id: outDevMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: openAudioDeviceList(true, outDevMouse)
+                            }
+                        }
+                    }
+
+                    // Playback profile — label outside, matching Device / Level
+                    RowLayout {
+                        visible: audio.speakerCard.length > 0 && audio.speakerProfiles.length > 0
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Text {
+                            text: "Profile"
+                            color: bar.subtext
+                            font.pixelSize: 11
+                            font.family: bar.fontFamily
+                            Layout.preferredWidth: 48
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 26
+                            radius: bar.buttonRadius
+                            color: outProfMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.45)
+                            border.width: bar.controlBorderWidth
+                            border.color: bar.dividerStrong
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 6
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: audio.getProfileLabel(true)
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    text: "▼"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            MouseArea {
+                                id: outProfMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: openAudioProfileList(true, outProfMouse)
+                            }
+                        }
+                    }
+
+                    // Master volume — operates on selected playback device
+                    // Slight extra top gap so Volume sits a bit lower than Device/Profile.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
                         spacing: 8
 
                         Text {
-                            text: audio.speakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
+                            text: "Volume"
+                            color: bar.subtext
+                            font.pixelSize: 11
+                            font.family: bar.fontFamily
+                            Layout.preferredWidth: 48
+                        }
+
+                        Text {
+                            text: audio.popupSpeakerMuted ? bar.iconSpeakerMuted : bar.iconSpeaker
                             font.pixelSize: bar.iconSizePopup
                             font.family: bar.fontFamily
-                            color: audio.speakerMuted ? bar.audioSpeakerIconMuted : bar.audioSpeakerIcon
+                            color: audio.popupSpeakerMuted ? bar.audioSpeakerIconMuted : bar.audioSpeakerIcon
                         }
 
                         Item {
@@ -1023,28 +2278,28 @@ Rectangle {
                                 anchors.fill: parent
                                 anchors.verticalCenter: parent.verticalCenter
                                 bar: bar
-                                onSet: function(v){ audio.setVolume(audio.speaker, v); }
+                                onSet: function(v){ audio.setVolume(audio.popupSpeaker, v); }
                                 barHeight: bar ? bar.sliderPopupHeight : 8
                             }
                             Binding {
                                 target: popupSpkBar
                                 property: "fill"
-                                value: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.speakerPercent)
+                                value: audio.popupSpeakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(audio.popupSpeakerPercent)
                             }
                             Binding {
                                 target: popupSpkBar
                                 property: "value"
-                                value: audio.speakerVolume
+                                value: audio.popupSpeakerVolume
                             }
                             WheelHandler {
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.speaker, d); }
+                                onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.popupSpeaker, d, true); }
                             }
                         }
 
                         Text {
-                            text: audio.speakerPercent + "%"
-                            color: audio.speakerMuted ? bar.muted : bar.audioSpeakerUtilColor(audio.speakerPercent)
+                            text: audio.popupSpeakerPercent + "%"
+                            color: audio.popupSpeakerMuted ? bar.muted : bar.audioSpeakerUtilColor(audio.popupSpeakerPercent)
                             font.pixelSize: 13
                             font.bold: true
                             Layout.preferredWidth: 42
@@ -1052,13 +2307,13 @@ Rectangle {
 
                         Rectangle {
                             width: 52; height: 22; radius: bar.smallButtonRadius
-                            color: muteOutMa.containsMouse ? (audio.speakerMuted ? bar.muted : bar.accent) : bar.surface
+                            color: muteOutMa.containsMouse ? (audio.popupSpeakerMuted ? bar.muted : bar.accent) : bar.surface
                             border.width: bar.controlBorderWidth
                             border.color: bar.dividerStrong
 
                             Text {
                                 anchors.centerIn: parent
-                                text: audio.speakerMuted ? "Unmute" : "Mute"
+                                text: audio.popupSpeakerMuted ? "Unmute" : "Mute"
                                 color: muteOutMa.containsMouse ? bar.bg : bar.text
                                 font.pixelSize: 11
                                 font.bold: true
@@ -1068,91 +2323,164 @@ Rectangle {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: audio.toggleMute(audio.speaker)
+                                onClicked: audio.toggleMute(audio.popupSpeaker)
                             }
                         }
                     }
 
-                    // L / R channel volume (stereo playback only)
-                    RowLayout {
-                        visible: audio.speakerHasStereo
+                    // L / R channel volume (stereo selected playback only) — collapsible
+                    // Collapsed: compact "L/R ▸  L% / R%" row. Expanded: full dual bars + ▾.
+                    ColumnLayout {
+                        visible: audio.popupSpeakerHasStereo
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 0
 
-                        Text {
-                            text: "L"
-                            color: bar.subtext
-                            font.pixelSize: 11
-                            font.bold: true
-                            Layout.preferredWidth: 12
-                        }
+                        // Collapsed summary row
                         Item {
+                            visible: !root.speakerLrExpanded
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 14
-                            VolumeBar {
-                                id: popupSpkLBar
+                            Layout.preferredHeight: 18
+
+                            RowLayout {
                                 anchors.fill: parent
-                                bar: bar
-                                barHeight: 5
-                                onSet: function(v) { audio.setChannelVolume(audio.speaker, true, v, true); }
+                                spacing: 6
+
+                                Item { Layout.preferredWidth: 48; Layout.preferredHeight: 1 }
+
+                                Text {
+                                    text: "▸"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                    Layout.preferredWidth: 12
+                                }
+                                Text {
+                                    text: "L/R"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                    font.family: bar.fontFamily
+                                    font.bold: true
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    text: Math.round(audio.popupSpeakerLeftVolume * 100) + " / "
+                                          + Math.round(audio.popupSpeakerRightVolume * 100)
+                                    color: bar.overlay
+                                    font.pixelSize: 11
+                                    font.family: bar.fontFamily
+                                }
                             }
-                            Binding {
-                                target: popupSpkLBar
-                                property: "fill"
-                                value: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(Math.round(audio.speakerLeftVolume * 100))
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.speakerLrExpanded = true
                             }
-                            Binding {
-                                target: popupSpkLBar
-                                property: "value"
-                                value: audio.speakerLeftVolume
-                            }
-                        }
-                        Text {
-                            text: Math.round(audio.speakerLeftVolume * 100) + "%"
-                            color: bar.subtext
-                            font.pixelSize: 11
-                            Layout.preferredWidth: 32
                         }
 
-                        Text {
-                            text: "R"
-                            color: bar.subtext
-                            font.pixelSize: 11
-                            font.bold: true
-                            Layout.preferredWidth: 12
-                        }
-                        Item {
+                        // Expanded L/R bars (chevron collapses)
+                        RowLayout {
+                            visible: root.speakerLrExpanded
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 14
-                            VolumeBar {
-                                id: popupSpkRBar
-                                anchors.fill: parent
-                                bar: bar
-                                barHeight: 5
-                                onSet: function(v) { audio.setChannelVolume(audio.speaker, false, v, true); }
+                            spacing: 8
+
+                            // Collapse control in the label column
+                            Item {
+                                Layout.preferredWidth: 48
+                                Layout.preferredHeight: 14
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 4
+                                    text: "▾"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.speakerLrExpanded = false
+                                }
                             }
-                            Binding {
-                                target: popupSpkRBar
-                                property: "fill"
-                                value: audio.speakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(Math.round(audio.speakerRightVolume * 100))
+
+                            Text {
+                                text: "L"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                font.bold: true
+                                Layout.preferredWidth: 12
                             }
-                            Binding {
-                                target: popupSpkRBar
-                                property: "value"
-                                value: audio.speakerRightVolume
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 14
+                                VolumeBar {
+                                    id: popupSpkLBar
+                                    anchors.fill: parent
+                                    bar: bar
+                                    barHeight: 5
+                                    onSet: function(v) { audio.setChannelVolume(audio.popupSpeaker, true, v, true); }
+                                }
+                                Binding {
+                                    target: popupSpkLBar
+                                    property: "fill"
+                                    value: audio.popupSpeakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(Math.round(audio.popupSpeakerLeftVolume * 100))
+                                }
+                                Binding {
+                                    target: popupSpkLBar
+                                    property: "value"
+                                    value: audio.popupSpeakerLeftVolume
+                                }
                             }
-                        }
-                        Text {
-                            text: Math.round(audio.speakerRightVolume * 100) + "%"
-                            color: bar.subtext
-                            font.pixelSize: 11
-                            Layout.preferredWidth: 32
+                            Text {
+                                text: Math.round(audio.popupSpeakerLeftVolume * 100) + "%"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                Layout.preferredWidth: 32
+                            }
+
+                            Text {
+                                text: "R"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                font.bold: true
+                                Layout.preferredWidth: 12
+                            }
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 14
+                                VolumeBar {
+                                    id: popupSpkRBar
+                                    anchors.fill: parent
+                                    bar: bar
+                                    barHeight: 5
+                                    onSet: function(v) { audio.setChannelVolume(audio.popupSpeaker, false, v, true); }
+                                }
+                                Binding {
+                                    target: popupSpkRBar
+                                    property: "fill"
+                                    value: audio.popupSpeakerMuted ? bar.sliderFillMuted : bar.audioSpeakerUtilColor(Math.round(audio.popupSpeakerRightVolume * 100))
+                                }
+                                Binding {
+                                    target: popupSpkRBar
+                                    property: "value"
+                                    value: audio.popupSpeakerRightVolume
+                                }
+                            }
+                            Text {
+                                text: Math.round(audio.popupSpeakerRightVolume * 100) + "%"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                Layout.preferredWidth: 32
+                            }
                         }
                     }
 
-                    // Playback VU / peak meter
+                    // Playback VU / peak meter + Off switch (right of "Level")
+                    // Extra top gap so Level sits a bit lower (matches Volume spacing).
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.topMargin: 4
                         spacing: 6
 
                         Text {
@@ -1160,16 +2488,47 @@ Rectangle {
                             color: bar.subtext
                             font.pixelSize: 11
                             font.family: bar.fontFamily
-                            Layout.preferredWidth: 36
+                            Layout.preferredWidth: 48
                         }
+
+                        Rectangle {
+                            width: 40
+                            height: 20
+                            radius: bar.smallButtonRadius
+                            color: {
+                                if (spkLevelOffMa.containsMouse)
+                                    return root.speakerLevelMeterOn ? bar.muted : bar.accent;
+                                return bar.surface;
+                            }
+                            border.width: bar.controlBorderWidth
+                            border.color: bar.dividerStrong
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.speakerLevelMeterOn ? "Off" : "On"
+                                color: spkLevelOffMa.containsMouse ? bar.bg : bar.text
+                                font.pixelSize: 10
+                                font.bold: true
+                                font.family: bar.fontFamily
+                            }
+                            MouseArea {
+                                id: spkLevelOffMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.speakerLevelMeterOn = !root.speakerLevelMeterOn
+                            }
+                        }
+
                         AudioLevelMeter {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 10
                             bar: bar
                             barHeight: 8
-                            muted: audio.speakerMuted
-                            // Peak is 0..1 from PwNodePeakMonitor; force 0 when muted/closed
-                            level: (audioPopup.visible && !audio.speakerMuted) ? speakerPeakMon.peak : 0
+                            muted: audio.popupSpeakerMuted || !root.speakerLevelMeterOn
+                            level: (audioPopup.visible && root.speakerLevelMeterOn && !audio.popupSpeakerMuted)
+                                   ? speakerPeakMon.peak : 0
+                            opacity: root.speakerLevelMeterOn ? 1.0 : 0.35
                         }
                     }
                 }
@@ -1186,95 +2545,153 @@ Rectangle {
                         font.bold: true
                     }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 28
-                        radius: bar.buttonRadius
-                        color: inDevMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
-                        border.width: bar.controlBorderWidth
-                        border.color: bar.dividerStrong
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 6
-                            Text {
-                                Layout.fillWidth: true
-                                text: audio.getCurrentDeviceName(false)
-                                color: bar.text
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                            }
-                            Text {
-                                text: "▼"
-                                color: bar.subtext
-                                font.pixelSize: 11
-                            }
-                        }
-
-                        MouseArea {
-                            id: inDevMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: openAudioDeviceList(false, inDevMouse)
-                        }
-                    }
-
-                    // Recording card profile dropdown (hidden when card/profiles unavailable)
-                    Rectangle {
-                        visible: audio.micCard.length > 0 && audio.micProfiles.length > 0
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 26
-                        radius: bar.buttonRadius
-                        color: inProfMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.45)
-                        border.width: bar.controlBorderWidth
-                        border.color: bar.dividerStrong
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
-                            spacing: 6
-                            Text {
-                                text: "Profile"
-                                color: bar.subtext
-                                font.pixelSize: 11
-                                font.family: bar.fontFamily
-                            }
-                            Text {
-                                Layout.fillWidth: true
-                                text: audio.getProfileLabel(false)
-                                color: bar.text
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                            }
-                            Text {
-                                text: "▼"
-                                color: bar.subtext
-                                font.pixelSize: 11
-                            }
-                        }
-
-                        MouseArea {
-                            id: inProfMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: openAudioProfileList(false)
-                        }
-                    }
-
+                    // Device picker with transport icon (Bluetooth headset, USB mic, etc.)
                     RowLayout {
                         Layout.fillWidth: true
+                        spacing: 6
+
+                        Text {
+                            text: "Device"
+                            color: bar.subtext
+                            font.pixelSize: 11
+                            font.family: bar.fontFamily
+                            Layout.preferredWidth: 48
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 28
+                            radius: bar.buttonRadius
+                            color: inDevMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.6)
+                            border.width: bar.controlBorderWidth
+                            border.color: bar.dividerStrong
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 6
+                                Text {
+                                    text: audio.deviceKindIcon(audio.popupMic)
+                                    color: bar.subtext
+                                    font.pixelSize: 14
+                                    font.family: bar.fontFamily
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: audio.getSelectedDeviceName(false)
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                Row {
+                                    visible: audio.popupMicBtBattery >= 0
+                                    spacing: 3
+                                    Text {
+                                        text: (bar && bar.iconAudioBattery) ? bar.iconAudioBattery : "󰁹"
+                                        color: audio.batteryColor(audio.popupMicBtBattery)
+                                        font.pixelSize: 13
+                                        font.family: bar.fontFamily
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: audio.popupMicBtBattery + "%"
+                                        color: audio.batteryColor(audio.popupMicBtBattery)
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                Text {
+                                    text: "▼"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            MouseArea {
+                                id: inDevMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: openAudioDeviceList(false, inDevMouse)
+                            }
+                        }
+                    }
+
+                    // Headset / Bluetooth profile (HFP vs A2DP, etc.) — only when a
+                    // connected headset exposes input-capable card profiles.
+                    RowLayout {
+                        visible: audio.showRecordingHeadsetProfile
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Text {
+                            text: "Profile"
+                            color: bar.subtext
+                            font.pixelSize: 11
+                            font.family: bar.fontFamily
+                            Layout.preferredWidth: 48
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 26
+                            radius: bar.buttonRadius
+                            color: inProfMouse.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.45)
+                            border.width: bar.controlBorderWidth
+                            border.color: bar.dividerStrong
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 6
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: audio.getProfileLabel(false)
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    text: "▼"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            MouseArea {
+                                id: inProfMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: openAudioProfileList(false, inProfMouse)
+                            }
+                        }
+                    }
+
+                    // Master volume — operates on selected recording device
+                    // Slight extra top gap so Volume sits a bit lower than Device/Profile.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
                         spacing: 8
 
                         Text {
-                            text: audio.micMuted ? bar.iconMicMuted : bar.iconMic
+                            text: "Volume"
+                            color: bar.subtext
+                            font.pixelSize: 11
+                            font.family: bar.fontFamily
+                            Layout.preferredWidth: 48
+                        }
+
+                        Text {
+                            text: audio.popupMicMuted ? bar.iconMicMuted : bar.iconMic
                             font.pixelSize: bar.iconSizePopup
                             font.family: bar.fontFamily
-                            color: audio.micMuted ? bar.audioMicIconMuted : bar.audioMicIcon
+                            color: audio.popupMicMuted ? bar.audioMicIconMuted : bar.audioMicIcon
                         }
 
                         Item {
@@ -1285,28 +2702,28 @@ Rectangle {
                                 anchors.fill: parent
                                 anchors.verticalCenter: parent.verticalCenter
                                 bar: bar
-                                onSet: function(v){ audio.setVolume(audio.mic, v); }
+                                onSet: function(v){ audio.setVolume(audio.popupMic, v); }
                                 barHeight: bar ? bar.sliderPopupHeight : 8
                             }
                             Binding {
                                 target: popupMicBar
                                 property: "fill"
-                                value: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.micPercent)
+                                value: audio.popupMicMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(audio.popupMicPercent)
                             }
                             Binding {
                                 target: popupMicBar
                                 property: "value"
-                                value: audio.micVolume
+                                value: audio.popupMicVolume
                             }
                             WheelHandler {
                                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.mic, d); }
+                                onWheel: (e) => { const d = (e.angleDelta.y > 0) ? 0.05 : -0.05; audio.stepVolume(audio.popupMic, d, false); }
                             }
                         }
 
                         Text {
-                            text: audio.micPercent + "%"
-                            color: audio.micMuted ? bar.muted : bar.audioMicUtilColor(audio.micPercent)
+                            text: audio.popupMicPercent + "%"
+                            color: audio.popupMicMuted ? bar.muted : bar.audioMicUtilColor(audio.popupMicPercent)
                             font.pixelSize: 13
                             font.bold: true
                             Layout.preferredWidth: 42
@@ -1314,13 +2731,13 @@ Rectangle {
 
                         Rectangle {
                             width: 52; height: 22; radius: bar.smallButtonRadius
-                            color: muteInMa.containsMouse ? (audio.micMuted ? bar.muted : bar.accent) : bar.surface
+                            color: muteInMa.containsMouse ? (audio.popupMicMuted ? bar.muted : bar.accent) : bar.surface
                             border.width: bar.controlBorderWidth
                             border.color: bar.dividerStrong
 
                             Text {
                                 anchors.centerIn: parent
-                                text: audio.micMuted ? "Unmute" : "Mute"
+                                text: audio.popupMicMuted ? "Unmute" : "Mute"
                                 color: muteInMa.containsMouse ? bar.bg : bar.text
                                 font.pixelSize: 11
                                 font.bold: true
@@ -1330,91 +2747,162 @@ Rectangle {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: audio.toggleMute(audio.mic)
+                                onClicked: audio.toggleMute(audio.popupMic)
                             }
                         }
                     }
 
-                    // L / R channel volume (stereo recording only)
-                    RowLayout {
-                        visible: audio.micHasStereo
+                    // L / R channel volume (stereo selected recording only) — collapsible
+                    ColumnLayout {
+                        visible: audio.popupMicHasStereo
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 0
 
-                        Text {
-                            text: "L"
-                            color: bar.subtext
-                            font.pixelSize: 11
-                            font.bold: true
-                            Layout.preferredWidth: 12
-                        }
+                        // Collapsed summary row
                         Item {
+                            visible: !root.micLrExpanded
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 14
-                            VolumeBar {
-                                id: popupMicLBar
+                            Layout.preferredHeight: 18
+
+                            RowLayout {
                                 anchors.fill: parent
-                                bar: bar
-                                barHeight: 5
-                                onSet: function(v) { audio.setChannelVolume(audio.mic, true, v, false); }
+                                spacing: 6
+
+                                Item { Layout.preferredWidth: 48; Layout.preferredHeight: 1 }
+
+                                Text {
+                                    text: "▸"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                    Layout.preferredWidth: 12
+                                }
+                                Text {
+                                    text: "L/R"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                    font.family: bar.fontFamily
+                                    font.bold: true
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    text: Math.round(audio.popupMicLeftVolume * 100) + " / "
+                                          + Math.round(audio.popupMicRightVolume * 100)
+                                    color: bar.overlay
+                                    font.pixelSize: 11
+                                    font.family: bar.fontFamily
+                                }
                             }
-                            Binding {
-                                target: popupMicLBar
-                                property: "fill"
-                                value: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(Math.round(audio.micLeftVolume * 100))
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.micLrExpanded = true
                             }
-                            Binding {
-                                target: popupMicLBar
-                                property: "value"
-                                value: audio.micLeftVolume
-                            }
-                        }
-                        Text {
-                            text: Math.round(audio.micLeftVolume * 100) + "%"
-                            color: bar.subtext
-                            font.pixelSize: 11
-                            Layout.preferredWidth: 32
                         }
 
-                        Text {
-                            text: "R"
-                            color: bar.subtext
-                            font.pixelSize: 11
-                            font.bold: true
-                            Layout.preferredWidth: 12
-                        }
-                        Item {
+                        // Expanded L/R bars (chevron collapses)
+                        RowLayout {
+                            visible: root.micLrExpanded
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 14
-                            VolumeBar {
-                                id: popupMicRBar
-                                anchors.fill: parent
-                                bar: bar
-                                barHeight: 5
-                                onSet: function(v) { audio.setChannelVolume(audio.mic, false, v, false); }
+                            spacing: 8
+
+                            Item {
+                                Layout.preferredWidth: 48
+                                Layout.preferredHeight: 14
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 4
+                                    text: "▾"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.micLrExpanded = false
+                                }
                             }
-                            Binding {
-                                target: popupMicRBar
-                                property: "fill"
-                                value: audio.micMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(Math.round(audio.micRightVolume * 100))
+
+                            Text {
+                                text: "L"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                font.bold: true
+                                Layout.preferredWidth: 12
                             }
-                            Binding {
-                                target: popupMicRBar
-                                property: "value"
-                                value: audio.micRightVolume
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 14
+                                VolumeBar {
+                                    id: popupMicLBar
+                                    anchors.fill: parent
+                                    bar: bar
+                                    barHeight: 5
+                                    onSet: function(v) { audio.setChannelVolume(audio.popupMic, true, v, false); }
+                                }
+                                Binding {
+                                    target: popupMicLBar
+                                    property: "fill"
+                                    value: audio.popupMicMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(Math.round(audio.popupMicLeftVolume * 100))
+                                }
+                                Binding {
+                                    target: popupMicLBar
+                                    property: "value"
+                                    value: audio.popupMicLeftVolume
+                                }
                             }
-                        }
-                        Text {
-                            text: Math.round(audio.micRightVolume * 100) + "%"
-                            color: bar.subtext
-                            font.pixelSize: 11
-                            Layout.preferredWidth: 32
+                            Text {
+                                text: Math.round(audio.popupMicLeftVolume * 100) + "%"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                Layout.preferredWidth: 32
+                            }
+
+                            Text {
+                                text: "R"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                font.bold: true
+                                Layout.preferredWidth: 12
+                            }
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 14
+                                VolumeBar {
+                                    id: popupMicRBar
+                                    anchors.fill: parent
+                                    bar: bar
+                                    barHeight: 5
+                                    onSet: function(v) { audio.setChannelVolume(audio.popupMic, false, v, false); }
+                                }
+                                Binding {
+                                    target: popupMicRBar
+                                    property: "fill"
+                                    value: audio.popupMicMuted ? bar.sliderFillMuted : bar.audioMicUtilColor(Math.round(audio.popupMicRightVolume * 100))
+                                }
+                                Binding {
+                                    target: popupMicRBar
+                                    property: "value"
+                                    value: audio.popupMicRightVolume
+                                }
+                            }
+                            Text {
+                                text: Math.round(audio.popupMicRightVolume * 100) + "%"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                Layout.preferredWidth: 32
+                            }
                         }
                     }
 
-                    // Recording VU / peak meter
+                    // Recording VU / peak meter + Off switch (right of "Level")
+                    // Extra top gap so Level sits a bit lower (matches Volume spacing).
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.topMargin: 4
                         spacing: 6
 
                         Text {
@@ -1422,90 +2910,176 @@ Rectangle {
                             color: bar.subtext
                             font.pixelSize: 11
                             font.family: bar.fontFamily
-                            Layout.preferredWidth: 36
+                            Layout.preferredWidth: 48
                         }
+
+                        // Compact On/Off for this meter only (does not mute audio)
+                        Rectangle {
+                            width: 40
+                            height: 20
+                            radius: bar.smallButtonRadius
+                            color: {
+                                if (micLevelOffMa.containsMouse)
+                                    return root.micLevelMeterOn ? bar.muted : bar.accent;
+                                return bar.surface;
+                            }
+                            border.width: bar.controlBorderWidth
+                            border.color: bar.dividerStrong
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.micLevelMeterOn ? "Off" : "On"
+                                color: micLevelOffMa.containsMouse ? bar.bg : bar.text
+                                font.pixelSize: 10
+                                font.bold: true
+                                font.family: bar.fontFamily
+                            }
+                            MouseArea {
+                                id: micLevelOffMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.micLevelMeterOn = !root.micLevelMeterOn
+                            }
+                        }
+
                         AudioLevelMeter {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 10
                             bar: bar
                             barHeight: 8
-                            muted: audio.micMuted
-                            level: (audioPopup.visible && !audio.micMuted) ? micPeakMon.peak : 0
+                            muted: audio.popupMicMuted || !root.micLevelMeterOn
+                            level: (audioPopup.visible && root.micLevelMeterOn && !audio.popupMicMuted)
+                                   ? micPeakMon.peak : 0
+                            opacity: root.micLevelMeterOn ? 1.0 : 0.35
                         }
                     }
 
                     // ---------------------------------------------------------
-                    // Echo cancel toggle (system AEC for speaker→mic bleed)
+                    // Echo cancel (system AEC for speaker→mic bleed) — collapsible
                     // Fully reversible: Off restores prior hardware defaults.
                     // Does not edit PipeWire conf; safe alongside Meet/Discord.
                     // ---------------------------------------------------------
                     ColumnLayout {
                         Layout.fillWidth: true
+                        Layout.topMargin: 2
                         spacing: 4
 
-                        RowLayout {
+                        // Header always visible: chevron + title + compact state when collapsed
+                        Item {
                             Layout.fillWidth: true
-                            spacing: 8
+                            Layout.preferredHeight: 24
 
-                            Text {
-                                text: "Echo cancel"
-                                color: bar.text
-                                font.pixelSize: 12
-                                font.family: bar.fontFamily
-                                font.bold: true
-                            }
-
-                            Item { Layout.fillWidth: true }
-
-                            // Toggle button — label always shows the action / state clearly
-                            Rectangle {
-                                width: 72
-                                height: 24
-                                radius: bar.smallButtonRadius
-                                opacity: root.echoCancelBusy ? 0.6 : 1.0
-                                color: {
-                                    if (echoCancelToggleMa.containsMouse)
-                                        return root.echoCancelEnabled ? bar.muted : bar.accent;
-                                    return root.echoCancelEnabled ? bar.accent : bar.surface;
-                                }
-                                border.width: bar.controlBorderWidth
-                                border.color: bar.dividerStrong
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 8
 
                                 Text {
-                                    anchors.centerIn: parent
+                                    text: root.echoCancelExpanded ? "▾" : "▸"
+                                    color: bar.subtext
+                                    font.pixelSize: 12
+                                    Layout.preferredWidth: 12
+                                }
+                                Text {
+                                    text: "Echo cancel"
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    font.family: bar.fontFamily
+                                    font.bold: true
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    visible: !root.echoCancelExpanded
                                     text: root.echoCancelBusy
                                           ? "…"
                                           : (root.echoCancelEnabled ? "On" : "Off")
-                                    color: {
-                                        if (echoCancelToggleMa.containsMouse)
-                                            return bar.bg;
-                                        return root.echoCancelEnabled ? bar.bg : bar.text;
-                                    }
-                                    font.pixelSize: 12
+                                    color: root.echoCancelEnabled ? bar.accent : bar.subtext
+                                    font.pixelSize: 11
                                     font.bold: true
                                     font.family: bar.fontFamily
                                 }
+                            }
 
-                                MouseArea {
-                                    id: echoCancelToggleMa
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: root.echoCancelBusy ? Qt.BusyCursor : Qt.PointingHandCursor
-                                    enabled: !root.echoCancelBusy
-                                    onClicked: root.setEchoCancel(!root.echoCancelEnabled)
-                                }
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.echoCancelExpanded = !root.echoCancelExpanded
                             }
                         }
 
-                        Text {
+                        // Expanded body: toggle + hint
+                        ColumnLayout {
+                            visible: root.echoCancelExpanded
                             Layout.fillWidth: true
-                            text: root.echoCancelHint.length
-                                  ? root.echoCancelHint
-                                  : "Sticky preference · survives reboot when On"
-                            color: root.echoCancelError.length ? bar.muted : bar.subtext
-                            font.pixelSize: 10
-                            font.family: bar.fontFamily
-                            wrapMode: Text.WordWrap
+                            spacing: 4
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Item { Layout.preferredWidth: 12; Layout.preferredHeight: 1 }
+
+                                Text {
+                                    text: "Enable"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
+                                    font.family: bar.fontFamily
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                // Toggle button — label always shows the action / state clearly
+                                Rectangle {
+                                    width: 72
+                                    height: 24
+                                    radius: bar.smallButtonRadius
+                                    opacity: root.echoCancelBusy ? 0.6 : 1.0
+                                    color: {
+                                        if (echoCancelToggleMa.containsMouse)
+                                            return root.echoCancelEnabled ? bar.muted : bar.accent;
+                                        return root.echoCancelEnabled ? bar.accent : bar.surface;
+                                    }
+                                    border.width: bar.controlBorderWidth
+                                    border.color: bar.dividerStrong
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.echoCancelBusy
+                                              ? "…"
+                                              : (root.echoCancelEnabled ? "On" : "Off")
+                                        color: {
+                                            if (echoCancelToggleMa.containsMouse)
+                                                return bar.bg;
+                                            return root.echoCancelEnabled ? bar.bg : bar.text;
+                                        }
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+
+                                    MouseArea {
+                                        id: echoCancelToggleMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: root.echoCancelBusy ? Qt.BusyCursor : Qt.PointingHandCursor
+                                        enabled: !root.echoCancelBusy
+                                        onClicked: root.setEchoCancel(!root.echoCancelEnabled)
+                                    }
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 20
+                                text: root.echoCancelHint.length
+                                      ? root.echoCancelHint
+                                      : "Sticky preference · survives reboot when On"
+                                color: root.echoCancelError.length ? bar.muted : bar.subtext
+                                font.pixelSize: 10
+                                font.family: bar.fontFamily
+                                wrapMode: Text.WordWrap
+                            }
                         }
                     }
                 }
@@ -1524,11 +3098,12 @@ Rectangle {
     }
 
     // Device list popup (shared) — same centralization pattern applied
+    // Anchor is set at open time via positionSecondaryPopup() so the list can
+    // attach to the Device row (Playback/Recording) instead of the bar bottom.
     PopupWindow {
         id: audioDeviceListPopup
-        anchor.window: bar
-        implicitWidth: 320
-        implicitHeight: Math.min(420, Math.max(100, (audio.deviceListForSink ? audio.sinks.length : audio.sources.length) * 39 + 90))
+        implicitWidth: 380
+        implicitHeight: Math.min(420, Math.max(100, (audio.deviceListForSink ? audio.sinks.length : audio.sources.length) * 40 + 90))
         visible: false
         color: "transparent"
 
@@ -1560,53 +3135,110 @@ Rectangle {
                     font.bold: true
                 }
 
-                Item { Layout.preferredHeight: 4 }
+                Text {
+                    text: "Selecting a device makes it Active (live routing)"
+                    color: bar.overlay
+                    font.pixelSize: 10
+                    font.family: bar.fontFamily
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+
+                Item { Layout.preferredHeight: 2 }
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 2
+                    spacing: 3
                     Repeater {
                         model: audio.deviceListForSink ? audio.sinks : audio.sources
                         delegate: Rectangle {
+                            id: devRow
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 24
+                            Layout.preferredHeight: 30
                             radius: bar.buttonRadius
-                            color: rowDevMa.containsMouse ? bar.surface : "transparent"
+                            // Hover via either the row or the Default button
+                            color: (rowDevMa.containsMouse || setDefMa.containsMouse)
+                                   ? bar.surface : "transparent"
 
                             required property var modelData
+                            // Selected for popup controls (not necessarily system default)
+                            readonly property bool isSelected: root.isSelectedDevice(modelData)
+                            // System fallback device
+                            readonly property bool isDefault: root.isSystemDefaultDevice(modelData)
 
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: modelData.name
-                                    color: bar.text
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                }
-                                Text {
-                                    visible: isCurrentDevice(modelData)
-                                    text: "✓"
-                                    color: bar.accent
-                                    font.pixelSize: 13
-                                }
-                            }
-
+                            // Full-row click = select device for Volume/Level/etc (NOT system default)
                             MouseArea {
                                 id: rowDevMa
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    var node = modelData.node
-                                    if (audio.deviceListForSink) {
-                                        Pipewire.preferredDefaultAudioSink = node
-                                    } else {
-                                        Pipewire.preferredDefaultAudioSource = node
+                                onClicked: audio.selectDevice(modelData.node, audio.deviceListForSink)
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 6
+                                spacing: 8
+                                z: 1
+
+                                Text {
+                                    visible: devRow.isSelected
+                                    text: "›"
+                                    color: bar.accent
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+
+                                Text {
+                                    text: audio.deviceKindIcon(modelData.node)
+                                    color: bar.subtext
+                                    font.pixelSize: 13
+                                    font.family: bar.fontFamily
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.name
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    font.bold: devRow.isSelected
+                                    elide: Text.ElideRight
+                                }
+
+                                // Active indicator / switch (live system routing)
+                                Rectangle {
+                                    Layout.preferredWidth: devRow.isDefault ? 54 : 72
+                                    Layout.preferredHeight: 22
+                                    radius: bar.smallButtonRadius
+                                    color: {
+                                        if (devRow.isDefault)
+                                            return bar.accent;
+                                        if (setDefMa.containsMouse)
+                                            return bar.popupButtonHoverBg;
+                                        return bar.surface;
                                     }
-                                    audioDeviceListPopup.visible = false
+                                    border.width: bar.controlBorderWidth
+                                    border.color: bar.dividerStrong
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: devRow.isDefault ? "Active" : "Set Active"
+                                        color: devRow.isDefault ? bar.bg : bar.text
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    MouseArea {
+                                        id: setDefMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: (mouse) => {
+                                            mouse.accepted = true;
+                                            root.setDefaultAudioDevice(modelData.node, audio.deviceListForSink);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1631,9 +3263,9 @@ Rectangle {
     }
 
     // Card profile list popup (shared by Playback + Recording profile rows)
+    // Anchor set at open time (same as device list — over Profile row, not bar).
     PopupWindow {
         id: audioProfileListPopup
-        anchor.window: bar
         implicitWidth: 340
         implicitHeight: Math.min(420, Math.max(100, audio.profileListItems.length * 32 + 70))
         visible: false
@@ -1758,28 +3390,132 @@ Rectangle {
         }
     }
 
+    // Is this list entry the one currently selected for popup controls?
+    function isSelectedDevice(dev) {
+        if (!dev || !dev.nodeName) return false
+        var selName = audio.deviceListForSink ? audio.selectedSinkName : audio.selectedSourceName
+        return selName.length > 0 && selName === dev.nodeName
+    }
+
+    // Is this list entry the system default / fallback device?
+    function isSystemDefaultDevice(dev) {
+        if (!dev || !dev.nodeName) return false
+        var liveName = audio.liveDefaultName(audio.deviceListForSink)
+        return liveName.length > 0 && liveName === dev.nodeName
+    }
+
+    // Back-compat alias (device list Active badge)
     function isCurrentDevice(dev) {
-        if (!dev || !dev.node) return false
-        var def = audio.deviceListForSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource
-        if (!def) return false
-        return (def.name === dev.node.name) || (def.description === dev.node.description)
+        return root.isSystemDefaultDevice(dev)
+    }
+
+    // Select + set system default sink/source so the device is immediately live.
+    // Uses Quickshell preferredDefault + pactl for reliability.
+    // Stores selection by name only — never keeps a raw PwNode after return.
+    function setDefaultAudioDevice(node, forSink) {
+        if (!node) return
+
+        var nm = audio.safeName(node)
+        var label = audio.safeDesc(node) || nm || "device"
+        if (!nm || nm.indexOf("qs_ec_") === 0)
+            return
+
+        // Update popup selection by stable name (survives node rebuilds).
+        if (forSink)
+            audio.selectedSinkName = nm
+        else
+            audio.selectedSourceName = nm
+
+        try {
+            if (forSink)
+                Pipewire.preferredDefaultAudioSink = node
+            else
+                Pipewire.preferredDefaultAudioSource = node
+        } catch (e) {
+            // fall through to pactl
+        }
+
+        Quickshell.execDetached([
+            root.audioControlScript,
+            "set-default",
+            forSink ? "sink" : "source",
+            String(nm)
+        ])
+
+        audioDeviceListPopup.visible = false
+        root.audioToolsStatus = "Live: " + label
+        audioToolsStatusClear.restart()
+
+        // Defer profile fetch — node registry may still be settling.
+        Qt.callLater(function() {
+            try {
+                root._startProfileFetch(forSink)
+                if (root.echoCancelPreferred || root.echoCancelEnabled)
+                    deviceChangeEcTimer.restart()
+                else if (audioPopup.visible)
+                    root.refreshStreams()
+            } catch (e2) {}
+        })
+    }
+
+    // Brief delay so pactl/preferred settle, then re-apply echo cancel on new masters.
+    Timer {
+        id: deviceChangeEcTimer
+        interval: 350
+        repeat: false
+        onTriggered: {
+            // apply path rebuilds qs_ec_* from the new defaults
+            root.applyEchoCancelPreference()
+            if (audioPopup.visible) {
+                root.refreshProfiles()
+                root.refreshStreams()
+            }
+        }
+    }
+
+    // Position a secondary flyout next to the row that opened it (Device / Profile),
+    // instead of re-anchoring to the bottom bar. Falls back to bar-bottom placement
+    // if no target item is available.
+    function positionSecondaryPopup(popup, targetItem) {
+        if (targetItem) {
+            // Attach to the clicked Device/Profile control so the list sits over
+            // Playback or Recording rather than gravitating to the bar edge.
+            popup.anchor.item = targetItem
+            // Anchor to the top-left of the control; expand down/right so the menu
+            // hovers over that section of the main audio popup.
+            popup.anchor.edges = Edges.Top | Edges.Left
+            popup.anchor.gravity = Edges.Bottom | Edges.Right
+            popup.anchor.margins.top = 0
+            popup.anchor.margins.left = 0
+            popup.anchor.adjustment = PopupAdjustment.All
+            // Point-anchor at the control's top-left so the menu lines up with the row.
+            popup.anchor.rect.x = 0
+            popup.anchor.rect.y = 0
+            popup.anchor.rect.width = 1
+            popup.anchor.rect.height = Math.max(1, targetItem.height)
+        } else {
+            var popupW = popup.implicitWidth
+            var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
+            var p = root.mapToItem(barBg, 0, root.height)
+            var baseX = bar.sideMargin + p.x
+            popup.anchor.window = bar
+            popup.anchor.rect.x = Math.min(baseX, screenW - popupW - 12)
+            popup.anchor.rect.y = bar.popupAnchorY(popup.implicitHeight, 46)
+        }
     }
 
     function openAudioDeviceList(forSink, targetItem) {
         audio.deviceListForSink = forSink
         // Close sibling flyouts so only one secondary popup is open.
         audioProfileListPopup.visible = false
-        var popupW = audioDeviceListPopup.implicitWidth
-        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
-
-        var p = root.mapToItem(barBg, 0, root.height)
-        var baseX = bar.sideMargin + p.x
-        audioDeviceListPopup.anchor.rect.x = Math.min(baseX, screenW - popupW - 12)
-        audioDeviceListPopup.anchor.rect.y = bar.popupAnchorY(audioDeviceListPopup.implicitHeight, 46)
+        positionSecondaryPopup(audioDeviceListPopup, targetItem)
         audioDeviceListPopup.visible = true
+        // Item may have moved since last open (popup layout); refresh anchor.
+        if (targetItem && audioDeviceListPopup.anchor)
+            audioDeviceListPopup.anchor.updateAnchor()
     }
 
-    function openAudioProfileList(forSink) {
+    function openAudioProfileList(forSink, targetItem) {
         audio.profileListForSink = forSink
         audio.profileListCard = forSink ? audio.speakerCard : audio.micCard
         audio.profileListItems = audio.filteredProfiles(forSink)
@@ -1788,13 +3524,10 @@ Rectangle {
         if (!audio.profileListCard || audio.profileListItems.length === 0)
             return
 
-        var popupW = audioProfileListPopup.implicitWidth
-        var screenW = (bar.screen && bar.screen.width) ? bar.screen.width : 1920
-        var p = root.mapToItem(barBg, 0, root.height)
-        var baseX = bar.sideMargin + p.x
-        audioProfileListPopup.anchor.rect.x = Math.min(baseX, screenW - popupW - 12)
-        audioProfileListPopup.anchor.rect.y = bar.popupAnchorY(audioProfileListPopup.implicitHeight, 46)
+        positionSecondaryPopup(audioProfileListPopup, targetItem)
         audioProfileListPopup.visible = true
+        if (targetItem && audioProfileListPopup.anchor)
+            audioProfileListPopup.anchor.updateAnchor()
     }
 
     function showAudioPopup() {
@@ -1816,9 +3549,14 @@ Rectangle {
         audioPopup.anchor.rect.x = Math.max(minX, Math.min(targetX, maxX))
         audioPopup.anchor.rect.y = bar.popupAnchorY(audioPopup.implicitHeight)
 
-        // Load card profiles + echo-cancel status (async, non-blocking).
+        // Always open on the live system defaults (forceLive).
+        audio.refreshDevices()
+        audio.ensureSelection(true)
         root.refreshProfiles()
         root.refreshEchoCancelStatus()
+        // One immediate stream snapshot; timer keeps it fresh while open
+        root.refreshStreams()
+        root.pollBtBatteries()
         audioPopup.visible = true
     }
 }

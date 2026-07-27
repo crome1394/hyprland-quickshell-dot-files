@@ -32,6 +32,8 @@ Item {
     property var bar
     property real value: 0.0
     property var onSet: function(v){}
+    // When false, bar is display-only (parent may attach WheelHandler for scroll adjust).
+    property bool interactive: true
 
     // === THEME-DRIVEN DEFAULTS (hybrid access) ===
     readonly property QtObject t: ConfigModule.Config
@@ -83,6 +85,8 @@ Item {
     // === Behavior ===
     MouseArea {
         anchors.fill: parent
+        enabled: root.interactive
+        visible: root.interactive
         cursorShape: Qt.PointingHandCursor
         onClicked: (m) => {
             var f = Math.max(0, Math.min(1, m.x / width));
