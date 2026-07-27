@@ -1007,6 +1007,179 @@ cmd_mark() {
     json_ok_obj "$(jq -nc --arg id "$id" --arg as "$as" '{id:$id, as:$as, mode:"fever"}')"
 }
 
+# Resolve Google Reader auth token (reuses cache used by status/items).
+greader_auth_token() {
+    FRESHRSS_BASE_URL="$FRESHRSS_BASE_URL" \
+    FRESHRSS_USER="$FRESHRSS_USER" \
+    FRESHRSS_API_PASSWORD="$FRESHRSS_API_PASSWORD" \
+    python3 - <<'PY'
+import json, os, time, urllib.parse, urllib.request
+base = os.environ["FRESHRSS_BASE_URL"].rstrip("/")
+user = os.environ.get("FRESHRSS_USER", "admin")
+pw = os.environ.get("FRESHRSS_API_PASSWORD", "")
+cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
+                     "quickshell", "freshrss-greader.auth")
+
+def http(method, url, data=None, headers=None):
+    h = {"User-Agent": "quickshell-freshrss/1.2"}
+    if headers: h.update(headers)
+    body = None
+    if data is not None:
+        body = urllib.parse.urlencode(data).encode()
+        h["Content-Type"] = "application/x-www-form-urlencoded"
+    req = urllib.request.Request(url, data=body, headers=h, method=method)
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return r.read()
+
+try:
+    with open(cache, "r", encoding="utf-8") as f:
+        d = json.load(f)
+    if d.get("user") == user and d.get("base") == base and time.time() - float(d.get("ts", 0)) < 25 * 60:
+        print(d.get("auth") or "")
+        raise SystemExit(0)
+except SystemExit:
+    raise
+except Exception:
+    pass
+raw = http("POST", f"{base}/api/greader.php/accounts/ClientLogin",
+           {"Email": user, "Passwd": pw}).decode("utf-8", "replace")
+tok = ""
+for line in raw.splitlines():
+    if line.startswith("Auth="):
+        tok = line.split("=", 1)[1].strip()
+        break
+if tok:
+    try:
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        tmp = cache + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"auth": tok, "user": user, "base": base, "ts": time.time()}, f)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, cache)
+    except Exception:
+        pass
+print(tok)
+PY
+}
+
+# mark-feed-read <feed_id> | mark-feed-unread <feed_id>
+# feed_id is numeric FreshRSS/Fever id (stream feed/N).
+cmd_mark_feed() {
+    local action="$1"
+    local feed_id="${2:-}"
+    [[ -n "$feed_id" ]] || json_err "usage: $action <feed_id>"
+    [[ "$feed_id" =~ ^[0-9]+$ ]] || json_err "feed_id must be numeric (got: $feed_id)"
+    fever_mode || json_err "mark-feed requires FRESHRSS_API_PASSWORD"
+    need_cmd curl
+    need_cmd jq
+    need_cmd python3
+
+    local stream="feed/${feed_id}"
+    local auth
+    auth="$(greader_auth_token)"
+    [[ -n "$auth" ]] || json_err "greader auth failed"
+
+    if [[ "$action" == "mark-feed-read" ]]; then
+        # Whole feed → read (GReader mark-all-as-read up to now)
+        local ts
+        ts="$(date +%s)000000"
+        local code body
+        body="$(curl -sS -m 20 -w '\n%{http_code}' -X POST \
+            -H "Authorization: GoogleLogin auth=${auth}" \
+            "${FRESHRSS_BASE_URL}/api/greader.php/reader/api/0/mark-all-as-read" \
+            --data-urlencode "s=${stream}" \
+            --data-urlencode "ts=${ts}" 2>/dev/null || true)"
+        code="$(printf '%s' "$body" | tail -n1)"
+        body="$(printf '%s' "$body" | sed '$d')"
+        # Fever fallback (marks items with id/time before "before")
+        local before
+        before="$(date +%s)"
+        fever_post "api" "mark=feed" "as=read" "id=${feed_id}" "before=${before}" >/dev/null 2>&1 || true
+        if [[ "$code" != "200" && "$body" != "OK" ]]; then
+            # still ok if fever path worked
+            :
+        fi
+        json_ok_obj "$(jq -nc --arg fid "$feed_id" --arg stream "$stream" \
+            '{action:"mark-feed-read",feed_id:$fid,stream:$stream}')"
+        return 0
+    fi
+
+    if [[ "$action" == "mark-feed-unread" ]]; then
+        # Fetch recent item ids for the feed and strip the read tag (batch).
+        FRESHRSS_BASE_URL="$FRESHRSS_BASE_URL" \
+        FRESHRSS_GREADER_AUTH="$auth" \
+        FRESHRSS_FEED_STREAM="$stream" \
+        python3 - <<'PY'
+import json, os, urllib.parse, urllib.request, sys
+
+base = os.environ["FRESHRSS_BASE_URL"].rstrip("/")
+auth = os.environ["FRESHRSS_GREADER_AUTH"]
+stream = os.environ["FRESHRSS_FEED_STREAM"]
+auth_h = {"Authorization": f"GoogleLogin auth={auth}", "User-Agent": "quickshell-freshrss/1.2"}
+
+def http(method, url, data=None):
+    h = dict(auth_h)
+    body = None
+    if data is not None:
+        body = urllib.parse.urlencode(data, doseq=True).encode()
+        h["Content-Type"] = "application/x-www-form-urlencoded"
+    req = urllib.request.Request(url, data=body, headers=h, method=method)
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.read()
+
+# Collect item ids (paginated). No xt= filter → includes read + unread.
+ids = []
+cont = None
+for _ in range(20):
+    q = {"s": stream, "n": "1000", "output": "json"}
+    if cont:
+        q["c"] = cont
+    raw = http("GET", base + "/api/greader.php/reader/api/0/stream/items/ids?" + urllib.parse.urlencode(q))
+    data = json.loads(raw.decode("utf-8", "replace"))
+    refs = data.get("itemRefs") or []
+    for ref in refs:
+        iid = ref.get("id")
+        if iid is not None:
+            # decimal id → greader tag form
+            try:
+                n = int(iid)
+                hexid = format(n, "016x")
+                ids.append(f"tag:google.com,2005:reader/item/{hexid}")
+            except Exception:
+                ids.append(str(iid))
+    cont = data.get("continuation")
+    if not cont or not refs:
+        break
+
+# Remove read state in chunks
+READ = "user/-/state/com.google/read"
+chunk = 50
+marked = 0
+for i in range(0, len(ids), chunk):
+    batch = ids[i:i + chunk]
+    form = [("r", READ)]
+    for item in batch:
+        form.append(("i", item))
+    try:
+        http("POST", base + "/api/greader.php/reader/api/0/edit-tag", form)
+        marked += len(batch)
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": f"edit-tag failed: {e}", "partial": marked}))
+        sys.exit(1)
+
+print(json.dumps({
+    "ok": True,
+    "action": "mark-feed-unread",
+    "stream": stream,
+    "items": marked,
+}, separators=(",", ":")))
+PY
+        return 0
+    fi
+
+    json_err "unknown mark-feed action: $action"
+}
+
 cmd_open_browser() {
     local url="${1:-}"
     [[ -n "$url" ]] || json_err "usage: open-browser <url>"
@@ -1059,10 +1232,11 @@ Commands:
                          scope: unread (default) | all | read | saved
                          all/read use Google Reader per-feed fetch (per_feed default 12)
   item <id>              Single entry
-  mark-read <id>         Fever only
-  mark-unread <id>       Fever only
-  star <id>              Fever only
-  unstar <id>            Fever only
+  mark-read <id>         Mark one item read (Fever)
+  mark-unread <id>       Mark one item unread (Fever)
+  star <id> | unstar <id>
+  mark-feed-read <feed_id>    Whole feed → read (GReader + Fever)
+  mark-feed-unread <feed_id>  Whole feed → unread (GReader edit-tag)
   open-browser <url>
   play-mpv <url>
 
@@ -1079,6 +1253,7 @@ main() {
         items|unread)  cmd_items "$@" ;;
         item)          cmd_item "$@" ;;
         mark-read|mark-unread|star|unstar) cmd_mark "$cmd" "$@" ;;
+        mark-feed-read|mark-feed-unread) cmd_mark_feed "$cmd" "$@" ;;
         open-browser)  cmd_open_browser "$@" ;;
         play-mpv)      cmd_play_mpv "$@" ;;
         -h|--help|help|"") usage; exit 0 ;;

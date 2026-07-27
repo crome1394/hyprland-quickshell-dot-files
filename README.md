@@ -125,11 +125,30 @@ chmod 600 ~/.config/quickshell/secrets/freshrss.env
 - Type: Any type · Video.
 - **Per feed / max items** steppers + presets (reloads from server).
 - Search (`/` or `Ctrl+F`) over title, feed, author, summary (not full HTML).
-- **Play in mpv** for YouTube/direct media (`yt-dlp` on `PATH`, e.g. `~/.local/bin/yt-dlp`). Body video links open in mpv too.
-- Mark read / star when API password is configured.
-- Feed list numbers track FreshRSS unread; choosing **All** does not replace them with “items loaded”.
+- **Play in mpv** only on **video** articles (YouTube, `.m4v`/`.mp4`, etc.); body video links also open in mpv. Needs `yt-dlp` on `PATH` (e.g. `~/.local/bin/yt-dlp`).
+- Mark item read / star when API password is configured.
+- **Mark whole feed** read/unread (detail buttons + shortcuts) via GReader/Fever.
+- Feed header numbers track FreshRSS unread; `·N` is articles loaded in the window.
 
-**Shortcuts:** `j`/`k` navigate · `/` or `Ctrl+F` search · `o` browser · `v` mpv · `r` refresh · `Esc` close · (`m` mark read · `s` star when writable). Double-click: video → mpv, else browser.
+**Keyboard shortcuts** (window focused; not while typing in search)
+
+| Keys | Action |
+|------|--------|
+| `w` / `s` or `↑` / `↓` | Move list cursor (feeds, dates, articles) |
+| `Space` / `←` / `→` | Expand or collapse feed or date under cursor |
+| `Enter` | Open article in detail pane (or expand feed/date) |
+| `j` / `k` | Next / previous **article** only |
+| `/` or `Ctrl+F` | Focus search |
+| `b` | Open selected article in browser |
+| `v` | Play in mpv (**video items only**) |
+| `r` / `Ctrl+R` | Refresh |
+| `Esc` | Close window |
+| `m` | Mark **item** read (writable) |
+| `Shift+S` | Star / unstar item |
+| `Shift+R` | Mark **feed** (category) read |
+| `Shift+U` | Mark **feed** unread |
+
+Double-click a row: video → mpv, otherwise browser.
 
 **IPC / keybind**
 

@@ -41,6 +41,9 @@ Rectangle {
     property string errorMsg: ""
     property var items: []
     property int selectedIndex: -1
+    // Keyboard list cursor (index into listRows: headers, dates, and items)
+    property int listCursor: 0
+    property string listCursorId: ""
     // note: unreadCount / loadedCount declared with filter defaults below
     property string filterMode: "all" // all | video  (content type)
     // Defaults: All (read + unread) with all dates, categories start collapsed.
@@ -251,6 +254,7 @@ Rectangle {
             rows.push({
                 kind: "header",
                 category: cat,
+                feed_id: sampleFid,
                 // FreshRSS-style unread (server); fall back to loaded unread
                 unread: srvUnread >= 0 ? srvUnread : loadedUnread,
                 read: loadedRead,
@@ -573,6 +577,126 @@ Rectangle {
         }
         fi = Math.max(0, Math.min(filteredItems.length - 1, fi + delta))
         selectIndex(fi)
+        // Keep list cursor on the selected article when using j/k
+        syncListCursorToArticleId(selectedItem ? selectedItem.id : "")
+    }
+
+    function syncListCursorToArticleId(articleId) {
+        if (articleId === undefined || articleId === null || articleId === "")
+            return
+        const rows = listRows
+        const sid = String(articleId)
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].kind === "item" && rows[i].item && String(rows[i].item.id) === sid) {
+                listCursor = i
+                listCursorId = rows[i].id || ("item:" + sid)
+                return
+            }
+        }
+    }
+
+    function restoreListCursor() {
+        const rows = listRows
+        if (!rows || rows.length === 0) {
+            listCursor = 0
+            listCursorId = ""
+            return
+        }
+        if (listCursorId) {
+            for (let i = 0; i < rows.length; i++) {
+                if (String(rows[i].id) === String(listCursorId)) {
+                    listCursor = i
+                    return
+                }
+            }
+            // After expand/collapse, id may be gone; try same category header
+            if (String(listCursorId).indexOf("hdr:") === 0) {
+                const cat = String(listCursorId).slice(4)
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i].kind === "header" && rows[i].category === cat) {
+                        listCursor = i
+                        listCursorId = rows[i].id
+                        return
+                    }
+                }
+            }
+        }
+        listCursor = Math.max(0, Math.min(rows.length - 1, listCursor))
+        listCursorId = rows[listCursor] ? (rows[listCursor].id || "") : ""
+    }
+
+    function moveListCursor(delta) {
+        const rows = listRows
+        if (!rows || rows.length === 0)
+            return
+        restoreListCursor()
+        listCursor = Math.max(0, Math.min(rows.length - 1, listCursor + delta))
+        const row = rows[listCursor]
+        listCursorId = row ? (row.id || "") : ""
+        if (typeof listView !== "undefined" && listView)
+            listView.positionViewAtIndex(listCursor, ListView.Contain)
+    }
+
+    /** Space — expand/collapse feed or date under the list cursor. */
+    function scheduleRestoreListCursor() {
+        restoreCursorTimer.restart()
+    }
+
+    function toggleListCursorExpand() {
+        const rows = listRows
+        if (!rows || rows.length === 0)
+            return
+        restoreListCursor()
+        const row = rows[listCursor]
+        if (!row)
+            return
+        if (row.kind === "header") {
+            toggleCategory(row.category || "Other")
+            listCursorId = "hdr:" + (row.category || "Other")
+            scheduleRestoreListCursor()
+        } else if (row.kind === "date") {
+            toggleDateGroup(row.category, row.dateKey)
+            listCursorId = row.id
+            scheduleRestoreListCursor()
+        } else if (row.kind === "item") {
+            // On an article: toggle its feed category (collapse/expand whole feed)
+            if (row.category)
+                toggleCategory(row.category)
+            listCursorId = "hdr:" + (row.category || "Other")
+            scheduleRestoreListCursor()
+        }
+    }
+
+    /** Enter — open article in the detail pane, or expand header/date. */
+    function activateListCursor() {
+        const rows = listRows
+        if (!rows || rows.length === 0)
+            return
+        restoreListCursor()
+        const row = rows[listCursor]
+        if (!row)
+            return
+        if (row.kind === "item" && row.item) {
+            selectItemById(row.item.id)
+            listCursorId = row.id || ("item:" + row.item.id)
+        } else if (row.kind === "header") {
+            toggleCategory(row.category || "Other")
+            listCursorId = "hdr:" + (row.category || "Other")
+            scheduleRestoreListCursor()
+        } else if (row.kind === "date") {
+            toggleDateGroup(row.category, row.dateKey)
+            listCursorId = row.id
+            scheduleRestoreListCursor()
+        }
+    }
+
+    onListRowsChanged: scheduleRestoreListCursor()
+
+    Timer {
+        id: restoreCursorTimer
+        interval: 1
+        repeat: false
+        onTriggered: root.restoreListCursor()
     }
 
     function openBrowser() {
@@ -584,7 +708,7 @@ Rectangle {
 
     function playMpv() {
         const it = selectedItem
-        if (!it)
+        if (!it || !itemIsVideo(it))
             return
         const url = playableUrl(it)
         if (!url)
@@ -625,6 +749,78 @@ Rectangle {
             return
         const act = Number(selectedItem.is_saved) === 1 ? "unstar" : "star"
         runAction([act, String(selectedItem.id)])
+    }
+
+    /** Resolve numeric feed id for a category title (from list rows or loaded items). */
+    function feedIdForCategory(cat) {
+        if (!cat)
+            return ""
+        const rows = listRows
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].kind === "header" && rows[i].category === cat && rows[i].feed_id)
+                return String(rows[i].feed_id)
+        }
+        for (let j = 0; j < items.length; j++) {
+            const it = items[j]
+            const c = (it.category || it.feed_title || "").toString()
+            if (c === cat && it.feed_id !== undefined && it.feed_id !== null && it.feed_id !== "")
+                return String(it.feed_id)
+        }
+        return ""
+    }
+
+    /** Category under list cursor, or of the selected article. */
+    function activeCategoryContext() {
+        const rows = listRows
+        if (rows && rows.length > 0) {
+            let idx = listCursor
+            if (idx < 0 || idx >= rows.length)
+                idx = 0
+            const row = rows[idx]
+            if (row && row.category)
+                return {
+                    category: row.category,
+                    feed_id: row.feed_id || feedIdForCategory(row.category)
+                }
+        }
+        if (selectedItem) {
+            const cat = (selectedItem.category || selectedItem.feed_title || "").toString()
+            return { category: cat, feed_id: String(selectedItem.feed_id || feedIdForCategory(cat) || "") }
+        }
+        return null
+    }
+
+    // Reactive context for feed-level actions (depends on cursor + data)
+    readonly property var cursorFeedContext: {
+        const _c = listCursor
+        const _v = collapseVersion
+        const _i = items.length
+        const _s = selectedIndex
+        return activeCategoryContext()
+    }
+
+    function markCategoryRead() {
+        if (!writable)
+            return
+        const ctx = activeCategoryContext()
+        if (!ctx || !ctx.feed_id) {
+            statusMsg = "No feed selected (focus a category or article)"
+            return
+        }
+        statusMsg = "Marking “" + ctx.category + "” read…"
+        runAction(["mark-feed-read", String(ctx.feed_id)])
+    }
+
+    function markCategoryUnread() {
+        if (!writable)
+            return
+        const ctx = activeCategoryContext()
+        if (!ctx || !ctx.feed_id) {
+            statusMsg = "No feed selected (focus a category or article)"
+            return
+        }
+        statusMsg = "Marking “" + ctx.category + "” unread…"
+        runAction(["mark-feed-unread", String(ctx.feed_id)])
     }
 
     function runAction(args) {
@@ -796,7 +992,13 @@ Rectangle {
                     }
                     if (j.as === "read" || j.as === "saved" || j.as === "unsaved" || j.as === "unread")
                         root.loadItems()
-                    else if (j.action === "mpv")
+                    else if (j.action === "mark-feed-read" || j.action === "mark-feed-unread") {
+                        root.statusMsg = j.action === "mark-feed-read"
+                            ? "Feed marked read"
+                            : ("Feed marked unread" + (j.items ? (" (" + j.items + " items)") : ""))
+                        root.loadItems()
+                        root.pollStatus()
+                    } else if (j.action === "mpv")
                         root.statusMsg = "Playing in mpv…"
                     else if (j.action === "browser")
                         root.statusMsg = "Opened in browser"
@@ -842,35 +1044,96 @@ Rectangle {
             enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: searchField.forceActiveFocus()
         }
+        // Article-only navigation (also moves list cursor onto the article)
         Shortcut {
             sequence: "J"
-            enabled: readerWindow.visible
+            enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: root.selectRelative(1)
         }
         Shortcut {
             sequence: "K"
-            enabled: readerWindow.visible
+            enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: root.selectRelative(-1)
         }
+        // Full list cursor (headers, dates, articles): W up / S down
         Shortcut {
-            sequence: "O"
-            enabled: readerWindow.visible
+            sequence: "W"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.moveListCursor(-1)
+        }
+        Shortcut {
+            sequence: "S"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.moveListCursor(1)
+        }
+        Shortcut {
+            sequence: "Up"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.moveListCursor(-1)
+        }
+        Shortcut {
+            sequence: "Down"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.moveListCursor(1)
+        }
+        Shortcut {
+            sequence: "Space"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.toggleListCursorExpand()
+        }
+        // Same expand/collapse as Space (common tree navigation)
+        Shortcut {
+            sequence: "Right"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.toggleListCursorExpand()
+        }
+        Shortcut {
+            sequence: "Left"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.toggleListCursorExpand()
+        }
+        Shortcut {
+            sequence: "Return"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.activateListCursor()
+        }
+        Shortcut {
+            sequence: "Enter"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.activateListCursor()
+        }
+        Shortcut {
+            sequence: "B"
+            enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: root.openBrowser()
         }
         Shortcut {
             sequence: "V"
-            enabled: readerWindow.visible
+            enabled: readerWindow.visible && !searchField.activeFocus
+                     && root.selectedItem && root.itemIsVideo(root.selectedItem)
             onActivated: root.playMpv()
         }
         Shortcut {
             sequence: "M"
-            enabled: readerWindow.visible && root.writable
+            enabled: readerWindow.visible && root.writable && !searchField.activeFocus
             onActivated: root.markRead()
         }
+        // Star moved off S (S = list down); use Shift+S
         Shortcut {
-            sequence: "S"
-            enabled: readerWindow.visible && root.writable
+            sequence: "Shift+S"
+            enabled: readerWindow.visible && root.writable && !searchField.activeFocus
             onActivated: root.starItem()
+        }
+        // Mark whole feed/category under list cursor
+        Shortcut {
+            sequence: "Shift+R"
+            enabled: readerWindow.visible && root.writable && !searchField.activeFocus
+            onActivated: root.markCategoryRead()
+        }
+        Shortcut {
+            sequence: "Shift+U"
+            enabled: readerWindow.visible && root.writable && !searchField.activeFocus
+            onActivated: root.markCategoryUnread()
         }
 
         Rectangle {
@@ -1351,7 +1614,10 @@ Rectangle {
                                 readonly property var art: isItem ? (modelData.item || null) : null
                                 height: isHeader ? 28 : (isDate ? 24 : (titleCol.implicitHeight + 14))
                                 radius: isHeader ? 4 : (isDate ? 3 : 6)
+                                readonly property bool isCursor: index === root.listCursor
                                 color: {
+                                    if (isCursor)
+                                        return Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.28)
                                     if (isHeader)
                                         return Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.12)
                                     if (isDate)
@@ -1361,8 +1627,8 @@ Rectangle {
                                         return Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.22)
                                     return rowMa.containsMouse ? (th.inspRowHoverBg || bar.iconHoverBg) : "transparent"
                                 }
-                                border.width: (isItem && root.selectedItem && art && String(root.selectedItem.id) === String(art.id)) ? 1 : 0
-                                border.color: bar.accent
+                                border.width: isCursor || (isItem && root.selectedItem && art && String(root.selectedItem.id) === String(art.id)) ? 1 : 0
+                                border.color: isCursor ? bar.accent : bar.accent
 
                                 // Feed category header (click to collapse / expand)
                                 RowLayout {
@@ -1410,7 +1676,11 @@ Rectangle {
                                     enabled: rowDelegate.isHeader
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.toggleCategory(modelData.category || "Other")
+                                    onClicked: {
+                                        root.listCursor = index
+                                        root.listCursorId = modelData.id || ("hdr:" + (modelData.category || ""))
+                                        root.toggleCategory(modelData.category || "Other")
+                                    }
                                 }
 
                                 // Date sub-header under an open feed (click to collapse that day)
@@ -1458,7 +1728,11 @@ Rectangle {
                                     enabled: rowDelegate.isDate
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.toggleDateGroup(modelData.category, modelData.dateKey)
+                                    onClicked: {
+                                        root.listCursor = index
+                                        root.listCursorId = modelData.id || ""
+                                        root.toggleDateGroup(modelData.category, modelData.dateKey)
+                                    }
                                 }
 
                                 // Article content (indented under date)
@@ -1518,10 +1792,13 @@ Rectangle {
                                     enabled: rowDelegate.isItem
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
+                                        root.listCursor = index
+                                        root.listCursorId = modelData.id || ""
                                         if (rowDelegate.art)
                                             root.selectItemById(rowDelegate.art.id)
                                     }
                                     onDoubleClicked: {
+                                        root.listCursor = index
                                         if (rowDelegate.art)
                                             root.activateItem(rowDelegate.art)
                                     }
@@ -1583,7 +1860,58 @@ Rectangle {
                                 wrapMode: Text.WordWrap
                             }
 
-                            // Actions
+                            // Feed/category actions (when cursor is on a feed or article)
+                            Flow {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                visible: root.writable && root.cursorFeedContext && root.cursorFeedContext.feed_id
+
+                                Text {
+                                    text: (root.cursorFeedContext ? root.cursorFeedContext.category : "") + ":"
+                                    color: bar.subtext
+                                    font.pixelSize: 12
+                                    Layout.alignment: Qt.AlignVCenter
+                                }
+
+                                Repeater {
+                                    model: [
+                                        { id: "feed-read", label: "Mark feed read" },
+                                        { id: "feed-unread", label: "Mark feed unread" }
+                                    ]
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        radius: 6
+                                        implicitHeight: 28
+                                        implicitWidth: feedActTxt.implicitWidth + 18
+                                        color: feedActMa.containsMouse
+                                               ? Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.25)
+                                               : "transparent"
+                                        border.width: 1
+                                        border.color: bar.pillBorder
+                                        Text {
+                                            id: feedActTxt
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            color: bar.text
+                                            font.pixelSize: 12
+                                        }
+                                        MouseArea {
+                                            id: feedActMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (modelData.id === "feed-read")
+                                                    root.markCategoryRead()
+                                                else
+                                                    root.markCategoryUnread()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Article actions
                             Flow {
                                 Layout.fillWidth: true
                                 spacing: 8
@@ -1596,12 +1924,15 @@ Rectangle {
                                             return []
                                         const acts = [
                                             { id: "browser", label: "Open in browser", enabled: !!(it.url) },
-                                            {
-                                                id: "mpv",
-                                                label: root.itemIsVideo(it) ? "Play in mpv" : "Play URL in mpv",
-                                                enabled: !!(root.playableUrl(it))
-                                            },
                                         ]
+                                        // Only show mpv for video articles (YouTube, .m4v, etc.)
+                                        if (root.itemIsVideo(it) && root.playableUrl(it)) {
+                                            acts.push({
+                                                id: "mpv",
+                                                label: "Play in mpv",
+                                                enabled: true
+                                            })
+                                        }
                                         if (root.writable) {
                                             acts.push({ id: "read", label: "Mark read", enabled: true })
                                             acts.push({
@@ -1699,8 +2030,8 @@ Rectangle {
                 // Footer shortcuts
                 Text {
                     Layout.fillWidth: true
-                    text: "Feed ▾ → date groups · click date to collapse · j/k · / search · o browser · v mpv · r refresh · Esc"
-                          + (root.writable ? " · m mark read · s star" : "")
+                    text: "w/s or ↑/↓ list · Space/←/→ expand · Enter open · j/k articles · / search · b browser · v mpv · r refresh · Esc"
+                          + (root.writable ? " · m item read · Shift+S star · Shift+R feed read · Shift+U feed unread" : "")
                     color: bar.overlay || bar.subtext
                     font.pixelSize: 11
                     font.family: bar.fontMono
