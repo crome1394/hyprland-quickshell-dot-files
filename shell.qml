@@ -17,6 +17,8 @@
 //   - qs ipc call shell setShowMagicWorkspacePill true
 //   - qs ipc call shell toggleShowMagicWorkspacePill
 //   - qs ipc call shell setShowAudioPill false   (and set/toggle for each bar pill)
+//   - qs ipc call audioPill setEchoCancel true|false
+//   - qs ipc call audioPill toggleEchoCancel / enableEchoCancel / disableEchoCancel
 //   - qs ipc call clockPill showCalendar
 //   - qs ipc call notificationBell toggleDoNotDisturb
 //   - qs ipc call sysStatsPill setMetricsLiveUpdates false
@@ -99,32 +101,54 @@ ShellRoot {
     // Workspace behavior (config defaults in Config.qml; IPC overrides until qs restart)
     property int  wsMinimumShown: 3
     property bool wsShowOnlyActive: false
-    property int  wsStartupWorkspace: 1
-    property bool wsStartupCloseMagic: true
+    property int  wsStartupWorkspace: 0   // 0 = do not touch focus (safe for qs reload)
+    property bool wsStartupCloseMagic: false
 
-    // On qs start, optionally close magic and focus wsStartupWorkspace (see Config.qml).
-    // Polls a few times so Hyprland.activeToplevel is ready (Hyprland 0.55+ lua).
+    // Optional startup focus (Config.wsStartupWorkspace > 0 only).
+    // IMPORTANT: Quickshell reloads re-run this whole tree — treating reload like login
+    // is what forced workspace 1. Default is 0 (no-op). When N > 0, only dispatch if
+    // current focus differs; never re-focus a workspace you are already on.
     property int _startupWsAttempts: 0
     Timer {
         id: startupWorkspaceTimer
         interval: 350
-        running: true
+        // Stay dormant when disabled; bar.Component.onCompleted can start it if needed.
+        running: false
         repeat: true
         onTriggered: {
-            const targetWs = bar.wsStartupWorkspace
+            const targetWs = root.wsStartupWorkspace
             if (targetWs <= 0) {
                 stop()
+                root._startupWsAttempts = 0
                 return
             }
+
             root._startupWsAttempts += 1
+
+            // Resolve current Hyprland focus before any dispatch.
+            Hyprland.refreshMonitors()
+            const focused = Hyprland.focusedWorkspace
+            const focusedId = (focused && focused.id > 0) ? focused.id : 0
+
+            let magicOpen = false
             if (bar.wsStartupCloseMagic) {
-                const toplevel = Hyprland.activeToplevel
-                if (toplevel && toplevel.workspace && bar.wsIsSpecialName(toplevel.workspace.name)) {
+                const mon = Hyprland.focusedMonitor
+                const sw = (mon && mon.lastIpcObject) ? mon.lastIpcObject.specialWorkspace : null
+                const magicName = sw ? (sw.name || "") : ""
+                magicOpen = magicName.length > 0 && bar.wsIsSpecialName(magicName)
+                if (magicOpen) {
                     Hyprland.dispatch("hl.dsp.workspace.toggle_special('" + bar.wsSpecialName + "')")
                 }
             }
-            Hyprland.dispatch("hl.dsp.focus({ workspace = " + targetWs + " })")
-            if (root._startupWsAttempts >= 4) {
+
+            // Guard: only focus when not already there (focus(N) can still have side effects).
+            if (focusedId !== targetWs) {
+                Hyprland.dispatch("hl.dsp.focus({ workspace = " + targetWs + " })")
+            }
+
+            // Done when already correct (and magic closed if requested), or after retries.
+            const done = (!magicOpen && focusedId === targetWs) || root._startupWsAttempts >= 4
+            if (done) {
                 stop()
                 root._startupWsAttempts = 0
             }
@@ -162,6 +186,11 @@ ShellRoot {
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
             root.wsStartupWorkspace = cfg.wsStartupWorkspace
             root.wsStartupCloseMagic = cfg.wsStartupCloseMagic
+
+            // Start optional startup focus only after config is applied (avoids
+            // racing the property default before cfg loads). No-op when 0.
+            if (root.wsStartupWorkspace > 0)
+                startupWorkspaceTimer.start()
         }
 
         readonly property alias notificationSubscribe: cfg.notificationSubscribe
@@ -273,6 +302,7 @@ ShellRoot {
 
         // --- State colors
         readonly property alias pillHoverBorder: cfg.pillHoverBorder
+        readonly property alias iconHoverBg: cfg.iconHoverBg
         readonly property alias controlHoverBg: cfg.controlHoverBg
         readonly property alias controlActiveBg: cfg.controlActiveBg
         readonly property alias popupButtonHoverBg: cfg.popupButtonHoverBg
@@ -662,6 +692,7 @@ ShellRoot {
 
                     // ─ Audio ─
                     AudioPill {
+                        id: audioPill
                         visible: root.showAudioPill
                         bar: bar
                         barBg: barBg
@@ -757,6 +788,33 @@ ShellRoot {
             target: "hyprConfigInsp"
             function toggle() {
                 if (hyprConfigInsp && hyprConfigInsp.toggle) hyprConfigInsp.toggle()
+            }
+        }
+
+        Io.IpcHandler {
+            target: "audioPill"
+            // Echo cancel (sticky AEC). Same as the popup On/Off toggle.
+            // Examples:
+            //   qs ipc call audioPill setEchoCancel true
+            //   qs ipc call audioPill setEchoCancel false
+            //   qs ipc call audioPill toggleEchoCancel
+            //   qs ipc call audioPill enableEchoCancel
+            //   qs ipc call audioPill disableEchoCancel
+            function setEchoCancel(enabled: bool): void {
+                if (audioPill && audioPill.setEchoCancelEnabled)
+                    audioPill.setEchoCancelEnabled(enabled)
+            }
+            function toggleEchoCancel(): void {
+                if (audioPill && audioPill.toggleEchoCancel)
+                    audioPill.toggleEchoCancel()
+            }
+            function enableEchoCancel(): void {
+                if (audioPill && audioPill.enableEchoCancel)
+                    audioPill.enableEchoCancel()
+            }
+            function disableEchoCancel(): void {
+                if (audioPill && audioPill.disableEchoCancel)
+                    audioPill.disableEchoCancel()
             }
         }
 

@@ -38,7 +38,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
 | **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
-| **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel adjustment, and device selection popup (PipeWire) |
+| **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, L/R channel balance, real-time VU meters, and optional **echo cancel** (PipeWire AEC). Right-click opens the full popup. See [Audio pill](#audio-pill-audiopillqml) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
 | **Notifications** | `NotificationBell.qml` | Bell with count badge and red DND styling. Polls your daemon's CLI from `Config.qml` (defaults: SwayNC / `swaync-client`) via timer sync + optional live subscribe — state and `Io.Process` polling live in this widget, not `shell.qml`. Left-click toggles panel; right-click opens menu (DND, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
 | **Kill Target** | `KillTargetPill.qml` | xkill-style window picker (hidden by default). Click the pill to arm pick mode (crosshair on all monitors), then click a window to send **SIGTERM** to its process. Escape, right-click, empty click, or a second pill click cancels. Uses `window-at-point.sh` + `process-control.sh` (user-owned processes only). IPC: `qs ipc call killTargetPill activatePickMode` |
@@ -88,6 +88,9 @@ Some bar widgets expose actions beyond show/hide. These work from scripts, Hyprl
 | Target | Command | Action |
 |--------|---------|--------|
 | `clockPill` | `showCalendar` | Open the ClockPill calendar popup |
+| `audioPill` | `setEchoCancel` | Enable (`true`) or disable (`false`) system echo cancel (sticky preference) |
+| `audioPill` | `enableEchoCancel` / `disableEchoCancel` | Same as `setEchoCancel true` / `false` |
+| `audioPill` | `toggleEchoCancel` | Toggle system echo cancel on/off |
 | `notificationBell` | `toggleDoNotDisturb` | Toggle Do Not Disturb for the configured notification daemon |
 | `killTargetPill` | `activatePickMode` / `cancelPickMode` | Arm or cancel the click-to-kill picker (same as clicking the pill) |
 | `sysStatsPill` | `setMetricsLiveUpdates` | Pause (`false`) or resume (`true`) metrics-popup polling for all CPU/Memory/GPU sections |
@@ -99,6 +102,9 @@ Some bar widgets expose actions beyond show/hide. These work from scripts, Hyprl
 
 ```bash
 qs ipc call clockPill showCalendar
+qs ipc call audioPill setEchoCancel true
+qs ipc call audioPill disableEchoCancel
+qs ipc call audioPill toggleEchoCancel
 qs ipc call notificationBell toggleDoNotDisturb
 qs ipc call sysStatsPill setMetricsLiveUpdates false
 qs ipc call sysStatsPill toggleMetricsLiveUpdates
@@ -116,7 +122,86 @@ SUPER + C   →   qs ipc call clockPill showCalendar
 SUPER + N   →   qs ipc call notificationBell toggleDoNotDisturb
 SUPER + M   →   qs ipc call sysStatsPill toggleMetricsLiveUpdates
 SUPER + X   →   qs ipc call killTargetPill activatePickMode
+# Optional: bind echo cancel
+# SUPER + ALT + E   →   qs ipc call audioPill toggleEchoCancel
 ```
+
+### Audio pill (`AudioPill.qml`)
+
+Bar pill (left-click cycles speaker / mic / dual; middle-click mute; scroll on bars adjusts volume). **Right-click** opens the full popup.
+
+#### Popup controls
+
+| Area | Controls |
+|------|----------|
+| **Playback** | Default sink device, card **profile** dropdown, master volume, mute, **L/R** channel sliders (stereo only), real-time **Level** VU meter |
+| **Recording** | Default source device, card **profile** dropdown, master volume, mute, **L/R** channel sliders, **Level** VU meter, **Echo cancel** On/Off |
+
+- **L/R** — per-channel volumes via PipeWire `PwNodeAudio.volumes`, with a `pactl` multi-volume write for reliability (same idea as the Bluetooth master-volume workaround).
+- **Level** — `PwNodePeakMonitor` peak meter (`components/AudioLevelMeter.qml`). Sampling runs only while the popup is open.
+- **Profile** — PipeWire/Pulse card profiles for the current device’s ALSA card (`audio-control.sh list-card-profiles` / `set-card-profile`). Hidden when no card/profiles exist (e.g. some Bluetooth devices).
+- Popup size: `popupAudioWidth` / `popupAudioHeight` in `Config.qml`.
+
+#### Echo cancel (system AEC)
+
+Optional **WebRTC acoustic echo cancellation** for speaker bleed into the mic (e.g. YouTube on speakers while the mic is open). Uses PipeWire `module-echo-cancel` and temporary virtual devices:
+
+| Node | Role |
+|------|------|
+| `qs_ec_source` | Cleaned default microphone |
+| `qs_ec_sink` | Default playback path used as the AEC reference |
+
+Meet, Telegram, and Discord follow system defaults, so they pick up `qs_ec_*` while echo cancel is **On**, and hardware again when **Off**. App-built-in AEC is left alone; if a call sounds odd, turn Off.
+
+| Mechanism | Purpose |
+|-----------|---------|
+| `echo-cancel.pref` | Sticky preference `{"preferred":true\|false}` under this config dir (not committed; per-machine) |
+| `scripts/audio-control.sh` | `echo-cancel-status` / `on` / `off` / `force-off` / `apply` |
+| `quickshell-echo-cancel.service` | User systemd unit (under `~/.config/systemd/user/`) runs `echo-cancel-apply` after PipeWire at login |
+| AudioPill + IPC | UI toggle and `qs ipc call audioPill …` (same sticky on/off) |
+
+**Enable / disable**
+
+```bash
+# UI: right-click audio pill → Echo cancel On/Off
+
+# IPC (sticky across reboot when On)
+qs ipc call audioPill enableEchoCancel
+qs ipc call audioPill disableEchoCancel
+qs ipc call audioPill setEchoCancel true
+qs ipc call audioPill toggleEchoCancel
+
+# CLI
+~/.config/quickshell/scripts/audio-control.sh echo-cancel-on
+~/.config/quickshell/scripts/audio-control.sh echo-cancel-off
+~/.config/quickshell/scripts/audio-control.sh echo-cancel-force-off   # hard cleanup
+~/.config/quickshell/scripts/audio-control.sh echo-cancel-status      # JSON
+```
+
+**Login autostart** (already used if you enabled permanence):
+
+```bash
+systemctl --user enable --now quickshell-echo-cancel.service
+systemctl --user disable --now quickshell-echo-cancel.service   # stop autostart
+```
+
+**Back-out ladder**
+
+1. UI / IPC / `echo-cancel-off` — unload module, restore previous hardware defaults, `preferred=false`
+2. `echo-cancel-force-off` — same even if state is missing/corrupt
+3. Disable the user unit (and optionally delete `echo-cancel.pref`)
+
+No permanent PipeWire `conf.d` is written; everything is reversible.
+
+#### Related files
+
+| Path | Role |
+|------|------|
+| `widgets/AudioPill.qml` | Bar pill + popup |
+| `components/AudioLevelMeter.qml` | VU / peak meter visuals |
+| `components/VolumeBar.qml` / `MiniVolumeBar.qml` | Volume sliders |
+| `scripts/audio-control.sh` | Devices, profiles, channel volume, echo cancel |
+| `Config.qml` | `popupAudioWidth`, `popupAudioHeight`, volume color tiers |
 
 ### Workspaces (`WorkspacesPill.qml` + `Config.qml`)
 

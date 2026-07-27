@@ -118,6 +118,11 @@ QtObject {
     // Pill-level hover (used by almost every bar widget)
     readonly property color pillHoverBorder: accent   // Border color on hover for all pills
 
+    // Per-item hover chips (QuickLaunch, SystemTray, SysStats, Clock, Audio,
+    // Workspaces). Change here to recolor all of those together.
+    // Default matches glassHover / PowerMenu pill; override freely.
+    readonly property color iconHoverBg: Qt.rgba(0, 0.55, 1, 0.58)
+
     // General control states (used inside popups and complex widgets)
     readonly property color controlHoverBg:   glassHover                     // Hover background for buttons/controls
     readonly property color controlActiveBg:  Qt.rgba(0.12, 0.12, 0.15, 0.70) // Pressed / toggled / active state
@@ -204,8 +209,20 @@ QtObject {
         {
             icon: "/home/crome/icons/firefox.svg",
             glyph: "",
-            command: ["gtk-launch", "firefox"],
+            command: ["env", "MOZ_ENABLE_WAYLAND=0", "firefox"],
             tooltip: "Firefox"
+        },
+        {
+            icon: "/home/crome/icons/brave.svg",
+            glyph: "",
+            command: ["/usr/bin/brave-origin"],
+            tooltip: "Brave Origin"
+        },
+        {
+            icon: "/home/crome/icons/google-chrome.svg",
+            glyph: "",
+            command: ["/usr/bin/google-chrome-stable"],
+            tooltip: "Google Chrome"
         },
         {
             icon: "/home/crome/icons/logseq-a.svg",
@@ -218,12 +235,31 @@ QtObject {
             glyph: "",
             command: ["/home/crome/applications/LM-Studio-0.4.13-1-x64.AppImage"],
             tooltip: "LM Studio"
-        }
+        },
+        {
+            icon: "/home/crome/icons/steam.svg",
+            glyph: "",
+            command: ["/usr/bin/steam"],
+            tooltip: "Steam"
+        },   
+        {
+            icon: "/home/crome/icons/com.system76.CosmicFiles.svg",
+            glyph: "",
+            command: ["/usr/bin/cosmic-files"],
+            tooltip: "Cosmic Files"
+        },    
+        {
+            icon: "/home/crome/icons/kitty.svg",
+            glyph: "",
+            command: ["/usr/bin/kitty"],
+            tooltip: "Kitty"
+        },        
     ]
 
     // Popup window sizes in pixels (width × height). Increase if content feels cramped.
-    readonly property int popupAudioWidth:     420   // AudioPill device/volume popup
-    readonly property int popupAudioHeight:    260
+    // AudioPill: device + profile dropdowns, master volume, L/R, VU, echo-cancel toggle.
+    readonly property int popupAudioWidth:     440   // AudioPill device/volume popup
+    readonly property int popupAudioHeight:    480
     readonly property int popupMediaWidth:     520   // MediaPill player controls popup
     readonly property int popupMediaHeight:    470
     readonly property int popupPowerWidth:     560   // PowerMenu full grid (left-click)
@@ -499,17 +535,19 @@ QtObject {
     //   wsShowOnlyActive true  → only occupied/active numbered pills (+ extras)
     //   wsShowSpecialPill      → config default for magic pill (IPC can override at runtime)
     //
-    // qs startup (shell.qml):
-    //   wsStartupWorkspace 0 → do not change Hyprland workspace on qs start
-    //   wsStartupWorkspace N → focus workspace N (after optional magic close)
+    // qs startup (shell.qml) — runs on every qs start AND reload (qs has no session vs reload distinction):
+    //   wsStartupWorkspace 0 → do not change Hyprland workspace (recommended; preserves focus on qs reload)
+    //   wsStartupWorkspace N → focus workspace N (after optional magic close). Prefer Hyprland exec-once
+    //                          for true login-only focus instead of forcing from the bar.
 
     readonly property bool wsShowSpecialPill: true    // Magic pill default (toggle via qs ipc call shell setShowMagicWorkspacePill)
     readonly property int  wsMinimumShown: 3           // Default pills 1..N (IPC: qs ipc call shell setWsMinimumShown)
     readonly property bool wsShowOnlyActive: false    // IPC: qs ipc call shell setWsShowOnlyActive
-    readonly property int  wsStartupWorkspace: 1       // qs-start focus (0 = unchanged). IPC: setWsStartupWorkspace
-    readonly property bool wsStartupCloseMagic: true   // Close magic on qs start. IPC: setWsStartupCloseMagic
+    readonly property int  wsStartupWorkspace: 0       // 0 = preserve focus on start/reload. IPC: setWsStartupWorkspace
+    readonly property bool wsStartupCloseMagic: false  // Close magic on qs start (only if wsStartupWorkspace > 0). IPC: setWsStartupCloseMagic
 
-    readonly property color wsHoverYellow: "#fdf9db"           // Hover from original eww migration
+    // Legacy workspace hover (unused by WorkspacesPill — uses iconHoverBg now).
+    readonly property color wsHoverYellow: '#dbfdfc'           // Kept for reference / other callers
     readonly property color wsActiveBg:    Qt.rgba(0.53, 0.69, 0.96, 0.22)  // Active workspace glass
     readonly property color wsActiveBorder: Qt.rgba(0.53, 0.69, 0.96, 0.6)
     readonly property color wsActiveText:  "#e0e7ff"
