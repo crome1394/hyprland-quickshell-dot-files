@@ -26,7 +26,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 |------|-------------------------|
 | **Left** | App Launcher, Quick Launch, Media Player |
 | **Center** | Workspaces |
-| **Right** | System Stats, System Tray, Bluetooth, Audio, Clock, Notifications, Power |
+| **Right** | System Stats, System Tray, Network, Bluetooth, Audio, Clock, Notifications, Power |
 
 ### Bar widgets
 
@@ -38,6 +38,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
 | **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
+| **Network** | `NetworkPill.qml` | NetworkManager manager (nm-applet replacement): two-column popup (Adapters + Connections \| WiFi), traffic graph, radio toggles, connection info, optional nm-applet tray. Left-click opens the popup; right-click toggles WiFi radio. See [Network pill](#network-pill-networkpillqml) |
 | **Bluetooth** | `BluetoothPill.qml` | Adapter power, scan/pair, connect/disconnect, trust/block/remove, battery, device info, and BlueZ **audio profiles** (A2DP/HFP via `audio-control.sh`). Left-click opens the popup; right-click toggles adapter power. See [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, L/R channel balance, real-time VU meters, and optional **echo cancel** (PipeWire AEC). Right-click opens the full popup. See [Audio pill](#audio-pill-audiopillqml) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
@@ -59,6 +60,7 @@ Every bar pill can be hidden or shown. Defaults live in `Config.qml` (search for
 | `showWorkspacesPill` | `true` | `setShowWorkspacesPill` / `toggleShowWorkspacesPill` | Workspaces strip |
 | `showStatsPill` | `true` | `setShowStatsWidget` / `toggleShowStatsWidget` | System Stats |
 | `showTrayPill` | `true` | `setShowTrayPill` / `toggleShowTrayPill` | System Tray |
+| `showNetworkPill` | `true` | `setShowNetworkPill` / `toggleShowNetworkPill` | Network |
 | `showBluetoothPill` | `true` | `setShowBluetoothPill` / `toggleShowBluetoothPill` | Bluetooth |
 | `showAudioPill` | `true` | `setShowAudioPill` / `toggleShowAudioPill` | Audio |
 | `showClockPill` | `true` | `setShowClockPill` / `toggleShowClockPill` | Clock |
@@ -93,6 +95,16 @@ Some bar widgets expose actions beyond show/hide. These work from scripts, Hyprl
 | `audioPill` | `setEchoCancel` | Enable (`true`) or disable (`false`) system echo cancel (sticky preference) |
 | `audioPill` | `enableEchoCancel` / `disableEchoCancel` | Same as `setEchoCancel true` / `false` |
 | `audioPill` | `toggleEchoCancel` | Toggle system echo cancel on/off |
+| `networkPill` | `showPopup` / `hidePopup` / `togglePopup` | Open, close, or toggle the Network menu |
+| `networkPill` | `setWifi` / `toggleWifi` / `enableWifi` / `disableWifi` | WiFi radio on/off |
+| `networkPill` | `setNetworking` / `toggleNetworking` | Global NetworkManager networking on/off |
+| `networkPill` | `startScan` / `stopScan` | WiFi network scan |
+| `networkPill` | `connectSsid` / `forgetSsid` / `disconnectDevice` | Connect (SSID), forget SSID, disconnect iface |
+| `networkPill` | `startApplet` / `stopApplet` / `toggleApplet` | nm-applet tray (session only) |
+| `networkPill` | `enableApplet` / `disableApplet` / `setAppletAutostart` | nm-applet autostart (survives reboot) |
+| `networkPill` | `openEditor` | Launch `nm-connection-editor` |
+| `networkPill` | `refreshIp` / `refreshDns` | Reapply IP / flush DNS |
+| `networkPill` | `activateConnection` / `deactivateConnection` | `uuid` or connection name |
 | `bluetoothPill` | `showPopup` / `hidePopup` / `togglePopup` | Open, close, or toggle the Bluetooth menu |
 | `bluetoothPill` | `setPower` / `togglePower` / `enable` / `disable` | Adapter radio power on/off |
 | `bluetoothPill` | `startScan` / `stopScan` / `toggleScan` | Device discovery |
@@ -117,6 +129,10 @@ qs ipc call clockPill showCalendar
 qs ipc call audioPill setEchoCancel true
 qs ipc call audioPill disableEchoCancel
 qs ipc call audioPill toggleEchoCancel
+qs ipc call networkPill togglePopup
+qs ipc call networkPill toggleWifi
+qs ipc call networkPill openEditor
+qs ipc call networkPill toggleApplet
 qs ipc call bluetoothPill togglePopup
 qs ipc call bluetoothPill togglePower
 qs ipc call bluetoothPill startScan
@@ -141,9 +157,108 @@ SUPER + C   →   qs ipc call clockPill showCalendar
 SUPER + N   →   qs ipc call notificationBell toggleDoNotDisturb
 SUPER + M   →   qs ipc call sysStatsPill toggleMetricsLiveUpdates
 SUPER + X   →   qs ipc call killTargetPill activatePickMode
-# Optional: bind echo cancel / Bluetooth
+# Optional: bind echo cancel / Bluetooth / Network
 # SUPER + ALT + E   →   qs ipc call audioPill toggleEchoCancel
 # SUPER + ALT + B   →   qs ipc call bluetoothPill togglePopup
+# SUPER + ALT + W   →   qs ipc call networkPill togglePopup
+```
+
+### Network pill (`NetworkPill.qml`)
+
+Glassmorphic bar pill for day-to-day NetworkManager control via **Quickshell.Networking** plus `scripts/network-control.sh`. Intended as a replacement for the **nm-applet** menu while still allowing the tray applet to run when you want it (header **Applet on/off**).
+
+| Input | Action |
+|-------|--------|
+| **Left-click** | Open / close the Network popup |
+| **Right-click** | Toggle WiFi radio (`Networking.wifiEnabled`); if no WiFi device, toggles networking |
+
+#### Layout
+
+| Pane | Contents |
+|------|----------|
+| **Header** (full width) | WiFi / Net / Applet toggles, connectivity, ↻ IP / ↻ DNS, dual traffic graph |
+| **Left** | **Adapters** (per-device status + actions) and **Connections** dropdown + **Editor** |
+| **Right** | **WiFi** networks (scan, connect / disconnect / forget, PSK prompt) |
+| **Details** | Single-column connection info (click any value to copy) |
+
+#### Popup features
+
+| Feature | Details |
+|---------|---------|
+| **WiFi radio** | Header **WiFi on/off** — software rfkill for all wireless devices |
+| **Networking** | Header **Net on/off** — `nmcli networking` global switch (green when on) |
+| **nm-applet** | Header **Applet on/off** starts or stops `nm-applet` for the **session** only; use IPC `enableApplet` / `disableApplet` to persist across reboot |
+| **Adapters** | Wired and WiFi devices with state, active connection name, IPv4, link speed; Disconnect / Connect / Details / Edit / Autoconnect |
+| **Connections** | Dropdown of saved NM profiles (activate by selection); **Editor** opens `nm-connection-editor` for the selected profile |
+| **Connection info** | Details panel (nm-applet *Connection Information* style): interface, MAC, cable/link, IPv4/IPv6, gateway, DNS, routes; click row to copy |
+| **WiFi networks** | Right column: scan while popup is open; signal bars, security, saved flag; Connect (PSK prompt when needed), Disconnect, Forget |
+| **Traffic graph** | Downstream (blue) + upstream (green) sparklines with live rates |
+
+Config tokens (search **NETWORK** / `popupNetwork*` in `Config.qml`): `showNetworkPill`, `popupNetworkWidth`, `popupNetworkWifiWidth`, `popupNetworkHeight`, `iconNetwork*`.
+
+#### Implementation notes
+
+- **Backend:** `Quickshell.Networking` for devices, WiFi scan/connect/forget, wifi radio; `scripts/network-control.sh` for live IP/DNS/routes, connection list, global networking, and nm-applet control.
+- **Scanner:** WiFi `scannerEnabled` is on only while the popup is open and WiFi is enabled.
+- **Safety:** Devices and SSIDs are string-keyed (no long-lived NM object pointers). Password field uses `HyprlandFocusGrab` under Hyprland. Fail handlers disconnect when the popup closes.
+- **Coexistence:** nm-applet may remain enabled for migration; use header session toggle or IPC `disableApplet` for permanent off. Advanced edits stay in `nm-connection-editor`.
+
+#### Performance
+
+- **One-pass device snapshot** for bar glyph, primary connection, WiFi connected SSID, and (when open) sorted AP list — no multi-walk of `Networking.devices` per frame.
+- **Status poll:** ~12s while the popup is closed (bar only); ~1.5s while open (graph + adapters). Overlapping `nmcli` status runs are skipped.
+- **Popup-gated work:** connection ComboBox model rebuild, rate history arrays, and WiFi SSID list materialization only while open; history cleared on close.
+- **Connection model fingerprint:** dropdown is not rebuilt if UUID/active set is unchanged.
+- **Sparse epoch timer** (3s while open) for weak NM notifies; no separate applet poll loop (status JSON carries `applet_running`).
+
+#### IPC (`networkPill`)
+
+Visibility (show/hide the pill itself) stays on the `shell` target. Actions below are on `networkPill`:
+
+| Command | Arguments | Description |
+|---------|-----------|-------------|
+| `showPopup` / `hidePopup` / `togglePopup` | — | Open or close the Network menu |
+| `setWifi` | `true`\|`false` | WiFi radio on/off |
+| `toggleWifi` / `enableWifi` / `disableWifi` | — | Same radio control |
+| `setNetworking` | `true`\|`false` | Global networking |
+| `toggleNetworking` | — | Flip networking |
+| `startScan` / `stopScan` | — | WiFi scanner |
+| `connectSsid` | `ssid` | Connect (known/open; PSK via UI) |
+| `disconnectDevice` | `iface` | e.g. `enp10s0` |
+| `forgetSsid` | `ssid` | Forget saved WiFi |
+| `startApplet` / `stopApplet` / `toggleApplet` | — | nm-applet for this session only |
+| `enableApplet` | — | Enable unit + start (survives reboot) |
+| `disableApplet` | — | Stop + disable unit (stays off after reboot) |
+| `setAppletAutostart` | `true`\|`false` | Same as enable / disable |
+| `openEditor` | — | `nm-connection-editor` |
+| `refreshIp` / `refreshDns` | — | Reapply / renew IP; flush DNS caches |
+| `activateConnection` | `uuid` or `name` | Bring a saved profile up |
+| `deactivateConnection` | `uuid` or `name` | Bring a profile down |
+
+**Applet note:** Header **Applet on/off** and `startApplet` / `stopApplet` / `toggleApplet` only affect the current session. After reboot the systemd user unit may start again if still enabled. Use `disableApplet` / `enableApplet` (or `setAppletAutostart`) to change login autostart.
+
+```bash
+# Pill visibility (shell target)
+qs ipc call shell setShowNetworkPill false
+qs ipc call shell toggleShowNetworkPill
+
+# Widget actions
+qs ipc call networkPill togglePopup
+qs ipc call networkPill toggleWifi
+qs ipc call networkPill disconnectDevice "enp10s0"
+qs ipc call networkPill openEditor
+qs ipc call networkPill refreshIp
+qs ipc call networkPill refreshDns
+qs ipc call networkPill activateConnection "Wired connection 1"
+
+# nm-applet — session only
+qs ipc call networkPill toggleApplet
+qs ipc call networkPill stopApplet
+
+# nm-applet — survives reboot
+qs ipc call networkPill disableApplet
+qs ipc call networkPill enableApplet
+qs ipc call networkPill setAppletAutostart false
 ```
 
 ### Bluetooth pill (`BluetoothPill.qml`)

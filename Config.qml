@@ -276,6 +276,11 @@ QtObject {
     readonly property int popupBluetoothWidth:  380
     readonly property int popupBluetoothHeight: 480
     readonly property int bluetoothScanSeconds: 45   // Auto-stop discovery after this many seconds
+    // --- NetworkPill (nm-applet replacement: wired/WiFi, radios, connection info)
+    // Main column width; WiFi AP list opens as a second column of popupNetworkWifiWidth
+    readonly property int popupNetworkWidth:      520
+    readonly property int popupNetworkWifiWidth:  340   // right column when scanning / changing network
+    readonly property int popupNetworkHeight:     580
     // --- SysStatsPill metrics popups (right-click CPU / Memory / GPU on the bar pill)
     // These are the large dropdown panels with charts and process lists — not the
     // compact numbers shown on the pill itself. Each section has its own size.
@@ -357,6 +362,7 @@ QtObject {
     readonly property bool showWorkspacesPill:      true   // WorkspacesPill.qml (numbered pills)
     readonly property bool showStatsPill:           true   // SysStatsPill.qml
     readonly property bool showTrayPill:             true   // SystemTrayPill.qml
+    readonly property bool showNetworkPill:          true   // NetworkPill.qml (nm-applet replacement)
     readonly property bool showBluetoothPill:        true   // BluetoothPill.qml
     readonly property bool showAudioPill:           true   // AudioPill.qml
     readonly property bool showClockPill:           true   // ClockPill.qml
@@ -465,6 +471,16 @@ QtObject {
     readonly property string iconBluetoothOff:       "󰂲"   // Powered off / no adapter
     readonly property string iconBluetoothConnected: "󰂱"   // At least one device connected
     readonly property string iconBluetoothScanning:  "󰂰"   // Discovery active
+    // Network pill (wired / WiFi / radios)
+    readonly property string iconNetworkWired:          "󰈀"   // Ethernet connected
+    readonly property string iconNetworkWifi:           "󰤨"   // Strong WiFi signal
+    readonly property string iconNetworkWifiFair:       "󰤥"   // Medium WiFi
+    readonly property string iconNetworkWifiWeak:       "󰤢"   // Weak WiFi
+    readonly property string iconNetworkWifiNone:       "󰤟"   // Very weak / no bars
+    readonly property string iconNetworkWifiOff:        "󰤭"   // WiFi radio off
+    readonly property string iconNetworkDisconnected:   "󰤮"   // No active connection
+    readonly property string iconNetworkOff:            "󰲛"   // Networking disabled
+    readonly property string iconNetworkPortal:         "󰖟"   // Captive portal
     // Power menu
     readonly property string iconPower:         "󰐥"
     readonly property string iconLock:          "󰌾"

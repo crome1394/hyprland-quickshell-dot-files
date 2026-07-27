@@ -17,9 +17,20 @@
 //   - qs ipc call shell setShowMagicWorkspacePill true
 //   - qs ipc call shell toggleShowMagicWorkspacePill
 //   - qs ipc call shell setShowAudioPill false   (and set/toggle for each bar pill)
+//   - qs ipc call shell setShowNetworkPill true / toggleShowNetworkPill
 //   - qs ipc call shell setShowBluetoothPill true / toggleShowBluetoothPill
 //   - qs ipc call audioPill setEchoCancel true|false
 //   - qs ipc call audioPill toggleEchoCancel / enableEchoCancel / disableEchoCancel
+//   - qs ipc call networkPill showPopup / hidePopup / togglePopup
+//   - qs ipc call networkPill setWifi true|false / toggleWifi / enableWifi / disableWifi
+//   - qs ipc call networkPill setNetworking true|false / toggleNetworking
+//   - qs ipc call networkPill startScan / stopScan / connectSsid / forgetSsid
+//   - qs ipc call networkPill disconnectDevice "iface" / openEditor
+//   - qs ipc call networkPill refreshIp [iface] / refreshDns [iface]
+//   - qs ipc call networkPill activateConnection "uuid|name" / deactivateConnection "uuid|name"
+//   - qs ipc call networkPill startApplet / stopApplet / toggleApplet   (session only)
+//   - qs ipc call networkPill enableApplet / disableApplet              (survives reboot)
+//   - qs ipc call networkPill setAppletAutostart true|false
 //   - qs ipc call bluetoothPill showPopup / hidePopup / togglePopup
 //   - qs ipc call bluetoothPill setPower true|false / togglePower / enable / disable
 //   - qs ipc call bluetoothPill startScan / stopScan / toggleScan
@@ -102,6 +113,7 @@ ShellRoot {
     property bool showWorkspacesPill: true
     property bool showStatsWidget: true
     property bool showTrayPill: true
+    property bool showNetworkPill: true
     property bool showBluetoothPill: true
     property bool showAudioPill: true
     property bool showClockPill: true
@@ -188,6 +200,7 @@ ShellRoot {
             root.showWorkspacesPill = cfg.showWorkspacesPill
             root.showStatsWidget = cfg.showStatsPill
             root.showTrayPill = cfg.showTrayPill
+            root.showNetworkPill = cfg.showNetworkPill
             root.showBluetoothPill = cfg.showBluetoothPill
             root.showAudioPill = cfg.showAudioPill
             root.showClockPill = cfg.showClockPill
@@ -391,6 +404,9 @@ ShellRoot {
         readonly property alias popupBluetoothWidth: cfg.popupBluetoothWidth
         readonly property alias popupBluetoothHeight: cfg.popupBluetoothHeight
         readonly property alias bluetoothScanSeconds: cfg.bluetoothScanSeconds
+        readonly property alias popupNetworkWidth: cfg.popupNetworkWidth
+        readonly property alias popupNetworkWifiWidth: cfg.popupNetworkWifiWidth
+        readonly property alias popupNetworkHeight: cfg.popupNetworkHeight
         readonly property alias popupStatsCpuWidth: cfg.popupStatsCpuWidth
         readonly property alias popupStatsCpuHeight: cfg.popupStatsCpuHeight
         readonly property alias popupStatsGpuWidth: cfg.popupStatsGpuWidth
@@ -443,6 +459,15 @@ ShellRoot {
         readonly property alias iconBluetoothOff: cfg.iconBluetoothOff
         readonly property alias iconBluetoothConnected: cfg.iconBluetoothConnected
         readonly property alias iconBluetoothScanning: cfg.iconBluetoothScanning
+        readonly property alias iconNetworkWired: cfg.iconNetworkWired
+        readonly property alias iconNetworkWifi: cfg.iconNetworkWifi
+        readonly property alias iconNetworkWifiFair: cfg.iconNetworkWifiFair
+        readonly property alias iconNetworkWifiWeak: cfg.iconNetworkWifiWeak
+        readonly property alias iconNetworkWifiNone: cfg.iconNetworkWifiNone
+        readonly property alias iconNetworkWifiOff: cfg.iconNetworkWifiOff
+        readonly property alias iconNetworkDisconnected: cfg.iconNetworkDisconnected
+        readonly property alias iconNetworkOff: cfg.iconNetworkOff
+        readonly property alias iconNetworkPortal: cfg.iconNetworkPortal
         readonly property alias iconPower: cfg.iconPower
         readonly property alias killTargetIcon: cfg.killTargetIcon
         readonly property alias killTargetTooltip: cfg.killTargetTooltip
@@ -695,7 +720,7 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showStatsWidget && (root.showTrayPill || root.showBluetoothPill || root.showAudioPill)
+                        visible: root.showStatsWidget && (root.showTrayPill || root.showNetworkPill || root.showBluetoothPill || root.showAudioPill)
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -711,7 +736,24 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showTrayPill && (root.showBluetoothPill || root.showAudioPill)
+                        visible: root.showTrayPill && (root.showNetworkPill || root.showBluetoothPill || root.showAudioPill)
+                        Layout.preferredWidth: bar.dividerThickness
+                        Layout.preferredHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
+                        color: bar.divider
+                    }
+
+                    // ─ Network ─
+                    NetworkPill {
+                        id: networkPill
+                        visible: root.showNetworkPill
+                        bar: bar
+                        barBg: barBg
+                    }
+
+                    // ── divider ──
+                    Rectangle {
+                        visible: root.showNetworkPill && (root.showBluetoothPill || root.showAudioPill)
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -860,6 +902,90 @@ ShellRoot {
             function disableEchoCancel(): void {
                 if (audioPill && audioPill.disableEchoCancel)
                     audioPill.disableEchoCancel()
+            }
+        }
+
+        Io.IpcHandler {
+            target: "networkPill"
+            function showPopup(): void {
+                if (networkPill && networkPill.showPopup) networkPill.showPopup()
+            }
+            function hidePopup(): void {
+                if (networkPill && networkPill.hidePopup) networkPill.hidePopup()
+            }
+            function togglePopup(): void {
+                if (networkPill && networkPill.togglePopup) networkPill.togglePopup()
+            }
+            function setWifi(enabled: bool): void {
+                if (networkPill && networkPill.setWifi) networkPill.setWifi(enabled)
+            }
+            function toggleWifi(): void {
+                if (networkPill && networkPill.toggleWifi) networkPill.toggleWifi()
+            }
+            function enableWifi(): void {
+                if (networkPill && networkPill.enableWifi) networkPill.enableWifi()
+            }
+            function disableWifi(): void {
+                if (networkPill && networkPill.disableWifi) networkPill.disableWifi()
+            }
+            function setNetworking(enabled: bool): void {
+                if (networkPill && networkPill.setNetworking) networkPill.setNetworking(enabled)
+            }
+            function toggleNetworking(): void {
+                if (networkPill && networkPill.toggleNetworking) networkPill.toggleNetworking()
+            }
+            function startScan(): void {
+                if (networkPill && networkPill.startScan) networkPill.startScan()
+            }
+            function stopScan(): void {
+                if (networkPill && networkPill.stopScan) networkPill.stopScan()
+            }
+            function connectSsid(ssid: string): void {
+                if (networkPill && networkPill.connectSsid) networkPill.connectSsid(ssid)
+            }
+            function disconnectDevice(iface: string): void {
+                if (networkPill && networkPill.disconnectDevice) networkPill.disconnectDevice(iface)
+            }
+            function forgetSsid(ssid: string): void {
+                if (networkPill && networkPill.forgetSsid) networkPill.forgetSsid(ssid)
+            }
+            // nm-applet: session-only start/stop (does not change login enablement)
+            function startApplet(): void {
+                if (networkPill && networkPill.startApplet) networkPill.startApplet()
+            }
+            function stopApplet(): void {
+                if (networkPill && networkPill.stopApplet) networkPill.stopApplet()
+            }
+            function toggleApplet(): void {
+                if (networkPill && networkPill.toggleApplet) networkPill.toggleApplet()
+            }
+            // nm-applet: persist across reboots (systemctl --user enable/disable)
+            function enableApplet(): void {
+                if (networkPill && networkPill.enableApplet) networkPill.enableApplet()
+            }
+            function disableApplet(): void {
+                if (networkPill && networkPill.disableApplet) networkPill.disableApplet()
+            }
+            function setAppletAutostart(enabled: bool): void {
+                if (networkPill && networkPill.setAppletAutostart)
+                    networkPill.setAppletAutostart(enabled)
+            }
+            function openEditor(): void {
+                if (networkPill && networkPill.openConnectionEditor) networkPill.openConnectionEditor()
+            }
+            function refreshIp(): void {
+                if (networkPill && networkPill.refreshIp) networkPill.refreshIp("")
+            }
+            function refreshDns(): void {
+                if (networkPill && networkPill.refreshDns) networkPill.refreshDns("")
+            }
+            function activateConnection(id: string): void {
+                if (networkPill && networkPill.activateConnection)
+                    networkPill.activateConnection(id)
+            }
+            function deactivateConnection(id: string): void {
+                if (networkPill && networkPill.deactivateConnection)
+                    networkPill.deactivateConnection(id)
             }
         }
 
@@ -1037,6 +1163,12 @@ ShellRoot {
         }
         function toggleShowTrayPill(): void {
             root.showTrayPill = !root.showTrayPill
+        }
+        function setShowNetworkPill(enabled: bool): void {
+            root.showNetworkPill = enabled
+        }
+        function toggleShowNetworkPill(): void {
+            root.showNetworkPill = !root.showNetworkPill
         }
         function setShowBluetoothPill(enabled: bool): void {
             root.showBluetoothPill = enabled
