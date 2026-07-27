@@ -135,8 +135,9 @@ chmod 600 ~/.config/quickshell/secrets/freshrss.env
 | Keys | Action |
 |------|--------|
 | `w` / `s` or `↑` / `↓` | Move list cursor (feeds, dates, articles) |
-| `Space` / `←` / `→` | Expand or collapse feed or date under cursor |
-| `Enter` | Open article in detail pane (or expand feed/date) |
+| `Space` / `←` | Expand or collapse feed or date under cursor |
+| `Enter` | Open article in detail pane (or expand feed/date if cursor is on a header) |
+| `→` | **On an article:** open it (same as Enter). **On a feed/date:** expand/collapse |
 | `j` / `k` | Next / previous **article** only |
 | `/` or `Ctrl+F` | Focus search |
 | `b` | Open selected article in browser |

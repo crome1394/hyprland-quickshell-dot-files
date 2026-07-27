@@ -690,6 +690,24 @@ Rectangle {
         }
     }
 
+    /**
+     * Right arrow: load article when cursor is on an item (same as Enter).
+     * On a feed/date header, keep expand/collapse (same as Space) so trees still work.
+     */
+    function rightArrowAction() {
+        const rows = listRows
+        if (!rows || rows.length === 0)
+            return
+        restoreListCursor()
+        const row = rows[listCursor]
+        if (!row)
+            return
+        if (row.kind === "item")
+            activateListCursor()
+        else
+            toggleListCursorExpand()
+    }
+
     onListRowsChanged: scheduleRestoreListCursor()
 
     Timer {
@@ -1081,12 +1099,13 @@ Rectangle {
             enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: root.toggleListCursorExpand()
         }
-        // Same expand/collapse as Space (common tree navigation)
+        // Right: open article if cursor is on one; otherwise expand/collapse feed/date
         Shortcut {
             sequence: "Right"
             enabled: readerWindow.visible && !searchField.activeFocus
-            onActivated: root.toggleListCursorExpand()
+            onActivated: root.rightArrowAction()
         }
+        // Left: expand/collapse only (unchanged)
         Shortcut {
             sequence: "Left"
             enabled: readerWindow.visible && !searchField.activeFocus
@@ -2030,7 +2049,7 @@ Rectangle {
                 // Footer shortcuts
                 Text {
                     Layout.fillWidth: true
-                    text: "w/s or ↑/↓ list · Space/←/→ expand · Enter open · j/k articles · / search · b browser · v mpv · r refresh · Esc"
+                    text: "w/s or ↑/↓ list · Space/← expand · Enter/→ open article · j/k articles · / search · b browser · v mpv · r refresh · Esc"
                           + (root.writable ? " · m item read · Shift+S star · Shift+R feed read · Shift+U feed unread" : "")
                     color: bar.overlay || bar.subtext
                     font.pixelSize: 11
