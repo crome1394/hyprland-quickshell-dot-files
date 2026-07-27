@@ -172,8 +172,12 @@ QtObject {
     readonly property int pillHeight:          36   // Standard height for every pill in the bar
 
     // Audio widget (very sensitive — changing these requires testing dual view alignment)
-    readonly property int audioViewContentWidth: 172   // Total inner width that speaker+mic+dual views must fit
-    readonly property int audioViewSidePadding:    3   // Used only in dual view for left/right micro-padding
+    // Audio pill content width. Dual view (default) needs room for:
+    //   speaker icon + bar + vol% [+ bat%] | mic icon + bar + vol% [+ bat%]
+    readonly property int audioViewContentWidth: 330   // Inner width for dual-first layout (+ BT battery)
+    readonly property int audioViewSidePadding:    6   // Dual view left/right micro-padding
+    readonly property int audioDualBarWidth:      68   // Mini volume bar width in dual view
+    readonly property int audioDualPercentWidth:  34   // "100%" label slot in dual view
 
     // Icon sizes (nerd font glyphs and tray icons)
     readonly property int iconSizeTray:        18   // System tray — reference size for bar icons
@@ -257,9 +261,9 @@ QtObject {
     ]
 
     // Popup window sizes in pixels (width × height). Increase if content feels cramped.
-    // AudioPill: device + profile dropdowns, master volume, L/R, VU, echo-cancel toggle.
-    readonly property int popupAudioWidth:     440   // AudioPill device/volume popup
-    readonly property int popupAudioHeight:    480
+    // AudioPill: streams summary, device + profile, volume, L/R, VU, echo cancel, tools.
+    readonly property int popupAudioWidth:     520   // AudioPill device/volume popup
+    readonly property int popupAudioHeight:    620
     readonly property int popupMediaWidth:     520   // MediaPill player controls popup
     readonly property int popupMediaHeight:    470
     readonly property int popupPowerWidth:     560   // PowerMenu full grid (left-click)
@@ -268,6 +272,10 @@ QtObject {
     readonly property int popupContextMenuRowHeight: 34  // Height of one row in those menus
     readonly property int popupCalendarWidth:  310   // ClockPill calendar popup
     readonly property int popupCalendarHeight: 280
+    // --- BluetoothPill (adapter power, devices, profiles)
+    readonly property int popupBluetoothWidth:  380
+    readonly property int popupBluetoothHeight: 480
+    readonly property int bluetoothScanSeconds: 45   // Auto-stop discovery after this many seconds
     // --- SysStatsPill metrics popups (right-click CPU / Memory / GPU on the bar pill)
     // These are the large dropdown panels with charts and process lists — not the
     // compact numbers shown on the pill itself. Each section has its own size.
@@ -349,6 +357,7 @@ QtObject {
     readonly property bool showWorkspacesPill:      true   // WorkspacesPill.qml (numbered pills)
     readonly property bool showStatsPill:           true   // SysStatsPill.qml
     readonly property bool showTrayPill:             true   // SystemTrayPill.qml
+    readonly property bool showBluetoothPill:        true   // BluetoothPill.qml
     readonly property bool showAudioPill:           true   // AudioPill.qml
     readonly property bool showClockPill:           true   // ClockPill.qml
     readonly property bool showNotificationPill:     true   // NotificationBell.qml
@@ -444,6 +453,18 @@ QtObject {
     // Microphone
     readonly property string iconMic:           "󰍬"
     readonly property string iconMicMuted:      "󰍭"
+    // Audio device transport / form (AudioPill device picker)
+    readonly property string iconAudioBluetooth: "󰂯"   // Bluetooth headset/speakers
+    readonly property string iconAudioUsb:       "󰕓"   // USB audio (DAC, webcam mic, etc.)
+    readonly property string iconAudioHdmi:      "󰡁"   // HDMI / DisplayPort audio
+    readonly property string iconAudioInternal:  "󰓃"   // Built-in / PCI analog
+    readonly property string iconAudioHeadset:   "󰋋"   // Headset form factor
+    readonly property string iconAudioBattery:   "󰁹"   // BT battery (generic full)
+    // Bluetooth pill (adapter / connection state glyphs)
+    readonly property string iconBluetooth:          "󰂯"   // Powered on, idle
+    readonly property string iconBluetoothOff:       "󰂲"   // Powered off / no adapter
+    readonly property string iconBluetoothConnected: "󰂱"   // At least one device connected
+    readonly property string iconBluetoothScanning:  "󰂰"   // Discovery active
     // Power menu
     readonly property string iconPower:         "󰐥"
     readonly property string iconLock:          "󰌾"

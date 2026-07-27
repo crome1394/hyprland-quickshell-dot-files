@@ -17,8 +17,19 @@
 //   - qs ipc call shell setShowMagicWorkspacePill true
 //   - qs ipc call shell toggleShowMagicWorkspacePill
 //   - qs ipc call shell setShowAudioPill false   (and set/toggle for each bar pill)
+//   - qs ipc call shell setShowBluetoothPill true / toggleShowBluetoothPill
 //   - qs ipc call audioPill setEchoCancel true|false
 //   - qs ipc call audioPill toggleEchoCancel / enableEchoCancel / disableEchoCancel
+//   - qs ipc call bluetoothPill showPopup / hidePopup / togglePopup
+//   - qs ipc call bluetoothPill setPower true|false / togglePower / enable / disable
+//   - qs ipc call bluetoothPill startScan / stopScan / toggleScan
+//   - qs ipc call bluetoothPill setDiscoverable true|false / toggleDiscoverable
+//   - qs ipc call bluetoothPill startApplet / stopApplet / toggleApplet
+//   - qs ipc call bluetoothPill connectDevice|disconnectDevice|pairDevice|forgetDevice "AA:BB:…"
+//   - qs ipc call bluetoothPill setTrusted "AA:BB:…" true|false
+//   - qs ipc call bluetoothPill setBlocked "AA:BB:…" true|false
+//   - qs ipc call bluetoothPill renameDevice "AA:BB:…" "Name"
+//   - qs ipc call bluetoothPill setCardProfile "AA:BB:…" "a2dp-sink"
 //   - qs ipc call clockPill showCalendar
 //   - qs ipc call notificationBell toggleDoNotDisturb
 //   - qs ipc call sysStatsPill setMetricsLiveUpdates false
@@ -60,7 +71,7 @@
 // Current layout:
 //   LEFT:   App Launcher, Quick Launch, Media Player
 //   CENTER: Workspaces
-//   RIGHT:  System Stats, System Tray, Audio, Clock, Notifications, Power
+//   RIGHT:  System Stats, System Tray, Bluetooth, Audio, Clock, Notifications, Power
 //
 // Why CENTER is special: left and right zones are different widths, so a widget
 // placed "between" them would look off-center. CENTER ZONE is pinned to the
@@ -91,6 +102,7 @@ ShellRoot {
     property bool showWorkspacesPill: true
     property bool showStatsWidget: true
     property bool showTrayPill: true
+    property bool showBluetoothPill: true
     property bool showAudioPill: true
     property bool showClockPill: true
     property bool showNotificationPill: true
@@ -176,6 +188,7 @@ ShellRoot {
             root.showWorkspacesPill = cfg.showWorkspacesPill
             root.showStatsWidget = cfg.showStatsPill
             root.showTrayPill = cfg.showTrayPill
+            root.showBluetoothPill = cfg.showBluetoothPill
             root.showAudioPill = cfg.showAudioPill
             root.showClockPill = cfg.showClockPill
             root.showNotificationPill = cfg.showNotificationPill
@@ -351,6 +364,8 @@ ShellRoot {
         readonly property alias pillHeight: cfg.pillHeight
         readonly property alias audioViewContentWidth: cfg.audioViewContentWidth
         readonly property alias audioViewSidePadding: cfg.audioViewSidePadding
+        readonly property alias audioDualBarWidth: cfg.audioDualBarWidth
+        readonly property alias audioDualPercentWidth: cfg.audioDualPercentWidth
         readonly property alias iconSizePill: cfg.iconSizePill
         readonly property alias iconSizePillLarge: cfg.iconSizePillLarge
         readonly property alias iconSizePopup: cfg.iconSizePopup
@@ -373,6 +388,9 @@ ShellRoot {
         readonly property alias popupContextMenuRowHeight: cfg.popupContextMenuRowHeight
         readonly property alias popupCalendarWidth: cfg.popupCalendarWidth
         readonly property alias popupCalendarHeight: cfg.popupCalendarHeight
+        readonly property alias popupBluetoothWidth: cfg.popupBluetoothWidth
+        readonly property alias popupBluetoothHeight: cfg.popupBluetoothHeight
+        readonly property alias bluetoothScanSeconds: cfg.bluetoothScanSeconds
         readonly property alias popupStatsCpuWidth: cfg.popupStatsCpuWidth
         readonly property alias popupStatsCpuHeight: cfg.popupStatsCpuHeight
         readonly property alias popupStatsGpuWidth: cfg.popupStatsGpuWidth
@@ -415,6 +433,16 @@ ShellRoot {
         readonly property alias iconSpeakerMuted: cfg.iconSpeakerMuted
         readonly property alias iconMic: cfg.iconMic
         readonly property alias iconMicMuted: cfg.iconMicMuted
+        readonly property alias iconAudioBluetooth: cfg.iconAudioBluetooth
+        readonly property alias iconAudioUsb: cfg.iconAudioUsb
+        readonly property alias iconAudioHdmi: cfg.iconAudioHdmi
+        readonly property alias iconAudioInternal: cfg.iconAudioInternal
+        readonly property alias iconAudioHeadset: cfg.iconAudioHeadset
+        readonly property alias iconAudioBattery: cfg.iconAudioBattery
+        readonly property alias iconBluetooth: cfg.iconBluetooth
+        readonly property alias iconBluetoothOff: cfg.iconBluetoothOff
+        readonly property alias iconBluetoothConnected: cfg.iconBluetoothConnected
+        readonly property alias iconBluetoothScanning: cfg.iconBluetoothScanning
         readonly property alias iconPower: cfg.iconPower
         readonly property alias killTargetIcon: cfg.killTargetIcon
         readonly property alias killTargetTooltip: cfg.killTargetTooltip
@@ -667,7 +695,7 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showStatsWidget && root.showTrayPill
+                        visible: root.showStatsWidget && (root.showTrayPill || root.showBluetoothPill || root.showAudioPill)
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -683,7 +711,24 @@ ShellRoot {
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showTrayPill && root.showAudioPill
+                        visible: root.showTrayPill && (root.showBluetoothPill || root.showAudioPill)
+                        Layout.preferredWidth: bar.dividerThickness
+                        Layout.preferredHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
+                        color: bar.divider
+                    }
+
+                    // ─ Bluetooth ─
+                    BluetoothPill {
+                        id: bluetoothPill
+                        visible: root.showBluetoothPill
+                        bar: bar
+                        barBg: barBg
+                    }
+
+                    // ── divider ──
+                    Rectangle {
+                        visible: root.showBluetoothPill && root.showAudioPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter
@@ -819,6 +864,88 @@ ShellRoot {
         }
 
         Io.IpcHandler {
+            target: "bluetoothPill"
+            // Popup
+            function showPopup(): void {
+                if (bluetoothPill && bluetoothPill.showPopup) bluetoothPill.showPopup()
+            }
+            function hidePopup(): void {
+                if (bluetoothPill && bluetoothPill.hidePopup) bluetoothPill.hidePopup()
+            }
+            function togglePopup(): void {
+                if (bluetoothPill && bluetoothPill.togglePopup) bluetoothPill.togglePopup()
+            }
+            // Adapter radio power
+            function setPower(enabled: bool): void {
+                if (bluetoothPill && bluetoothPill.setPower) bluetoothPill.setPower(enabled)
+            }
+            function togglePower(): void {
+                if (bluetoothPill && bluetoothPill.togglePower) bluetoothPill.togglePower()
+            }
+            function enable(): void {
+                if (bluetoothPill && bluetoothPill.enable) bluetoothPill.enable()
+            }
+            function disable(): void {
+                if (bluetoothPill && bluetoothPill.disable) bluetoothPill.disable()
+            }
+            // Discovery
+            function startScan(): void {
+                if (bluetoothPill && bluetoothPill.startScan) bluetoothPill.startScan()
+            }
+            function stopScan(): void {
+                if (bluetoothPill && bluetoothPill.stopScan) bluetoothPill.stopScan()
+            }
+            function toggleScan(): void {
+                if (bluetoothPill && bluetoothPill.toggleScan) bluetoothPill.toggleScan()
+            }
+            function setDiscoverable(enabled: bool): void {
+                if (bluetoothPill && bluetoothPill.setDiscoverable) bluetoothPill.setDiscoverable(enabled)
+            }
+            function toggleDiscoverable(): void {
+                if (bluetoothPill && bluetoothPill.toggleDiscoverable) bluetoothPill.toggleDiscoverable()
+            }
+            // Blueman monitor applet
+            function startApplet(): void {
+                if (bluetoothPill && bluetoothPill.startApplet) bluetoothPill.startApplet()
+            }
+            function stopApplet(): void {
+                if (bluetoothPill && bluetoothPill.stopApplet) bluetoothPill.stopApplet()
+            }
+            function toggleApplet(): void {
+                if (bluetoothPill && bluetoothPill.toggleApplet) bluetoothPill.toggleApplet()
+            }
+            // Devices — address is MAC string e.g. "A0:0C:E2:66:FB:7D"
+            function connectDevice(address: string): void {
+                if (bluetoothPill && bluetoothPill.connectDevice) bluetoothPill.connectDevice(address)
+            }
+            function disconnectDevice(address: string): void {
+                if (bluetoothPill && bluetoothPill.disconnectDevice) bluetoothPill.disconnectDevice(address)
+            }
+            function pairDevice(address: string): void {
+                if (bluetoothPill && bluetoothPill.pairDevice) bluetoothPill.pairDevice(address)
+            }
+            function cancelPair(address: string): void {
+                if (bluetoothPill && bluetoothPill.cancelPair) bluetoothPill.cancelPair(address)
+            }
+            function forgetDevice(address: string): void {
+                if (bluetoothPill && bluetoothPill.forgetDevice) bluetoothPill.forgetDevice(address)
+            }
+            function setTrusted(address: string, trusted: bool): void {
+                if (bluetoothPill && bluetoothPill.setTrusted) bluetoothPill.setTrusted(address, trusted)
+            }
+            function setBlocked(address: string, blocked: bool): void {
+                if (bluetoothPill && bluetoothPill.setBlocked) bluetoothPill.setBlocked(address, blocked)
+            }
+            function renameDevice(address: string, name: string): void {
+                if (bluetoothPill && bluetoothPill.renameDevice) bluetoothPill.renameDevice(address, name)
+            }
+            // PipeWire bluez card profile for a device (e.g. a2dp-sink, headset-head-unit)
+            function setCardProfile(address: string, profileName: string): void {
+                if (bluetoothPill && bluetoothPill.setCardProfile) bluetoothPill.setCardProfile(address, profileName)
+            }
+        }
+
+        Io.IpcHandler {
             target: "clockPill"
             function showCalendar() {
                 if (clockPill && clockPill.showCalendar) clockPill.showCalendar()
@@ -910,6 +1037,12 @@ ShellRoot {
         }
         function toggleShowTrayPill(): void {
             root.showTrayPill = !root.showTrayPill
+        }
+        function setShowBluetoothPill(enabled: bool): void {
+            root.showBluetoothPill = enabled
+        }
+        function toggleShowBluetoothPill(): void {
+            root.showBluetoothPill = !root.showBluetoothPill
         }
         function setShowAudioPill(enabled: bool): void {
             root.showAudioPill = enabled

@@ -26,7 +26,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 |------|-------------------------|
 | **Left** | App Launcher, Quick Launch, Media Player |
 | **Center** | Workspaces |
-| **Right** | System Stats, System Tray, Audio, Clock, Notifications, Power |
+| **Right** | System Stats, System Tray, Bluetooth, Audio, Clock, Notifications, Power |
 
 ### Bar widgets
 
@@ -38,6 +38,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
 | **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
+| **Bluetooth** | `BluetoothPill.qml` | Adapter power, scan/pair, connect/disconnect, trust/block/remove, battery, device info, and BlueZ **audio profiles** (A2DP/HFP via `audio-control.sh`). Left-click opens the popup; right-click toggles adapter power. See [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, L/R channel balance, real-time VU meters, and optional **echo cancel** (PipeWire AEC). Right-click opens the full popup. See [Audio pill](#audio-pill-audiopillqml) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
 | **Notifications** | `NotificationBell.qml` | Bell with count badge and red DND styling. Polls your daemon's CLI from `Config.qml` (defaults: SwayNC / `swaync-client`) via timer sync + optional live subscribe — state and `Io.Process` polling live in this widget, not `shell.qml`. Left-click toggles panel; right-click opens menu (DND, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
@@ -58,6 +59,7 @@ Every bar pill can be hidden or shown. Defaults live in `Config.qml` (search for
 | `showWorkspacesPill` | `true` | `setShowWorkspacesPill` / `toggleShowWorkspacesPill` | Workspaces strip |
 | `showStatsPill` | `true` | `setShowStatsWidget` / `toggleShowStatsWidget` | System Stats |
 | `showTrayPill` | `true` | `setShowTrayPill` / `toggleShowTrayPill` | System Tray |
+| `showBluetoothPill` | `true` | `setShowBluetoothPill` / `toggleShowBluetoothPill` | Bluetooth |
 | `showAudioPill` | `true` | `setShowAudioPill` / `toggleShowAudioPill` | Audio |
 | `showClockPill` | `true` | `setShowClockPill` / `toggleShowClockPill` | Clock |
 | `showNotificationPill` | `true` | `setShowNotificationPill` / `toggleShowNotificationPill` | Notifications |
@@ -91,6 +93,16 @@ Some bar widgets expose actions beyond show/hide. These work from scripts, Hyprl
 | `audioPill` | `setEchoCancel` | Enable (`true`) or disable (`false`) system echo cancel (sticky preference) |
 | `audioPill` | `enableEchoCancel` / `disableEchoCancel` | Same as `setEchoCancel true` / `false` |
 | `audioPill` | `toggleEchoCancel` | Toggle system echo cancel on/off |
+| `bluetoothPill` | `showPopup` / `hidePopup` / `togglePopup` | Open, close, or toggle the Bluetooth menu |
+| `bluetoothPill` | `setPower` / `togglePower` / `enable` / `disable` | Adapter radio power on/off |
+| `bluetoothPill` | `startScan` / `stopScan` / `toggleScan` | Device discovery |
+| `bluetoothPill` | `setDiscoverable` / `toggleDiscoverable` | Make this PC discoverable |
+| `bluetoothPill` | `startApplet` / `stopApplet` / `toggleApplet` | Blueman monitor tray applet |
+| `bluetoothPill` | `connectDevice` / `disconnectDevice` | Connect or disconnect a MAC address |
+| `bluetoothPill` | `pairDevice` / `cancelPair` / `forgetDevice` | Pairing lifecycle for a MAC |
+| `bluetoothPill` | `setTrusted` / `setBlocked` | Trust or block a MAC (`address` + `bool`) |
+| `bluetoothPill` | `renameDevice` | Set BlueZ alias (`address` + `name`) |
+| `bluetoothPill` | `setCardProfile` | Set PipeWire profile for a MAC (`address` + profile name) |
 | `notificationBell` | `toggleDoNotDisturb` | Toggle Do Not Disturb for the configured notification daemon |
 | `killTargetPill` | `activatePickMode` / `cancelPickMode` | Arm or cancel the click-to-kill picker (same as clicking the pill) |
 | `sysStatsPill` | `setMetricsLiveUpdates` | Pause (`false`) or resume (`true`) metrics-popup polling for all CPU/Memory/GPU sections |
@@ -105,6 +117,13 @@ qs ipc call clockPill showCalendar
 qs ipc call audioPill setEchoCancel true
 qs ipc call audioPill disableEchoCancel
 qs ipc call audioPill toggleEchoCancel
+qs ipc call bluetoothPill togglePopup
+qs ipc call bluetoothPill togglePower
+qs ipc call bluetoothPill startScan
+qs ipc call bluetoothPill connectDevice "A0:0C:E2:66:FB:7D"
+qs ipc call bluetoothPill renameDevice "A0:0C:E2:66:FB:7D" "Shokz Dark"
+qs ipc call bluetoothPill setCardProfile "A0:0C:E2:66:FB:7D" "a2dp-sink"
+qs ipc call bluetoothPill toggleApplet
 qs ipc call notificationBell toggleDoNotDisturb
 qs ipc call sysStatsPill setMetricsLiveUpdates false
 qs ipc call sysStatsPill toggleMetricsLiveUpdates
@@ -122,8 +141,79 @@ SUPER + C   →   qs ipc call clockPill showCalendar
 SUPER + N   →   qs ipc call notificationBell toggleDoNotDisturb
 SUPER + M   →   qs ipc call sysStatsPill toggleMetricsLiveUpdates
 SUPER + X   →   qs ipc call killTargetPill activatePickMode
-# Optional: bind echo cancel
+# Optional: bind echo cancel / Bluetooth
 # SUPER + ALT + E   →   qs ipc call audioPill toggleEchoCancel
+# SUPER + ALT + B   →   qs ipc call bluetoothPill togglePopup
+```
+
+### Bluetooth pill (`BluetoothPill.qml`)
+
+Glassmorphic bar pill for day-to-day Bluetooth management via **Quickshell.Bluetooth** (BlueZ). Intended as a refined replacement for the Blueman tray applet while **keeping Blueman running** as a pairing-agent fallback for PIN/passkey dialogs.
+
+| Input | Action |
+|-------|--------|
+| **Left-click** | Open / close the Bluetooth popup |
+| **Right-click** | Toggle adapter radio power (`BluetoothAdapter.enabled`) |
+
+#### Popup features
+
+| Feature | Details |
+|---------|---------|
+| **Adapter power** | On/off for the default adapter (radio power — not `systemctl bluetooth.service`) |
+| **Scan / pair** | Start discovery (auto-stops after `bluetoothScanSeconds`, default 45s); pair nearby devices (`device.pair()`). Passkey UI may open via Blueman/agent |
+| **Discoverable** | Toggle so other devices can find this computer |
+| **Device list** | Connected, Paired, and Available sections with connection status and battery % when reported |
+| **Connect / disconnect** | For previously paired devices |
+| **Rename** | Set the BlueZ alias (`device.name`) for paired devices — **Rename** chip + Save / Enter |
+| **Trust / block** | Writable BlueZ flags per device |
+| **Remove** | `device.forget()` with a confirm step |
+| **Blueman applet** | Header **Applet on/off** starts or stops the Blueman monitor tray (`app-blueman@autostart.service`) |
+| **Audio profile** | For connected audio devices: PipeWire `bluez_card.*` profiles (A2DP / HFP / codecs) via `scripts/audio-control.sh` |
+| **Device info** | Name, address, paired/bonded/trusted/blocked, battery, adapter, D-Bus path; optional launch of `blueman-manager` |
+
+Config tokens (search **BLUETOOTH** / `popupBluetooth*` in `Config.qml`): `showBluetoothPill`, `popupBluetoothWidth`, `popupBluetoothHeight`, `bluetoothScanSeconds`, `iconBluetooth*`.
+
+#### Implementation notes
+
+- **Backend:** `Quickshell.Bluetooth` for adapter/devices; `scripts/audio-control.sh` for `bluez_card.*` profiles; Blueman coexists as pairing agent + optional tray (`startApplet` / `stopApplet`).
+- **Perf:** One-pass device snapshot for bar metrics and (when the popup is open) section address lists; no multi-walk of the device model. Popup closed → empty section lists (bar still tracks connected count + primary battery via BlueZ property notifies). While open, a modest timer refreshes sparse notifies (faster during scan). Blueman status is polled slowly and on open/toggle only.
+- **Safety:** Device selection is address-keyed (no long-lived BlueZ object pointers). Rename uses `HyprlandFocusGrab` so the `TextField` receives keys under Hyprland.
+- **Close behavior:** Closing the popup stops discovery and clears expand/rename/profile UI state.
+
+#### IPC (`bluetoothPill`)
+
+Visibility (show/hide the pill itself) stays on the `shell` target. All actions below are on `bluetoothPill`:
+
+| Command | Arguments | Description |
+|---------|-----------|-------------|
+| `showPopup` / `hidePopup` / `togglePopup` | — | Open or close the Bluetooth menu |
+| `setPower` | `true`\|`false` | Adapter radio on/off |
+| `togglePower` / `enable` / `disable` | — | Same power control |
+| `startScan` / `stopScan` / `toggleScan` | — | Discovery (auto-stops after `bluetoothScanSeconds`) |
+| `setDiscoverable` | `true`\|`false` | Advertise this PC |
+| `toggleDiscoverable` | — | Flip discoverable |
+| `startApplet` / `stopApplet` / `toggleApplet` | — | Blueman tray monitor |
+| `connectDevice` / `disconnectDevice` | `address` | Connect or disconnect |
+| `pairDevice` / `cancelPair` / `forgetDevice` | `address` | Pairing lifecycle |
+| `setTrusted` | `address` `true`\|`false` | Trust flag |
+| `setBlocked` | `address` `true`\|`false` | Block flag |
+| `renameDevice` | `address` `name` | BlueZ alias |
+| `setCardProfile` | `address` `profileName` | e.g. `a2dp-sink`, `headset-head-unit` |
+
+```bash
+# Pill visibility (shell target)
+qs ipc call shell setShowBluetoothPill false
+qs ipc call shell toggleShowBluetoothPill
+
+# Widget actions
+qs ipc call bluetoothPill togglePopup
+qs ipc call bluetoothPill setPower true
+qs ipc call bluetoothPill startScan
+qs ipc call bluetoothPill connectDevice "A0:0C:E2:66:FB:7D"
+qs ipc call bluetoothPill setTrusted "A0:0C:E2:66:FB:7D" true
+qs ipc call bluetoothPill renameDevice "A0:0C:E2:66:FB:7D" "Shokz Dark"
+qs ipc call bluetoothPill setCardProfile "A0:0C:E2:66:FB:7D" "a2dp-sink-sbc_xq"
+qs ipc call bluetoothPill toggleApplet
 ```
 
 ### Audio pill (`AudioPill.qml`)
