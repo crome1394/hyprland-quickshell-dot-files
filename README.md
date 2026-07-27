@@ -75,7 +75,16 @@ Floating reader for a local FreshRSS server (default `http://10.74.10.8`). Opens
 | **Unread** / **Starred** | Fever API id lists | True unread/starred sets from the server. |
 | (no API password) | Public RSS ` /i/?a=rss` | Read-only fallback. |
 
-Unread badge uses Google Reader `unread-count` (same total as FreshRSS’s `(N)` title).
+**Counters (match FreshRSS)**
+
+| Location | Source | What you see |
+|----------|--------|----------------|
+| **Bar pill badge** | GReader `unread-count` → `max` | Same total as FreshRSS’s `(N)` title |
+| **Status line** in the window | Same global unread + in-view filter stats | e.g. `all · all dates · 21 unread · 40 shown · 5u/35r in view` |
+| **Feed headers** | GReader per-feed unread (`titles` / `feeds` maps) | Accent number = unread (sidebar-style); `·N` = articles currently loaded for that feed |
+| **Date sub-rows** | Loaded list `is_read` flags | `unread` or `unread/total` for that day in the window |
+
+`freshrss-api.sh status` returns `{ unread, feeds, titles, labels, source }` for debugging. The bar badge only uses `unread`; in-window feed numbers use `titles` (feed name → count).
 
 **Setup**
 
@@ -94,6 +103,7 @@ chmod 600 ~/.config/quickshell/secrets/freshrss.env
 ```bash
 ~/.config/quickshell/scripts/freshrss-api.sh status
 # expect: "unread":N matching FreshRSS, "source":"greader"
+#         .titles."Alex Jones Live" etc. match the FreshRSS sidebar
 ~/.config/quickshell/scripts/freshrss-api.sh items 80 all 12 | jq '{count,feeds,ms,workers}'
 ```
 
@@ -117,6 +127,7 @@ chmod 600 ~/.config/quickshell/secrets/freshrss.env
 - Search (`/` or `Ctrl+F`) over title, feed, author, summary (not full HTML).
 - **Play in mpv** for YouTube/direct media (`yt-dlp` on `PATH`, e.g. `~/.local/bin/yt-dlp`). Body video links open in mpv too.
 - Mark read / star when API password is configured.
+- Feed list numbers track FreshRSS unread; choosing **All** does not replace them with “items loaded”.
 
 **Shortcuts:** `j`/`k` navigate · `/` or `Ctrl+F` search · `o` browser · `v` mpv · `r` refresh · `Esc` close · (`m` mark read · `s` star when writable). Double-click: video → mpv, else browser.
 

@@ -63,20 +63,59 @@ Rectangle {
     // After each successful fetch, re-collapse categories (fresh session start behavior).
     property bool autoCollapseOnLoad: true
 
-    // Unread badge — always FreshRSS total unread (never "items loaded" count)
+    // Unread badge + per-feed maps from FreshRSS (GReader unread-count)
     property int unreadCount: 0
     property int loadedCount: 0
+    property var feedUnreadById: ({})    // "16" → 10
+    property var feedUnreadByTitle: ({}) // "Alex Jones Live" → 10
+    property int countsVersion: 0        // bump when maps change (listRows rebind)
+
+    function serverUnreadForCategory(cat, feedId) {
+        const _ = countsVersion
+        const titles = feedUnreadByTitle || ({})
+        if (cat && titles[cat] !== undefined && titles[cat] !== null)
+            return Math.max(0, Number(titles[cat]) || 0)
+        const ids = feedUnreadById || ({})
+        if (feedId !== undefined && feedId !== null && feedId !== "") {
+            const k = String(feedId)
+            if (ids[k] !== undefined && ids[k] !== null)
+                return Math.max(0, Number(ids[k]) || 0)
+        }
+        return -1  // unknown (not from server)
+    }
+
+    /** Unread among currently loaded+filtered items for a category (fallback / date rows). */
+    function loadedUnreadInList(itemList) {
+        let n = 0
+        for (let i = 0; i < itemList.length; i++) {
+            if (Number(itemList[i].is_read) !== 1)
+                n++
+        }
+        return n
+    }
 
     readonly property string viewStatusText: {
         const shown = filteredItems.length
         const loaded = loadedCount || items.length
+        let loadedUnread = 0
+        let loadedRead = 0
+        for (let i = 0; i < filteredItems.length; i++) {
+            if (Number(filteredItems[i].is_read) === 1)
+                loadedRead++
+            else
+                loadedUnread++
+        }
         const parts = []
         parts.push(readScope)
         parts.push(dateFilter === "today" ? "today" : (dateFilter === "week" ? "7d" : "all dates"))
+        // FreshRSS-accurate global unread first
+        parts.push(unreadCount + " unread")
+        // What's visible in the current filter
         parts.push(shown + " shown")
+        if (shown > 0)
+            parts.push(loadedUnread + "u/" + loadedRead + "r in view")
         if (loaded !== shown)
             parts.push(loaded + " loaded")
-        parts.push(unreadCount + " unread")
         if (readScope === "all" || readScope === "read")
             parts.push(perFeedLimit + "/feed")
         else
@@ -185,6 +224,7 @@ Rectangle {
     // Sectioned rows: feed header → (when open) date subheaders → articles
     readonly property var listRows: {
         const _tick = collapseVersion  // dependency for collapse toggles
+        const _counts = countsVersion  // rebind when FreshRSS unread maps update
         const list = filteredItems
         const collapsed = collapsedCategories || ({})
         const collapsedDt = collapsedDates || ({})
@@ -204,10 +244,18 @@ Rectangle {
             const cat = cats[c]
             const itemsIn = byCat[cat]
             const isCollapsed = !!collapsed[cat]
+            const sampleFid = itemsIn[0] ? itemsIn[0].feed_id : ""
+            const srvUnread = serverUnreadForCategory(cat, sampleFid)
+            const loadedUnread = loadedUnreadInList(itemsIn)
+            const loadedRead = itemsIn.length - loadedUnread
             rows.push({
                 kind: "header",
                 category: cat,
-                count: itemsIn.length,
+                // FreshRSS-style unread (server); fall back to loaded unread
+                unread: srvUnread >= 0 ? srvUnread : loadedUnread,
+                read: loadedRead,
+                shown: itemsIn.length,
+                count: srvUnread >= 0 ? srvUnread : loadedUnread,
                 collapsed: isCollapsed,
                 id: "hdr:" + cat
             })
@@ -241,12 +289,17 @@ Rectangle {
                 const dKey = dateCollapseKey(cat, dk)
                 const dateCollapsed = !!collapsedDt[dKey]
                 const sampleEpoch = dayItems[0] ? dayItems[0].created_on_time : 0
+                const dayUnread = loadedUnreadInList(dayItems)
+                const dayRead = dayItems.length - dayUnread
                 rows.push({
                     kind: "date",
                     category: cat,
                     dateKey: dk,
                     dateLabel: dateLabelForKey(dk, sampleEpoch),
-                    count: dayItems.length,
+                    unread: dayUnread,
+                    read: dayRead,
+                    shown: dayItems.length,
+                    count: dayUnread,
                     collapsed: dateCollapsed,
                     id: "date:" + dKey
                 })
@@ -661,6 +714,12 @@ Rectangle {
                         root.mode = j.mode
                     if (j.writable !== undefined)
                         root.writable = !!j.writable
+                    // Per-feed / per-title unread (FreshRSS sidebar)
+                    if (j.feeds && typeof j.feeds === "object")
+                        root.feedUnreadById = j.feeds
+                    if (j.titles && typeof j.titles === "object")
+                        root.feedUnreadByTitle = j.titles
+                    root.countsVersion++
                 } catch (e) {}
             }
         }
@@ -1327,10 +1386,20 @@ Rectangle {
                                         font.bold: true
                                         elide: Text.ElideRight
                                     }
+                                    // FreshRSS sidebar style: primary number = unread on server
                                     Text {
-                                        text: String(modelData.count || 0)
-                                        color: bar.subtext
+                                        text: String(Number(modelData.unread || 0))
+                                        color: Number(modelData.unread || 0) > 0 ? bar.accent : bar.subtext
                                         font.pixelSize: 11
+                                        font.bold: Number(modelData.unread || 0) > 0
+                                        font.family: bar.fontMono
+                                    }
+                                    // Optional: how many of this feed are in the current window
+                                    Text {
+                                        visible: Number(modelData.shown || 0) > 0
+                                        text: "·" + String(modelData.shown || 0)
+                                        color: bar.overlay || bar.subtext
+                                        font.pixelSize: 10
                                         font.family: bar.fontMono
                                     }
                                 }
@@ -1365,10 +1434,20 @@ Rectangle {
                                         font.bold: true
                                         elide: Text.ElideRight
                                     }
+                                    // unread / total for that day (from loaded list)
                                     Text {
-                                        text: String(modelData.count || 0)
-                                        color: bar.overlay || bar.subtext
+                                        text: {
+                                            const u = Number(modelData.unread || 0)
+                                            const s = Number(modelData.shown || 0)
+                                            if (u > 0 && s > 0 && u !== s)
+                                                return u + "/" + s
+                                            if (u > 0)
+                                                return String(u)
+                                            return String(s)
+                                        }
+                                        color: Number(modelData.unread || 0) > 0 ? bar.accent : (bar.overlay || bar.subtext)
                                         font.pixelSize: 10
+                                        font.bold: Number(modelData.unread || 0) > 0
                                         font.family: bar.fontMono
                                     }
                                 }

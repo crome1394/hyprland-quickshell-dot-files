@@ -313,38 +313,125 @@ cmd_status() {
         local auth
         auth="$(printf '%s' "$resp" | jq -r '.auth // 0')"
         if [[ "$auth" == "1" ]]; then
-            # Prefer Google Reader unread-count "max" — same total FreshRSS uses in the UI.
-            local n=0 source="fever"
-            local gr_auth gr_raw
-            gr_raw="$(curl -sS -m 12 -X POST \
-                "${FRESHRSS_BASE_URL}/api/greader.php/accounts/ClientLogin" \
-                --data-urlencode "Email=${FRESHRSS_USER}" \
-                --data-urlencode "Passwd=${FRESHRSS_API_PASSWORD}" 2>/dev/null || true)"
-            gr_auth="$(printf '%s' "$gr_raw" | awk -F= '/^Auth=/{print $2; exit}')"
-            if [[ -n "$gr_auth" ]]; then
-                local gr_counts
-                gr_counts="$(curl -sS -m 12 \
-                    -H "Authorization: GoogleLogin auth=${gr_auth}" \
-                    "${FRESHRSS_BASE_URL}/api/greader.php/reader/api/0/unread-count?output=json" 2>/dev/null || true)"
-                n="$(printf '%s' "$gr_counts" | jq -r '.max // empty' 2>/dev/null || true)"
-                if [[ -n "$n" && "$n" =~ ^[0-9]+$ ]]; then
-                    source="greader"
-                else
-                    n=""
-                fi
-            fi
-            if [[ -z "${n:-}" ]]; then
-                local unread
-                unread="$(fever_post "api&unread_item_ids")"
-                n="$(printf '%s' "$unread" | jq -r '
-                    (.unread_item_ids // "")
-                    | if . == "" then 0 else (split(",") | map(select(length>0)) | length) end
-                ')"
-                source="fever"
-            fi
-            # count + unread both = total unread (badge uses unread; count kept for compat)
-            json_ok_obj "$(jq -nc --argjson n "$n" --arg src "$source" \
-                '{mode:"fever",auth:true,writable:true,unread:$n,count:$n,source:$src}')"
+            # Google Reader unread-count: global max + per-feed (matches FreshRSS sidebar).
+            FRESHRSS_BASE_URL="$FRESHRSS_BASE_URL" \
+            FRESHRSS_USER="$FRESHRSS_USER" \
+            FRESHRSS_API_PASSWORD="$FRESHRSS_API_PASSWORD" \
+            python3 - <<'PY'
+import json, os, urllib.parse, urllib.request, hashlib, time
+
+base = os.environ["FRESHRSS_BASE_URL"].rstrip("/")
+user = os.environ.get("FRESHRSS_USER", "admin")
+pw = os.environ.get("FRESHRSS_API_PASSWORD", "")
+cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
+                     "quickshell", "freshrss-greader.auth")
+
+def http(method, url, data=None, headers=None, timeout=12):
+    h = {"User-Agent": "quickshell-freshrss/1.2"}
+    if headers:
+        h.update(headers)
+    body = None
+    if data is not None:
+        body = urllib.parse.urlencode(data).encode()
+        h["Content-Type"] = "application/x-www-form-urlencoded"
+    req = urllib.request.Request(url, data=body, headers=h, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+def load_auth():
+    try:
+        with open(cache, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        if d.get("user") == user and d.get("base") == base and time.time() - float(d.get("ts", 0)) < 25 * 60:
+            return d.get("auth") or ""
+    except Exception:
+        pass
+    return ""
+
+def save_auth(tok):
+    try:
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        tmp = cache + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"auth": tok, "user": user, "base": base, "ts": time.time()}, f)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, cache)
+    except Exception:
+        pass
+
+def login():
+    raw = http("POST", f"{base}/api/greader.php/accounts/ClientLogin",
+               {"Email": user, "Passwd": pw}).decode("utf-8", "replace")
+    for line in raw.splitlines():
+        if line.startswith("Auth="):
+            tok = line.split("=", 1)[1].strip()
+            save_auth(tok)
+            return tok
+    return ""
+
+auth = load_auth() or login()
+if not auth:
+    # Fever fallback: global unread only
+    import subprocess, hashlib
+    key = hashlib.md5(f"{user}:{pw}".encode()).hexdigest()
+    import urllib.request as ur
+    # use curl-like via fever endpoint
+    try:
+        raw = http("POST", f"{base}/api/fever.php?api&unread_item_ids",
+                   {"api_key": key}).decode()
+        d = json.loads(raw)
+        ids = (d.get("unread_item_ids") or "").strip()
+        n = len([x for x in ids.split(",") if x]) if ids else 0
+    except Exception:
+        n = 0
+    print(json.dumps({
+        "ok": True, "mode": "fever", "auth": True, "writable": True,
+        "unread": n, "count": n, "source": "fever",
+        "feeds": {}, "titles": {}, "labels": {},
+    }, separators=(",", ":")))
+    raise SystemExit(0)
+
+auth_h = {"Authorization": f"GoogleLogin auth={auth}"}
+
+def get_json(path):
+    return json.loads(http("GET", f"{base}/api/greader.php{path}", headers=auth_h).decode())
+
+try:
+    counts = get_json("/reader/api/0/unread-count?output=json")
+    subs = get_json("/reader/api/0/subscription/list?output=json")
+except Exception:
+    auth = login()
+    if not auth:
+        print(json.dumps({"ok": False, "error": "greader auth failed"}))
+        raise SystemExit(1)
+    auth_h = {"Authorization": f"GoogleLogin auth={auth}"}
+    counts = get_json("/reader/api/0/unread-count?output=json")
+    subs = get_json("/reader/api/0/subscription/list?output=json")
+
+uc = counts.get("unreadcounts") or []
+by_stream = {u.get("id"): int(u.get("count") or 0) for u in uc if u.get("id")}
+feeds = {}
+for sid, c in by_stream.items():
+    if sid.startswith("feed/"):
+        feeds[sid[5:]] = c
+labels = {}
+for sid, c in by_stream.items():
+    if "/label/" in sid:
+        lab = urllib.parse.unquote(sid.split("/label/", 1)[-1].replace("+", " "))
+        labels[lab] = c
+titles = {}
+for s in subs.get("subscriptions") or []:
+    sid = s.get("id") or ""
+    title = s.get("title") or sid
+    titles[title] = int(by_stream.get(sid, 0))
+
+n = int(counts.get("max") or by_stream.get("user/-/state/com.google/reading-list") or 0)
+print(json.dumps({
+    "ok": True, "mode": "fever", "auth": True, "writable": True,
+    "unread": n, "count": n, "source": "greader",
+    "feeds": feeds, "titles": titles, "labels": labels,
+}, separators=(",", ":")))
+PY
             return 0
         fi
         # fall through to RSS if fever auth failed
