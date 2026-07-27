@@ -60,8 +60,15 @@ Rectangle {
     readonly property var perFeedChoices: [5, 8, 10, 12, 15, 20, 25, 30]
     readonly property var itemLimitChoices: [20, 40, 50, 80, 100, 150, 200]
 
-    // Resizable list pane width (SplitView); default from Config.freshRssListWidth
-    property int listPaneWidth: th.freshRssListWidth || 320
+    // Resizable list pane width (SplitView).
+    // Default always from Config.freshRssListWidth. listPaneUserWidth is set only when
+    // the user finishes dragging the split handle (not on every width change / not while
+    // the FloatingWindow is hidden). Writing preferredWidth every pixel used to thrash
+    // layout and early hidden layout used to break the Config binding entirely.
+    property int listPaneUserWidth: -1
+    readonly property int listPaneWidth: listPaneUserWidth > 0
+                                         ? listPaneUserWidth
+                                         : (th.freshRssListWidth || 320)
     readonly property int listPaneMinWidth: th.freshRssListMinWidth || 180
     readonly property int listPaneMaxWidth: th.freshRssListMaxWidth || 720
     readonly property int detailPaneMinWidth: th.freshRssDetailMinWidth || 260
@@ -934,12 +941,24 @@ Rectangle {
                         root.mode = j.mode
                     if (j.writable !== undefined)
                         root.writable = !!j.writable
-                    // Per-feed / per-title unread (FreshRSS sidebar)
-                    if (j.feeds && typeof j.feeds === "object")
-                        root.feedUnreadById = j.feeds
-                    if (j.titles && typeof j.titles === "object")
-                        root.feedUnreadByTitle = j.titles
-                    root.countsVersion++
+                    // Per-feed / per-title unread (FreshRSS sidebar).
+                    // Only bump countsVersion when maps actually change — every poll
+                    // used to rebuild listRows even when unread totals were identical.
+                    let mapsChanged = false
+                    if (j.feeds && typeof j.feeds === "object") {
+                        if (JSON.stringify(j.feeds) !== JSON.stringify(root.feedUnreadById || ({}))) {
+                            root.feedUnreadById = j.feeds
+                            mapsChanged = true
+                        }
+                    }
+                    if (j.titles && typeof j.titles === "object") {
+                        if (JSON.stringify(j.titles) !== JSON.stringify(root.feedUnreadByTitle || ({}))) {
+                            root.feedUnreadByTitle = j.titles
+                            mapsChanged = true
+                        }
+                    }
+                    if (mapsChanged)
+                        root.countsVersion++
                 } catch (e) {}
             }
         }
@@ -1611,6 +1630,17 @@ Rectangle {
                     handle: Rectangle {
                         implicitWidth: 10
                         color: "transparent"
+                        // Persist width once on drag end (not per-pixel) so preferredWidth
+                        // stays stable during the drag and we never clobber Config on
+                        // hidden/zero-size layout.
+                        readonly property bool dragging: SplitHandle.pressed
+                        onDraggingChanged: {
+                            if (dragging || !readerWindow.visible)
+                                return
+                            const w = Math.round(listPane.width)
+                            if (w >= root.listPaneMinWidth && Math.abs(w - root.listPaneWidth) > 1)
+                                root.listPaneUserWidth = w
+                        }
                         Rectangle {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.verticalCenter: parent.verticalCenter
@@ -1629,14 +1659,11 @@ Rectangle {
                     // List (grouped by feed/category title, newest sections & items on top)
                     Rectangle {
                         id: listPane
+                        // preferredWidth + implicitWidth so SplitView honors Config on first show
                         SplitView.preferredWidth: root.listPaneWidth
+                        implicitWidth: root.listPaneWidth
                         SplitView.minimumWidth: root.listPaneMinWidth
                         SplitView.maximumWidth: root.listPaneMaxWidth
-                        // Keep preferred width in sync when user drags the handle
-                        onWidthChanged: {
-                            if (Math.abs(width - root.listPaneWidth) > 1)
-                                root.listPaneWidth = Math.round(width)
-                        }
                         radius: 8
                         color: Qt.rgba(0, 0, 0, 0.18)
                         border.width: 1
