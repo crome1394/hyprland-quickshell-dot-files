@@ -1016,7 +1016,7 @@ Rectangle {
                 anchors.margins: bar.popupSpacing
                 spacing: 8
 
-                // ---- Header (two rows so toggles never clip) ----
+                // ---- Header (title + back only; power toggles live at bottom) ----
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -1054,110 +1054,6 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.detailIface = ""
-                        }
-                    }
-                }
-
-                // Toggle row — full width, never crowded by title/back
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    // WiFi radio
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 26
-                        radius: bar.buttonRadius
-                        color: wifiMa.containsMouse
-                               ? (net.wifiEnabled ? Qt.rgba(0.55, 0.14, 0.14, 0.55) : bar.accent)
-                               : (net.wifiEnabled ? Qt.rgba(0.12, 0.35, 0.22, 0.55) : bar.surface)
-                        border.width: bar.controlBorderWidth
-                        border.color: bar.dividerStrong
-                        opacity: net.wifiHardwareEnabled ? 1.0 : 0.45
-                        Text {
-                            anchors.centerIn: parent
-                            text: net.wifiEnabled ? "WiFi on" : "WiFi off"
-                            color: wifiMa.containsMouse && !net.wifiEnabled ? bar.bg : bar.text
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: bar.fontFamily
-                        }
-                        MouseArea {
-                            id: wifiMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            enabled: net.wifiHardwareEnabled
-                            ToolTip.text: net.wifiHardwareEnabled
-                                          ? (net.wifiEnabled ? "Disable WiFi radio" : "Enable WiFi radio")
-                                          : "WiFi hardware blocked (rfkill)"
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
-                            onClicked: net.toggleWifi()
-                        }
-                    }
-
-                    // Networking (green when on — matches WiFi / Applet)
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 26
-                        radius: bar.buttonRadius
-                        color: networkingMa.containsMouse
-                               ? (net.networkingEnabled ? Qt.rgba(0.55, 0.14, 0.14, 0.55) : bar.accent)
-                               : (net.networkingEnabled ? Qt.rgba(0.12, 0.35, 0.22, 0.55) : bar.surface)
-                        border.width: bar.controlBorderWidth
-                        border.color: bar.dividerStrong
-                        Text {
-                            anchors.centerIn: parent
-                            text: net.networkingEnabled ? "Net on" : "Net off"
-                            color: networkingMa.containsMouse && !net.networkingEnabled ? bar.bg : bar.text
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: bar.fontFamily
-                        }
-                        MouseArea {
-                            id: networkingMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            ToolTip.text: net.networkingEnabled
-                                          ? "Disable all networking (nmcli networking off)"
-                                          : "Enable networking"
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
-                            onClicked: net.toggleNetworking()
-                        }
-                    }
-
-                    // nm-applet
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 26
-                        radius: bar.buttonRadius
-                        color: appletMa.containsMouse
-                               ? (root.appletRunning ? Qt.rgba(0.55, 0.14, 0.14, 0.45) : bar.popupButtonHoverBg)
-                               : (root.appletRunning ? Qt.rgba(0.12, 0.35, 0.22, 0.45) : bar.surface)
-                        border.width: bar.controlBorderWidth
-                        border.color: root.appletRunning ? bar.accent : bar.dividerStrong
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.appletRunning ? "Applet on" : "Applet off"
-                            color: bar.text
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: bar.fontFamily
-                        }
-                        MouseArea {
-                            id: appletMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            ToolTip.text: root.appletRunning
-                                          ? "Stop nm-applet tray"
-                                          : "Start nm-applet tray"
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
-                            onClicked: root.toggleApplet()
                         }
                     }
                 }
@@ -2392,6 +2288,110 @@ Rectangle {
                         }
                     } // wifiColumn
                 } // mainBody
+
+                // ---- Footer toggles: WiFi / Net / Applet ----
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    // WiFi radio
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 26
+                        radius: bar.buttonRadius
+                        color: wifiMa.containsMouse
+                               ? (net.wifiEnabled ? Qt.rgba(0.55, 0.14, 0.14, 0.55) : bar.accent)
+                               : (net.wifiEnabled ? Qt.rgba(0.12, 0.35, 0.22, 0.55) : bar.surface)
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
+                        opacity: net.wifiHardwareEnabled ? 1.0 : 0.45
+                        Text {
+                            anchors.centerIn: parent
+                            text: net.wifiEnabled ? "WiFi on" : "WiFi off"
+                            color: wifiMa.containsMouse && !net.wifiEnabled ? bar.bg : bar.text
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: bar.fontFamily
+                        }
+                        MouseArea {
+                            id: wifiMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: net.wifiHardwareEnabled
+                            ToolTip.text: net.wifiHardwareEnabled
+                                          ? (net.wifiEnabled ? "Disable WiFi radio" : "Enable WiFi radio")
+                                          : "WiFi hardware blocked (rfkill)"
+                            ToolTip.visible: containsMouse
+                            ToolTip.delay: bar.tooltipDelay || 400
+                            onClicked: net.toggleWifi()
+                        }
+                    }
+
+                    // Networking (green when on — matches WiFi / Applet)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 26
+                        radius: bar.buttonRadius
+                        color: networkingMa.containsMouse
+                               ? (net.networkingEnabled ? Qt.rgba(0.55, 0.14, 0.14, 0.55) : bar.accent)
+                               : (net.networkingEnabled ? Qt.rgba(0.12, 0.35, 0.22, 0.55) : bar.surface)
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.dividerStrong
+                        Text {
+                            anchors.centerIn: parent
+                            text: net.networkingEnabled ? "Net on" : "Net off"
+                            color: networkingMa.containsMouse && !net.networkingEnabled ? bar.bg : bar.text
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: bar.fontFamily
+                        }
+                        MouseArea {
+                            id: networkingMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            ToolTip.text: net.networkingEnabled
+                                          ? "Disable all networking (nmcli networking off)"
+                                          : "Enable networking"
+                            ToolTip.visible: containsMouse
+                            ToolTip.delay: bar.tooltipDelay || 400
+                            onClicked: net.toggleNetworking()
+                        }
+                    }
+
+                    // nm-applet
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 26
+                        radius: bar.buttonRadius
+                        color: appletMa.containsMouse
+                               ? (root.appletRunning ? Qt.rgba(0.55, 0.14, 0.14, 0.45) : bar.popupButtonHoverBg)
+                               : (root.appletRunning ? Qt.rgba(0.12, 0.35, 0.22, 0.45) : bar.surface)
+                        border.width: bar.controlBorderWidth
+                        border.color: root.appletRunning ? bar.accent : bar.dividerStrong
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.appletRunning ? "Applet on" : "Applet off"
+                            color: bar.text
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: bar.fontFamily
+                        }
+                        MouseArea {
+                            id: appletMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            ToolTip.text: root.appletRunning
+                                          ? "Stop nm-applet tray"
+                                          : "Start nm-applet tray"
+                            ToolTip.visible: containsMouse
+                            ToolTip.delay: bar.tooltipDelay || 400
+                            onClicked: root.toggleApplet()
+                        }
+                    }
+                }
             }
         }
     }
