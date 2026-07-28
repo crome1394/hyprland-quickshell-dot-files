@@ -947,29 +947,22 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        acceptedButtons: Qt.LeftButton
 
         ToolTip.text: {
             if (!net.networkingEnabled)
-                return "Networking off · left-click menu · right-click toggle WiFi"
+                return "Networking off · left-click for menu"
             var bits = []
             if (net.primaryLabel.length) bits.push(net.primaryLabel)
             if (net.primaryIp.length) bits.push(net.primaryIp)
             bits.push("connectivity: " + net.connectivity)
-            bits.push("left-click menu · right-click WiFi")
+            bits.push("left-click menu")
             return bits.join(" · ")
         }
         ToolTip.visible: containsMouse && !netPopup.visible
         ToolTip.delay: bar.tooltipDelay || 400
 
-        onClicked: (mouse) => {
-            if (mouse.button === Qt.RightButton) {
-                if (net.hasWifiDevice())
-                    net.toggleWifi()
-                else
-                    net.toggleNetworking()
-                return
-            }
+        onClicked: {
             if (netPopup.visible)
                 closePopup()
             else

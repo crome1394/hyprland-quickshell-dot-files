@@ -40,7 +40,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
 | **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
-| **Network** | `NetworkPill.qml` | NetworkManager manager (nm-applet replacement): two-column popup (Adapters + Connections \| WiFi), traffic graph, radio toggles, connection info, optional nm-applet tray. Left-click opens the popup; right-click toggles WiFi radio. See [Network pill](#network-pill-networkpillqml) |
+| **Network** | `NetworkPill.qml` | NetworkManager manager (nm-applet replacement): two-column popup (Adapters + Connections \| WiFi), traffic graph, radio toggles, connection info, optional nm-applet tray. Left-click opens the popup (use the header WiFi toggle or IPC for radio power). See [Network pill](#network-pill-networkpillqml) |
 | **Bluetooth** | `BluetoothPill.qml` | Adapter power, scan/pair, connect/disconnect, trust/block/remove, battery, device info, and BlueZ **audio profiles** (A2DP/HFP via `audio-control.sh`). Left-click opens the popup; right-click toggles adapter power. See [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, collapsible L/R balance, real-time VU meters, BT battery, and optional **echo cancel** (PipeWire AEC). **Left-click** opens the full popup; right-click cycles speaker / mic / dual. See [Audio pill](#audio-pill-audiopillqml) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
@@ -347,7 +347,7 @@ Glassmorphic bar pill for day-to-day NetworkManager control via **Quickshell.Net
 | Input | Action |
 |-------|--------|
 | **Left-click** | Open / close the Network popup |
-| **Right-click** | Toggle WiFi radio (`Networking.wifiEnabled`); if no WiFi device, toggles networking |
+| **Right-click** | Disabled (use header **WiFi on/off** or `qs ipc call networkPill toggleWifi`) |
 
 #### Layout
 
@@ -412,7 +412,26 @@ Visibility (show/hide the pill itself) stays on the `shell` target. Actions belo
 | `activateConnection` | `uuid` or `name` | Bring a saved profile up |
 | `deactivateConnection` | `uuid` or `name` | Bring a profile down |
 
-**Applet note:** Header **Applet on/off** and `startApplet` / `stopApplet` / `toggleApplet` only affect the current session. After reboot the systemd user unit may start again if still enabled. Use `disableApplet` / `enableApplet` (or `setAppletAutostart`) to change login autostart.
+**Applet note:** Header **Applet on/off** and `startApplet` / `stopApplet` / `toggleApplet` only affect the **current session**. After reboot, `nm-applet.service` may start again if still enabled.
+
+To **keep the applet off across reboots** (disable the user unit + stop the process):
+
+```bash
+qs ipc call networkPill disableApplet
+# equivalent:
+qs ipc call networkPill setAppletAutostart false
+```
+
+To bring autostart back:
+
+```bash
+qs ipc call networkPill enableApplet
+# or:
+qs ipc call networkPill setAppletAutostart true
+```
+
+Check unit state anytime: `systemctl --user is-enabled nm-applet.service` or  
+`~/.config/quickshell/scripts/network-control.sh applet status`.
 
 ```bash
 # Pill visibility (shell target)
@@ -428,11 +447,11 @@ qs ipc call networkPill refreshIp
 qs ipc call networkPill refreshDns
 qs ipc call networkPill activateConnection "Wired connection 1"
 
-# nm-applet — session only
+# nm-applet — session only (does not change login enablement)
 qs ipc call networkPill toggleApplet
 qs ipc call networkPill stopApplet
 
-# nm-applet — survives reboot
+# nm-applet — keep off / on after reboot
 qs ipc call networkPill disableApplet
 qs ipc call networkPill enableApplet
 qs ipc call networkPill setAppletAutostart false
