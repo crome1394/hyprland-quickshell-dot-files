@@ -54,6 +54,7 @@ Rectangle {
     required property Item barBg
 
     readonly property string audioControlScript: "/home/crome/.config/quickshell/scripts/audio-control.sh"
+    readonly property string bluemanControlScript: "/home/crome/.config/quickshell/scripts/blueman-applet-control.sh"
 
     // Address of expanded / detail device (stable key; never store live object long-term)
     property string expandedAddress: ""
@@ -65,6 +66,9 @@ Rectangle {
     property string profileActive: ""
     property var profileList: []
     property bool bluemanRunning: false
+    // false when ~/.config/autostart/blueman.desktop masks login start
+    property bool bluemanAutostartEnabled: true
+    property string appletStatusMsg: ""
 
     Layout.preferredWidth: btContent.implicitWidth + 14
     Layout.preferredHeight: bar.pillHeight
@@ -405,24 +409,13 @@ Rectangle {
         }
 
         function startBlueman() {
-            // Prefer the generated XDG autostart unit (starts applet + tray).
-            Quickshell.execDetached([
-                "systemctl", "--user", "start", "app-blueman@autostart.service"
-            ])
-            bluemanRefreshTimer.restart()
-            // Fallback launch if the unit is missing or already dead without unit.
-            bluemanFallbackTimer.restart()
+            // Session-only start (does not re-enable login autostart)
+            root.runBluemanControl(["start"])
         }
 
         function stopBlueman() {
-            Quickshell.execDetached([
-                "systemctl", "--user", "stop", "app-blueman@autostart.service"
-            ])
-            // Also stop the static dbus unit if something launched via it
-            Quickshell.execDetached([
-                "systemctl", "--user", "stop", "blueman-applet.service"
-            ])
-            bluemanRefreshTimer.restart()
+            // Session-only stop (does not disable login autostart)
+            root.runBluemanControl(["stop"])
         }
 
         function toggleBlueman() {
@@ -430,6 +423,19 @@ Rectangle {
                 stopBlueman()
             else
                 startBlueman()
+        }
+
+        // Sticky: survives reboot via XDG autostart override
+        function enableBluemanAutostart() {
+            root.runBluemanControl(["enable"])
+        }
+
+        function disableBluemanAutostart() {
+            root.runBluemanControl(["disable"])
+        }
+
+        function setBluemanAutostart(enabled) {
+            root.runBluemanControl(["set-autostart", enabled ? "true" : "false"])
         }
 
         readonly property string pillGlyph: {
@@ -467,21 +473,64 @@ Rectangle {
         onTriggered: bt.deviceEpoch++
     }
 
-    // Blueman applet (monitor tray) presence — on-demand, not a tight loop.
+    // Blueman applet — status + control via blueman-applet-control.sh
+    function runBluemanControl(args) {
+        if (bluemanControlProcess.running)
+            bluemanControlProcess.running = false
+        var cmd = [root.bluemanControlScript]
+        for (var i = 0; i < args.length; i++)
+            cmd.push(String(args[i]))
+        bluemanControlProcess.command = cmd
+        bluemanControlProcess.running = true
+    }
+
     function refreshBluemanStatus() {
         if (bluemanCheckProcess.running)
             bluemanCheckProcess.running = false
-        // Match the python-launched applet path (process name is often "python")
-        bluemanCheckProcess.command = ["pgrep", "-f", "/usr/bin/blueman-applet"]
+        bluemanCheckProcess.command = [root.bluemanControlScript, "status"]
         bluemanCheckProcess.running = true
+    }
+
+    function applyBluemanStatus(data) {
+        if (!data) return
+        if (data.running !== undefined)
+            root.bluemanRunning = !!data.running
+        if (data.autostart_enabled !== undefined)
+            root.bluemanAutostartEnabled = !!data.autostart_enabled
+        if (data.message)
+            root.flashAppletStatus(String(data.message))
+        else if (data.error)
+            root.flashAppletStatus(String(data.error))
+    }
+
+    function flashAppletStatus(msg) {
+        root.appletStatusMsg = msg || ""
+        appletStatusClear.restart()
     }
 
     Io.Process {
         id: bluemanCheckProcess
         running: false
+        stdout: Io.StdioCollector { id: bluemanCheckStdout }
         onExited: (code) => {
-            // pgrep exits 0 when at least one match exists
-            root.bluemanRunning = (code === 0)
+            var data = root._parseJson(bluemanCheckStdout.text)
+            if (data)
+                root.applyBluemanStatus(data)
+            else
+                root.bluemanRunning = false
+        }
+    }
+
+    Io.Process {
+        id: bluemanControlProcess
+        running: false
+        stdout: Io.StdioCollector { id: bluemanControlStdout }
+        onExited: (code) => {
+            var data = root._parseJson(bluemanControlStdout.text)
+            if (data)
+                root.applyBluemanStatus(data)
+            // Always re-query after a short delay (process may still be settling)
+            bluemanRefreshTimer.restart()
         }
     }
 
@@ -494,7 +543,7 @@ Rectangle {
         onTriggered: root.refreshBluemanStatus()
     }
 
-    // One-shot recheck after start/stop (unit may take a moment)
+    // One-shot recheck after start/stop/enable/disable
     Timer {
         id: bluemanRefreshTimer
         interval: 600
@@ -502,16 +551,15 @@ Rectangle {
         onTriggered: root.refreshBluemanStatus()
     }
 
-    // If systemctl start did not bring the applet up, launch it directly once.
     Timer {
-        id: bluemanFallbackTimer
-        interval: 900
-        repeat: false
-        onTriggered: {
-            if (!root.bluemanRunning)
-                Quickshell.execDetached(["blueman-applet"])
-            root.refreshBluemanStatus()
-        }
+        id: appletStatusClear
+        interval: 4000
+        onTriggered: root.appletStatusMsg = ""
+    }
+
+    // On bar load: refresh sticky/running state (does not start the applet).
+    Component.onCompleted: {
+        root.refreshBluemanStatus()
     }
 
     // =========================================================================
@@ -851,7 +899,7 @@ Rectangle {
                         }
                     }
 
-                    // Blueman monitor applet start/stop
+                    // Blueman monitor applet — left-click session toggle; right-click sticky disable/enable
                     Rectangle {
                         width: Math.max(appletOnMetrics.width, appletOffMetrics.width) + 16
                         height: 26
@@ -860,7 +908,9 @@ Rectangle {
                                ? (root.bluemanRunning ? Qt.rgba(0.55, 0.14, 0.14, 0.45) : bar.popupButtonHoverBg)
                                : (root.bluemanRunning ? Qt.rgba(0.12, 0.35, 0.22, 0.45) : bar.surface)
                         border.width: bar.controlBorderWidth
-                        border.color: root.bluemanRunning ? bar.accent : bar.dividerStrong
+                        border.color: !root.bluemanAutostartEnabled
+                                      ? "#F59E0B"
+                                      : (root.bluemanRunning ? bar.accent : bar.dividerStrong)
                         Text {
                             id: appletOnMetrics
                             visible: false
@@ -890,14 +940,40 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            ToolTip.text: root.bluemanRunning
-                                          ? "Stop Blueman monitor applet (tray)"
-                                          : "Start Blueman monitor applet (tray)"
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            ToolTip.text: {
+                                var sticky = root.bluemanAutostartEnabled
+                                    ? "autostart on (login)"
+                                    : "autostart off (stays off after reboot)"
+                                var sess = root.bluemanRunning ? "running" : "stopped"
+                                return "Blueman tray · " + sess + " · " + sticky
+                                    + "\nLeft: session start/stop · Right: permanent disable/enable"
+                            }
                             ToolTip.visible: containsMouse
                             ToolTip.delay: bar.tooltipDelay || 400
-                            onClicked: bt.toggleBlueman()
+                            onClicked: (mouse) => {
+                                if (mouse.button === Qt.RightButton) {
+                                    // Sticky: flip login autostart (and stop/start now)
+                                    if (root.bluemanAutostartEnabled)
+                                        bt.disableBluemanAutostart()
+                                    else
+                                        bt.enableBluemanAutostart()
+                                } else {
+                                    bt.toggleBlueman()
+                                }
+                            }
                         }
                     }
+                }
+
+                Text {
+                    visible: root.appletStatusMsg.length > 0
+                    Layout.fillWidth: true
+                    text: root.appletStatusMsg
+                    color: bar.subtext
+                    font.pixelSize: 10
+                    font.family: bar.fontFamily
+                    elide: Text.ElideRight
                 }
 
                 Text {
@@ -2011,7 +2087,9 @@ Rectangle {
     // Scan:
     //   qs ipc call bluetoothPill startScan / stopScan / toggleScan
     // Blueman tray:
-    //   qs ipc call bluetoothPill startApplet / stopApplet / toggleApplet
+    //   qs ipc call bluetoothPill startApplet / stopApplet / toggleApplet   (session only)
+    //   qs ipc call bluetoothPill disableApplet / enableApplet              (survives reboot)
+    //   qs ipc call bluetoothPill setAppletAutostart true|false
     // Devices (MAC as string, e.g. "A0:0C:E2:66:FB:7D"):
     //   qs ipc call bluetoothPill connectDevice "AA:BB:…"
     //   qs ipc call bluetoothPill disconnectDevice "AA:BB:…"
@@ -2071,6 +2149,7 @@ Rectangle {
         bt.setDiscoverable(!bt.discoverable)
     }
 
+    // Session-only (comes back after reboot if autostart still enabled)
     function startApplet() {
         bt.startBlueman()
     }
@@ -2081,6 +2160,19 @@ Rectangle {
 
     function toggleApplet() {
         bt.toggleBlueman()
+    }
+
+    // Sticky across reboots (XDG autostart override + stop/start now)
+    function disableApplet() {
+        bt.disableBluemanAutostart()
+    }
+
+    function enableApplet() {
+        bt.enableBluemanAutostart()
+    }
+
+    function setAppletAutostart(enabled) {
+        bt.setBluemanAutostart(!!enabled)
     }
 
     function connectDevice(address) {

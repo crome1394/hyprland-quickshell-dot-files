@@ -41,7 +41,7 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
 | **Network** | `NetworkPill.qml` | NetworkManager manager (nm-applet replacement): two-column popup (Adapters + Connections \| WiFi), traffic graph, radio toggles, connection info, optional nm-applet tray. Left-click opens the popup (use the header WiFi toggle or IPC for radio power). See [Network pill](#network-pill-networkpillqml) |
-| **Bluetooth** | `BluetoothPill.qml` | Adapter power, scan/pair, connect/disconnect, trust/block/remove, battery, device info, and BlueZ **audio profiles** (A2DP/HFP via `audio-control.sh`). Left-click opens the popup; right-click toggles adapter power. See [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
+| **Bluetooth** | `BluetoothPill.qml` | Adapter power, scan/pair, connect/disconnect, trust/block/remove, rename, battery, device info, BlueZ **audio profiles**, and Blueman tray control (session + sticky autostart). Left-click opens the popup; right-click toggles adapter power. See [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, collapsible L/R balance, real-time VU meters, BT battery, and optional **echo cancel** (PipeWire AEC). **Left-click** opens the full popup; right-click cycles speaker / mic / dual. See [Audio pill](#audio-pill-audiopillqml) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
 | **Notifications** | `NotificationBell.qml` | Bell with count badge and red DND styling. Polls your daemon's CLI from `Config.qml` (defaults: SwayNC / `swaync-client`) via timer sync + optional live subscribe — state and `Io.Process` polling live in this widget, not `shell.qml`. Left-click toggles panel; right-click opens menu (DND, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
@@ -286,7 +286,9 @@ Some bar widgets expose actions beyond show/hide. These work from scripts, Hyprl
 | `bluetoothPill` | `setPower` / `togglePower` / `enable` / `disable` | Adapter radio power on/off |
 | `bluetoothPill` | `startScan` / `stopScan` / `toggleScan` | Device discovery |
 | `bluetoothPill` | `setDiscoverable` / `toggleDiscoverable` | Make this PC discoverable |
-| `bluetoothPill` | `startApplet` / `stopApplet` / `toggleApplet` | Blueman monitor tray applet |
+| `bluetoothPill` | `startApplet` / `stopApplet` / `toggleApplet` | Blueman tray (this session only) |
+| `bluetoothPill` | `disableApplet` / `enableApplet` | Blueman tray sticky autostart (survives reboot) |
+| `bluetoothPill` | `setAppletAutostart` | `true`/`false` — same sticky enable/disable |
 | `bluetoothPill` | `connectDevice` / `disconnectDevice` | Connect or disconnect a MAC address |
 | `bluetoothPill` | `pairDevice` / `cancelPair` / `forgetDevice` | Pairing lifecycle for a MAC |
 | `bluetoothPill` | `setTrusted` / `setBlocked` | Trust or block a MAC (`address` + `bool`) |
@@ -478,7 +480,7 @@ Glassmorphic bar pill for day-to-day Bluetooth management via **Quickshell.Bluet
 | **Rename** | Set the BlueZ alias (`device.name`) for paired devices — **Rename** chip + Save / Enter |
 | **Trust / block** | Writable BlueZ flags per device |
 | **Remove** | `device.forget()` with a confirm step |
-| **Blueman applet** | Header **Applet on/off** starts or stops the Blueman monitor tray (`app-blueman@autostart.service`) |
+| **Blueman applet** | Header **Applet on/off**: left-click = session start/stop; right-click = permanent disable/enable (XDG autostart). IPC: `disableApplet` / `enableApplet` / `setAppletAutostart` |
 | **Audio profile** | For connected audio devices: PipeWire `bluez_card.*` profiles (A2DP / HFP / codecs) via `scripts/audio-control.sh` |
 | **Device info** | Name, address, paired/bonded/trusted/blocked, battery, adapter, D-Bus path; optional launch of `blueman-manager` |
 
@@ -486,7 +488,7 @@ Config tokens (search **BLUETOOTH** / `popupBluetooth*` in `Config.qml`): `showB
 
 #### Implementation notes
 
-- **Backend:** `Quickshell.Bluetooth` for adapter/devices; `scripts/audio-control.sh` for `bluez_card.*` profiles; Blueman coexists as pairing agent + optional tray (`startApplet` / `stopApplet`).
+- **Backend:** `Quickshell.Bluetooth` for adapter/devices; `scripts/audio-control.sh` for `bluez_card.*` profiles; Blueman via `scripts/blueman-applet-control.sh` (session start/stop + sticky XDG autostart override for reboot).
 - **Perf:** One-pass device snapshot for bar metrics and (when the popup is open) section address lists; no multi-walk of the device model. Popup closed → empty section lists (bar still tracks connected count + primary battery via BlueZ property notifies). While open, a modest timer refreshes sparse notifies (faster during scan). Blueman status is polled slowly and on open/toggle only.
 - **Safety:** Device selection is address-keyed (no long-lived BlueZ object pointers). Rename uses `HyprlandFocusGrab` so the `TextField` receives keys under Hyprland.
 - **Close behavior:** Closing the popup stops discovery and clears expand/rename/profile UI state.
@@ -503,7 +505,10 @@ Visibility (show/hide the pill itself) stays on the `shell` target. All actions 
 | `startScan` / `stopScan` / `toggleScan` | — | Discovery (auto-stops after `bluetoothScanSeconds`) |
 | `setDiscoverable` | `true`\|`false` | Advertise this PC |
 | `toggleDiscoverable` | — | Flip discoverable |
-| `startApplet` / `stopApplet` / `toggleApplet` | — | Blueman tray monitor |
+| `startApplet` / `stopApplet` / `toggleApplet` | — | Blueman tray **this session only** (returns after reboot if autostart still on) |
+| `disableApplet` | — | Stop now **and** mask login autostart (`~/.config/autostart/blueman.desktop` with `Hidden=true`) so it **stays off after reboot** |
+| `enableApplet` | — | Remove that mask and start the applet again |
+| `setAppletAutostart` | `true`\|`false` | Same as enable / disable |
 | `connectDevice` / `disconnectDevice` | `address` | Connect or disconnect |
 | `pairDevice` / `cancelPair` / `forgetDevice` | `address` | Pairing lifecycle |
 | `setTrusted` | `address` `true`\|`false` | Trust flag |
@@ -525,7 +530,34 @@ qs ipc call bluetoothPill setTrusted "A0:0C:E2:66:FB:7D" true
 qs ipc call bluetoothPill renameDevice "A0:0C:E2:66:FB:7D" "Shokz Dark"
 qs ipc call bluetoothPill setCardProfile "A0:0C:E2:66:FB:7D" "a2dp-sink-sbc_xq"
 qs ipc call bluetoothPill toggleApplet
+# Permanent (survives reboot) — stop tray and prevent login autostart
+qs ipc call bluetoothPill disableApplet
+# Undo permanent disable
+qs ipc call bluetoothPill enableApplet
+# Or boolean form
+qs ipc call bluetoothPill setAppletAutostart false
+qs ipc call bluetoothPill setAppletAutostart true
 ```
+
+#### Blueman tray persistence (session vs reboot)
+
+| Action | Effect now | After reboot |
+|--------|------------|--------------|
+| Header left-click / `stopApplet` / `startApplet` / `toggleApplet` | Start or stop tray for **this session** | Autostart may bring Blueman back |
+| Header right-click / `disableApplet` / `setAppletAutostart false` | Stop tray **and** mask login autostart | **Stays off** |
+| Header right-click (when masked) / `enableApplet` / `setAppletAutostart true` | Remove mask and start tray | Starts at login again |
+
+Sticky disable writes `~/.config/autostart/blueman.desktop` (`Hidden=true`), which overrides `/etc/xdg/autostart/blueman.desktop` for your user. Generated `app-blueman@autostart.service` cannot be `systemctl disable`'d reliably, so the desktop override is the durable mechanism (implemented in `scripts/blueman-applet-control.sh`).
+
+```bash
+# CLI (same as IPC)
+~/.config/quickshell/scripts/blueman-applet-control.sh status
+~/.config/quickshell/scripts/blueman-applet-control.sh disable   # permanent off
+~/.config/quickshell/scripts/blueman-applet-control.sh enable    # permanent on
+~/.config/quickshell/scripts/blueman-applet-control.sh stop      # session only
+```
+
+The Applet button border turns amber when login autostart is masked.
 
 ### Audio pill (`AudioPill.qml`)
 

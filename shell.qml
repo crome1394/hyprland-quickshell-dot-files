@@ -39,7 +39,9 @@
 //   - qs ipc call bluetoothPill setPower true|false / togglePower / enable / disable
 //   - qs ipc call bluetoothPill startScan / stopScan / toggleScan
 //   - qs ipc call bluetoothPill setDiscoverable true|false / toggleDiscoverable
-//   - qs ipc call bluetoothPill startApplet / stopApplet / toggleApplet
+//   - qs ipc call bluetoothPill startApplet / stopApplet / toggleApplet   (session only)
+//   - qs ipc call bluetoothPill disableApplet / enableApplet              (survives reboot)
+//   - qs ipc call bluetoothPill setAppletAutostart true|false
 //   - qs ipc call bluetoothPill connectDevice|disconnectDevice|pairDevice|forgetDevice "AA:BB:…"
 //   - qs ipc call bluetoothPill setTrusted "AA:BB:…" true|false
 //   - qs ipc call bluetoothPill setBlocked "AA:BB:…" true|false
@@ -1110,7 +1112,7 @@ ShellRoot {
             function toggleDiscoverable(): void {
                 if (bluetoothPill && bluetoothPill.toggleDiscoverable) bluetoothPill.toggleDiscoverable()
             }
-            // Blueman monitor applet
+            // Blueman monitor applet — session vs sticky (reboot)
             function startApplet(): void {
                 if (bluetoothPill && bluetoothPill.startApplet) bluetoothPill.startApplet()
             }
@@ -1119,6 +1121,17 @@ ShellRoot {
             }
             function toggleApplet(): void {
                 if (bluetoothPill && bluetoothPill.toggleApplet) bluetoothPill.toggleApplet()
+            }
+            // Permanent: XDG autostart override so applet stays off after reboot
+            function disableApplet(): void {
+                if (bluetoothPill && bluetoothPill.disableApplet) bluetoothPill.disableApplet()
+            }
+            function enableApplet(): void {
+                if (bluetoothPill && bluetoothPill.enableApplet) bluetoothPill.enableApplet()
+            }
+            function setAppletAutostart(enabled: bool): void {
+                if (bluetoothPill && bluetoothPill.setAppletAutostart)
+                    bluetoothPill.setAppletAutostart(enabled)
             }
             // Devices — address is MAC string e.g. "A0:0C:E2:66:FB:7D"
             function connectDevice(address: string): void {
