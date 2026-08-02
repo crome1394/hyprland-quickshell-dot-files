@@ -30,6 +30,8 @@ import "../components"
 // Dependencies:
 //   - required property var bar
 //   - required property Item barBg
+//   - property bool embedded (optional) — when true, omit pill chrome so a
+//     parent shell (shell.qml connectivityPill) can group Network + Bluetooth
 //   - Quickshell.Networking (devices, wifi radio, connect/scan)
 //   - scripts/network-control.sh (live IP/DNS, networking on/off, nm-applet)
 //
@@ -47,6 +49,10 @@ Rectangle {
     required property var bar
     required property Item barBg
 
+    // When true, this widget is a section inside a shared connectivity pill
+    // (no own background/border; hover uses iconHoverBg like SysStats sections).
+    property bool embedded: false
+
     readonly property string controlScript: "/home/crome/.config/quickshell/scripts/network-control.sh"
 
     // UI navigation
@@ -56,6 +62,8 @@ Rectangle {
     property string confirmForgetSsid: ""
     property string statusMessage: ""        // transient footer hint
     property bool appletRunning: false
+    // false when sticky-disabled (XDG mask and/or unit disabled) — survives reboot
+    property bool appletAutostartEnabled: true
     property var statusData: ({})            // from network-control.sh status
     property int statusEpoch: 0
     property var _failBoundNetwork: null      // last WifiNetwork with connectionFailed handler
@@ -76,14 +84,25 @@ Rectangle {
     property int connectionIndex: -1
     property bool _suppressConnectionActivate: false
 
-    Layout.preferredWidth: netContent.implicitWidth + 14
-    Layout.preferredHeight: bar.pillHeight
+    // Standalone: full pill size. Embedded: content chip sized for shared shell.
+    implicitWidth: netContent.implicitWidth + (embedded ? 12 : 14)
+    implicitHeight: embedded ? (bar.pillHeight - 8) : bar.pillHeight
+    width: implicitWidth
+    height: implicitHeight
+    Layout.preferredWidth: implicitWidth
+    Layout.preferredHeight: implicitHeight
     Layout.alignment: Qt.AlignVCenter
 
-    radius: bar.pillRadius
-    color: netMouse.containsMouse ? bar.glassHover : bar.pillBg
-    border.width: bar.controlBorderWidth
-    border.color: netMouse.containsMouse ? bar.accent : bar.pillBorder
+    radius: embedded ? bar.workspaceRadius : bar.pillRadius
+    color: {
+        if (embedded)
+            return netMouse.containsMouse ? bar.iconHoverBg : "transparent"
+        return netMouse.containsMouse ? bar.glassHover : bar.pillBg
+    }
+    border.width: embedded ? 0 : bar.controlBorderWidth
+    border.color: embedded
+                 ? "transparent"
+                 : (netMouse.containsMouse ? bar.accent : bar.pillBorder)
 
     Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
     Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
@@ -280,10 +299,10 @@ Rectangle {
         }
 
         readonly property color pillGlyphColor: {
-            if (!networkingEnabled) return bar ? bar.muted : "#6c7086"
+            if (!networkingEnabled) return bar ? bar.muted : "#5c5c60"
             if (isPortal) return "#F59E0B"
-            if (anyConnected) return bar ? bar.accent : "#89b4fa"
-            return bar ? bar.subtext : "#a6adc8"
+            if (anyConnected) return bar ? bar.accent : "#00c4f5"
+            return bar ? bar.subtext : "#b0b0b2"
         }
 
         function hasWifiDevice() {
@@ -734,13 +753,13 @@ Rectangle {
     }
 
     function startApplet() {
-        // Session-only start (does not enable at login)
+        // Session-only start (does not re-enable login autostart if sticky-disabled)
         runControl(["applet", "start"])
         appletRefreshTimer.restart()
     }
 
     function stopApplet() {
-        // Session-only stop (does not disable at login)
+        // Session-only stop (does not change login autostart)
         runControl(["applet", "stop"])
         appletRefreshTimer.restart()
     }
@@ -750,11 +769,11 @@ Rectangle {
         else startApplet()
     }
 
-    // Persist across reboots: systemctl --user enable/disable nm-applet.service
+    // Sticky (survives reboot): XDG autostart mask + systemctl enable/disable
     function enableApplet() {
         runControl(["applet", "enable"])
         appletRefreshTimer.restart()
-        flashStatus("nm-applet enabled (survives reboot)")
+        flashStatus("nm-applet enabled (starts at login)")
     }
 
     function disableApplet() {
@@ -764,8 +783,11 @@ Rectangle {
     }
 
     function setAppletAutostart(enabled) {
-        if (enabled) enableApplet()
-        else disableApplet()
+        runControl(["applet", "set-autostart", enabled ? "true" : "false"])
+        appletRefreshTimer.restart()
+        flashStatus(enabled
+                    ? "nm-applet enabled (starts at login)"
+                    : "nm-applet disabled (stays off after reboot)")
     }
 
     function openEditor(uuidOrName) {
@@ -788,6 +810,10 @@ Rectangle {
                 root.statusData = data
                 if (data.applet_running !== undefined)
                     root.appletRunning = !!data.applet_running
+                if (data.applet_enabled !== undefined)
+                    root.appletAutostartEnabled = !!data.applet_enabled
+                else if (data.autostart_enabled !== undefined)
+                    root.appletAutostartEnabled = !!data.autostart_enabled
                 root.updateConnectionModel(data)
                 if (data.rx_rate !== undefined || data.tx_rate !== undefined)
                     root.pushRateSample(data.rx_rate, data.tx_rate)
@@ -825,6 +851,10 @@ Rectangle {
                 var j = JSON.parse(t)
                 if (j && j.running !== undefined)
                     root.appletRunning = !!j.running
+                if (j && j.autostart_enabled !== undefined)
+                    root.appletAutostartEnabled = !!j.autostart_enabled
+                else if (j && j.enabled !== undefined)
+                    root.appletAutostartEnabled = !!j.enabled
             } catch (e) {
                 root.appletRunning = (code === 0)
             }
@@ -934,7 +964,7 @@ Rectangle {
                     if (parts.length === 4) return parts[3]
                     return ""
                 }
-                color: bar ? bar.subtext : "#a6adc8"
+                color: bar ? bar.subtext : "#b0b0b2"
                 font.pixelSize: bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12
                 font.bold: true
                 font.family: bar.fontFamily
@@ -1163,14 +1193,14 @@ Rectangle {
                             spacing: 8
                             Text {
                                 text: "↓ " + root.formatRate(root.lastRxRate)
-                                color: "#89b4fa"
+                                color: "#00c4f5"
                                 font.pixelSize: 11
                                 font.bold: true
                                 font.family: bar.fontFamily
                             }
                             Text {
                                 text: "↑ " + root.formatRate(root.lastTxRate)
-                                color: "#a6e3a1"
+                                color: "#3ecf8e"
                                 font.pixelSize: 11
                                 font.bold: true
                                 font.family: bar.fontFamily
@@ -1208,7 +1238,7 @@ Rectangle {
                                 minValue: 0
                                 maxValue: parent.rateMax
                                 leftPadding: 0
-                                lineColor: "#89b4fa"
+                                lineColor: "#00c4f5"
                                 fillColor: Qt.rgba(0.53, 0.71, 0.98, 0.20)
                                 lineWidth: 1.5
                             }
@@ -1222,7 +1252,7 @@ Rectangle {
                                 minValue: 0
                                 maxValue: parent.rateMax
                                 leftPadding: 0
-                                lineColor: "#a6e3a1"
+                                lineColor: "#3ecf8e"
                                 fillColor: Qt.rgba(0.65, 0.89, 0.63, 0.12)
                                 lineWidth: 1.5
                             }
@@ -2360,7 +2390,7 @@ Rectangle {
                         }
                     }
 
-                    // nm-applet
+                    // nm-applet — left-click session; right-click sticky disable/enable (reboot-safe)
                     Rectangle {
                         Layout.fillWidth: true
                         height: 26
@@ -2369,7 +2399,9 @@ Rectangle {
                                ? (root.appletRunning ? Qt.rgba(0.55, 0.14, 0.14, 0.45) : bar.popupButtonHoverBg)
                                : (root.appletRunning ? Qt.rgba(0.12, 0.35, 0.22, 0.45) : bar.surface)
                         border.width: bar.controlBorderWidth
-                        border.color: root.appletRunning ? bar.accent : bar.dividerStrong
+                        border.color: !root.appletAutostartEnabled
+                                      ? "#F59E0B"
+                                      : (root.appletRunning ? bar.accent : bar.dividerStrong)
                         Text {
                             anchors.centerIn: parent
                             text: root.appletRunning ? "Applet on" : "Applet off"
@@ -2383,12 +2415,27 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            ToolTip.text: root.appletRunning
-                                          ? "Stop nm-applet tray"
-                                          : "Start nm-applet tray"
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            ToolTip.text: {
+                                var sticky = root.appletAutostartEnabled
+                                    ? "autostart on (login)"
+                                    : "autostart off (stays off after reboot)"
+                                var sess = root.appletRunning ? "running" : "stopped"
+                                return "nm-applet · " + sess + " · " + sticky
+                                    + "\nLeft: session start/stop · Right: permanent disable/enable"
+                            }
                             ToolTip.visible: containsMouse
                             ToolTip.delay: bar.tooltipDelay || 400
-                            onClicked: root.toggleApplet()
+                            onClicked: (mouse) => {
+                                if (mouse.button === Qt.RightButton) {
+                                    if (root.appletAutostartEnabled)
+                                        root.disableApplet()
+                                    else
+                                        root.enableApplet()
+                                } else {
+                                    root.toggleApplet()
+                                }
+                            }
                         }
                     }
                 }

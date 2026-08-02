@@ -18,6 +18,7 @@ usage: network-control.sh status
        network-control.sh refresh-ip [iface]
        network-control.sh refresh-dns [iface]
        network-control.sh applet status|start|stop|toggle|enable|disable
+       network-control.sh applet set-autostart true|false
 EOF
 }
 
@@ -53,62 +54,109 @@ need_nmcli() {
     command -v nmcli >/dev/null 2>&1 || { err_json "nmcli not found"; exit 1; }
 }
 
+# nm-applet can start from:
+#   - user unit nm-applet.service (hyprland-session)
+#   - /etc/xdg/autostart/nm-applet.desktop
+# Sticky disable must cover both (mirrors blueman-applet-control.sh).
 APPLETSVC="nm-applet.service"
+AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+OVERRIDE_DESKTOP="${AUTOSTART_DIR}/nm-applet.desktop"
 
 applet_running() {
-    # Match the real binary; process name is often just "nm-applet".
+    # Match the real binary only — not this script.
     if pgrep -x nm-applet >/dev/null 2>&1; then
         return 0
     fi
     pgrep -f '/usr/bin/nm-applet' >/dev/null 2>&1
 }
 
+# true if nm-applet is allowed to start at login (unit + no XDG mask)
 applet_enabled() {
-    # true if unit will start at login (enabled or enabled-runtime)
+    # XDG override with Hidden=true → sticky disabled
+    if [[ -f "$OVERRIDE_DESKTOP" ]]; then
+        if grep -qiE '^[[:space:]]*Hidden[[:space:]]*=[[:space:]]*true' "$OVERRIDE_DESKTOP" 2>/dev/null; then
+            return 1
+        fi
+        if grep -qiE '^[[:space:]]*X-GNOME-Autostart-enabled[[:space:]]*=[[:space:]]*false' "$OVERRIDE_DESKTOP" 2>/dev/null; then
+            return 1
+        fi
+    fi
     local st
     st=$(systemctl --user is-enabled "$APPLETSVC" 2>/dev/null || true)
     [[ "$st" == "enabled" || "$st" == "enabled-runtime" || "$st" == "static" || "$st" == "indirect" ]]
 }
 
 applet_start() {
-    if systemctl --user start "$APPLETSVC" 2>/dev/null; then
-        sleep 0.3
-        if applet_running; then
-            return 0
-        fi
+    # Do not start if sticky-disabled (XDG mask present)
+    if [[ -f "$OVERRIDE_DESKTOP" ]] \
+        && grep -qiE '^[[:space:]]*Hidden[[:space:]]*=[[:space:]]*true' "$OVERRIDE_DESKTOP" 2>/dev/null; then
+        return 1
     fi
-    # Fallback: direct launch (matches unit ExecStart flags when possible)
+    systemctl --user start --no-block "$APPLETSVC" 2>/dev/null || true
+    sleep 0.35
+    if applet_running; then
+        return 0
+    fi
     if command -v nm-applet >/dev/null 2>&1; then
         nohup nm-applet --indicator >/dev/null 2>&1 &
         disown || true
-        sleep 0.3
+        sleep 0.35
         applet_running && return 0
     fi
     return 1
 }
 
 applet_stop() {
-    systemctl --user stop "$APPLETSVC" 2>/dev/null || true
-    # Kill leftover process if unit was never managing it
+    systemctl --user stop --no-block "$APPLETSVC" 2>/dev/null || true
     if applet_running; then
         pkill -x nm-applet 2>/dev/null || true
         pkill -f '/usr/bin/nm-applet' 2>/dev/null || true
         sleep 0.2
     fi
+    if applet_running; then
+        pkill -9 -x nm-applet 2>/dev/null || true
+        pkill -9 -f '/usr/bin/nm-applet' 2>/dev/null || true
+        sleep 0.1
+    fi
     ! applet_running
 }
 
-# Persist across reboots: enable unit + start, or disable unit + stop
+# Sticky enable: remove XDG mask, enable user unit, start now
 applet_enable() {
+    mkdir -p "$AUTOSTART_DIR"
+    if [[ -f "$OVERRIDE_DESKTOP" ]]; then
+        rm -f "$OVERRIDE_DESKTOP"
+    fi
     systemctl --user enable "$APPLETSVC" >/dev/null 2>&1 || true
-    applet_start
+    applet_start || true
+    if applet_enabled; then
+        return 0
+    fi
+    return 1
 }
 
+# Sticky disable: XDG Hidden=true + systemctl disable + stop now (survives reboot)
 applet_disable() {
+    mkdir -p "$AUTOSTART_DIR"
+    cat >"$OVERRIDE_DESKTOP" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=NetworkManager Applet
+Comment=nm-applet (disabled by Quickshell NetworkPill)
+Exec=nm-applet --indicator
+Icon=nm-device-wireless
+Terminal=false
+Categories=
+Hidden=true
+X-GNOME-Autostart-enabled=false
+EOF
     applet_stop || true
     systemctl --user disable "$APPLETSVC" >/dev/null 2>&1 || true
-    # Confirm not running and not enabled
+    systemctl --user stop --no-block "$APPLETSVC" 2>/dev/null || true
     if applet_running; then
+        return 1
+    fi
+    if applet_enabled; then
         return 1
     fi
     return 0
@@ -537,11 +585,9 @@ case "$ACTION" in
             status)
                 en=false
                 applet_enabled && en=true
-                if applet_running; then
-                    printf '{"ok":true,"running":true,"enabled":%s}\n' "$en"
-                else
-                    printf '{"ok":true,"running":false,"enabled":%s}\n' "$en"
-                fi
+                run=false
+                applet_running && run=true
+                printf '{"ok":true,"running":%s,"enabled":%s,"autostart_enabled":%s}\n' "$run" "$en" "$en"
                 ;;
             start)
                 if applet_start; then ok_json "applet started"; else err_json "applet start failed"; fi
@@ -558,10 +604,21 @@ case "$ACTION" in
                 ;;
             # Persist across reboots (systemctl --user enable/disable)
             enable)
-                if applet_enable; then ok_json "applet enabled + started"; else err_json "applet enable failed"; fi
+                if applet_enable; then ok_json "nm-applet enabled (starts at login)"; else err_json "applet enable failed"; fi
                 ;;
             disable)
-                if applet_disable; then ok_json "applet disabled + stopped"; else err_json "applet disable failed"; fi
+                if applet_disable; then ok_json "nm-applet disabled (stays off after reboot)"; else err_json "applet disable failed"; fi
+                ;;
+            set-autostart)
+                case "${ARG2,,}" in
+                    true|1|on|yes)
+                        if applet_enable; then ok_json "nm-applet enabled (starts at login)"; else err_json "applet enable failed"; fi
+                        ;;
+                    false|0|off|no)
+                        if applet_disable; then ok_json "nm-applet disabled (stays off after reboot)"; else err_json "applet disable failed"; fi
+                        ;;
+                    *) usage; exit 2 ;;
+                esac
                 ;;
             *) usage; exit 2 ;;
         esac

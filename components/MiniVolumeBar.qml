@@ -38,8 +38,8 @@ Item {
     // === THEME-DRIVEN DEFAULTS (hybrid access) ===
     readonly property QtObject t: ConfigModule.Config
 
-    property color fill:     (bar && bar.sliderFill) ? bar.sliderFill : (t ? t.sliderFill : "#0095ff")
-    property color track:    (bar && bar.sliderTrack) ? bar.sliderTrack : (t ? t.sliderTrack : "#313244")
+    property color fill:     (bar && bar.sliderFill) ? bar.sliderFill : (t ? t.sliderFill : "#00c4f5")
+    property color track:    (bar && bar.sliderTrack) ? bar.sliderTrack : (t ? t.sliderTrack : "#1a1c1f")
     property int  barHeight: (bar && bar.sliderMiniHeight) ? bar.sliderMiniHeight : (t ? t.sliderMiniHeight : 5)
 
     readonly property int effectiveRadius: (bar && bar.sliderRadius !== undefined && bar.sliderRadius > 0)

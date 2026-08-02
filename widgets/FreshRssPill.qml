@@ -53,12 +53,15 @@ Rectangle {
     property string searchQuery: ""
 
     // How many articles to pull (adjustable in the window UI)
-    // - perFeedLimit: All/Read scopes (per channel)
-    // - itemLimit: Unread/Starred scopes (total ids)
+    // - maxDays: primary history window (default 30). When > 0, overrides per-feed/item caps.
+    // - perFeedLimit: All/Read when maxDays === 0
+    // - itemLimit: Unread/Starred when maxDays === 0
+    property int maxDays: th.freshRssMaxDays !== undefined ? th.freshRssMaxDays : 30
     property int perFeedLimit: th.freshRssPerFeedLimit || 12
     property int itemLimit: th.freshRssItemLimit || 80
     readonly property var perFeedChoices: [5, 8, 10, 12, 15, 20, 25, 30]
     readonly property var itemLimitChoices: [20, 40, 50, 80, 100, 150, 200]
+    readonly property var maxDaysChoices: [7, 14, 30, 60, 90, 180, 0]  // 0 = unlimited
 
     // Resizable list pane width (SplitView).
     // Default always from Config.freshRssListWidth. listPaneUserWidth is set only when
@@ -132,7 +135,9 @@ Rectangle {
             parts.push(loadedUnread + "u/" + loadedRead + "r in view")
         if (loaded !== shown)
             parts.push(loaded + " loaded")
-        if (readScope === "all" || readScope === "read")
+        if (maxDays > 0)
+            parts.push(maxDays + "d")
+        else if (readScope === "all" || readScope === "read")
             parts.push(perFeedLimit + "/feed")
         else
             parts.push("max " + itemLimit)
@@ -151,30 +156,32 @@ Rectangle {
         const q = (searchQuery || "").trim().toLowerCase()
         const wantVideo = filterMode === "video"
         const df = dateFilter
-        let startToday = 0
-        let startWeek = 0
-        if (df === "today" || df === "week") {
-            const now = new Date()
-            startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000
-            if (df === "week")
-                startWeek = startToday - 6 * 86400
-        }
+        const now = new Date()
+        const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000
+        const startWeek = startToday - 6 * 86400
+        // Global day window (overrides / is independent of Today/7d chips)
+        const maxDaysCut = (maxDays > 0)
+            ? (Math.floor(Date.now() / 1000) - maxDays * 86400)
+            : 0
 
         const src = items
         const n = src.length
         const list = []
         for (let i = 0; i < n; i++) {
             const it = src[i]
+            const created = Number(it.created_on_time || 0)
+            if (maxDaysCut > 0 && created > 0 && created < maxDaysCut)
+                continue
             if (wantVideo) {
                 // Prefer precomputed flag from the API; fall back for older payloads.
                 if (Number(it.is_video) !== 1 && !itemIsVideo(it))
                     continue
             }
             if (df === "today") {
-                if (Number(it.created_on_time || 0) < startToday)
+                if (created < startToday)
                     continue
             } else if (df === "week") {
-                if (Number(it.created_on_time || 0) < startWeek)
+                if (created < startWeek)
                     continue
             }
             if (q.length > 0) {
@@ -445,9 +452,35 @@ Rectangle {
             apiScript, "items",
             String(root.itemLimit),
             root.readScope || "all",
-            String(root.perFeedLimit)
+            String(root.perFeedLimit),
+            String(root.maxDays)  // primary history window; 0 = use per-feed/item caps
         ]
         itemsProcess.running = true
+    }
+
+    function setMaxDays(n) {
+        const v = Math.max(0, Math.min(3650, Number(n) || 0))
+        if (v === maxDays)
+            return
+        maxDays = v
+        loadItems()
+    }
+
+    function nudgeMaxDays(delta) {
+        const choices = maxDaysChoices
+        let idx = choices.indexOf(maxDays)
+        if (idx < 0) {
+            idx = 0
+            for (let i = 0; i < choices.length; i++) {
+                if (choices[i] >= maxDays && choices[i] > 0) {
+                    idx = i
+                    break
+                }
+                idx = i
+            }
+        }
+        idx = Math.max(0, Math.min(choices.length - 1, idx + delta))
+        setMaxDays(choices[idx])
     }
 
     function setReadScope(scope) {
@@ -735,6 +768,23 @@ Rectangle {
         if (!it || !it.url)
             return
         runAction(["open-browser", it.url])
+    }
+
+    /** Copy the selected article URL to the clipboard (wl-copy). */
+    function shareArticleLink() {
+        const it = selectedItem
+        const url = it && it.url ? String(it.url) : ""
+        if (!url.length) {
+            statusMsg = "No link to share"
+            return
+        }
+        Quickshell.execDetached([
+            "sh", "-c",
+            'printf "%s" "$1" | wl-copy',
+            "wl-copy",
+            url
+        ])
+        statusMsg = "Link copied"
     }
 
     function playMpv() {
@@ -1124,15 +1174,25 @@ Rectangle {
             enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: root.toggleListCursorExpand()
         }
-        // Right: open article if cursor is on one; otherwise expand/collapse feed/date
+        // Right / D: open article if cursor is on one; otherwise expand/collapse feed/date
         Shortcut {
             sequence: "Right"
             enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: root.rightArrowAction()
         }
-        // Left: expand/collapse only (unchanged)
+        Shortcut {
+            sequence: "D"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.rightArrowAction()
+        }
+        // Left / A: expand/collapse only
         Shortcut {
             sequence: "Left"
+            enabled: readerWindow.visible && !searchField.activeFocus
+            onActivated: root.toggleListCursorExpand()
+        }
+        Shortcut {
+            sequence: "A"
             enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: root.toggleListCursorExpand()
         }
@@ -1150,6 +1210,13 @@ Rectangle {
             sequence: "B"
             enabled: readerWindow.visible && !searchField.activeFocus
             onActivated: root.openBrowser()
+        }
+        // Copy article link (share)
+        Shortcut {
+            sequence: "C"
+            enabled: readerWindow.visible && !searchField.activeFocus
+                     && root.selectedItem && root.selectedItem.url
+            onActivated: root.shareArticleLink()
         }
         Shortcut {
             sequence: "V"
@@ -1484,10 +1551,121 @@ Rectangle {
                     }
                 }
 
-                // Amount controls: how many articles to download
+                // Primary history window (overrides per-feed / item caps when > 0)
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
+
+                    Text {
+                        text: "Max days:"
+                        color: bar.subtext
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+
+                    Rectangle {
+                        radius: 6
+                        implicitWidth: 28
+                        implicitHeight: 28
+                        color: daysMinusMa.containsMouse ? bar.iconHoverBg : "transparent"
+                        border.width: 1
+                        border.color: bar.pillBorder
+                        Text {
+                            anchors.centerIn: parent
+                            text: "−"
+                            color: bar.text
+                            font.pixelSize: 16
+                            font.bold: true
+                        }
+                        MouseArea {
+                            id: daysMinusMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.nudgeMaxDays(-1)
+                        }
+                    }
+
+                    Text {
+                        text: root.maxDays > 0 ? String(root.maxDays) : "∞"
+                        color: bar.accent
+                        font.pixelSize: 13
+                        font.bold: true
+                        font.family: bar.fontMono
+                        Layout.preferredWidth: 36
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    Rectangle {
+                        radius: 6
+                        implicitWidth: 28
+                        implicitHeight: 28
+                        color: daysPlusMa.containsMouse ? bar.iconHoverBg : "transparent"
+                        border.width: 1
+                        border.color: bar.pillBorder
+                        Text {
+                            anchors.centerIn: parent
+                            text: "+"
+                            color: bar.text
+                            font.pixelSize: 16
+                            font.bold: true
+                        }
+                        MouseArea {
+                            id: daysPlusMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.nudgeMaxDays(1)
+                        }
+                    }
+
+                    Repeater {
+                        model: root.maxDaysChoices
+                        delegate: Rectangle {
+                            required property var modelData
+                            radius: 6
+                            implicitHeight: 26
+                            implicitWidth: daysPresetTxt.implicitWidth + 12
+                            readonly property bool active: root.maxDays === modelData
+                            color: active
+                                   ? Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.28)
+                                   : (daysPresetMa.containsMouse ? bar.iconHoverBg : "transparent")
+                            border.width: 1
+                            border.color: active ? bar.accent : bar.pillBorder
+                            Text {
+                                id: daysPresetTxt
+                                anchors.centerIn: parent
+                                text: modelData === 0 ? "∞" : String(modelData)
+                                color: bar.text
+                                font.pixelSize: 11
+                                font.family: bar.fontMono
+                            }
+                            MouseArea {
+                                id: daysPresetMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.setMaxDays(modelData)
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.maxDays > 0
+                              ? "history window (overrides per-feed / item limits)"
+                              : "unlimited history — use per-feed / item limits below"
+                        color: bar.subtext
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                    }
+                }
+
+                // Secondary amount controls (used when maxDays === 0)
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    opacity: root.maxDays > 0 ? 0.45 : 1.0
 
                     Text {
                         text: (root.readScope === "all" || root.readScope === "read")
@@ -1497,12 +1675,11 @@ Rectangle {
                         font.pixelSize: 12
                     }
 
-                    // − button
                     Rectangle {
                         radius: 6
                         implicitWidth: 28
                         implicitHeight: 28
-                        color: minusMa.containsMouse ? bar.iconHoverBg : "transparent"
+                        color: minusMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent"
                         border.width: 1
                         border.color: bar.pillBorder
                         Text {
@@ -1515,6 +1692,7 @@ Rectangle {
                         MouseArea {
                             id: minusMa
                             anchors.fill: parent
+                            enabled: root.maxDays <= 0
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
@@ -1538,12 +1716,11 @@ Rectangle {
                         horizontalAlignment: Text.AlignHCenter
                     }
 
-                    // + button
                     Rectangle {
                         radius: 6
                         implicitWidth: 28
                         implicitHeight: 28
-                        color: plusMa.containsMouse ? bar.iconHoverBg : "transparent"
+                        color: plusMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent"
                         border.width: 1
                         border.color: bar.pillBorder
                         Text {
@@ -1556,6 +1733,7 @@ Rectangle {
                         MouseArea {
                             id: plusMa
                             anchors.fill: parent
+                            enabled: root.maxDays <= 0
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
@@ -1567,7 +1745,6 @@ Rectangle {
                         }
                     }
 
-                    // Quick presets for current mode
                     Repeater {
                         model: (root.readScope === "all" || root.readScope === "read")
                                ? [5, 10, 12, 15, 20, 30]
@@ -1584,7 +1761,7 @@ Rectangle {
                             }
                             color: active
                                    ? Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.28)
-                                   : (presetMa.containsMouse ? bar.iconHoverBg : "transparent")
+                                   : (presetMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent")
                             border.width: 1
                             border.color: active ? bar.accent : bar.pillBorder
                             Text {
@@ -1598,6 +1775,7 @@ Rectangle {
                             MouseArea {
                                 id: presetMa
                                 anchors.fill: parent
+                                enabled: root.maxDays <= 0
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
@@ -1612,9 +1790,11 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: (root.readScope === "all" || root.readScope === "read")
-                              ? "articles downloaded from each feed"
-                              : "total for Unread / Starred"
+                        text: root.maxDays > 0
+                              ? "(inactive while Max days is set)"
+                              : ((root.readScope === "all" || root.readScope === "read")
+                                 ? "articles per feed"
+                                 : "total for Unread / Starred")
                         color: bar.subtext
                         font.pixelSize: 11
                         elide: Text.ElideRight
@@ -2002,6 +2182,8 @@ Rectangle {
                                             return []
                                         const acts = [
                                             { id: "browser", label: "Open in browser", enabled: !!(it.url) },
+                                            // Share = copy article URL to clipboard
+                                            { id: "share", label: "󰒲 Share", enabled: !!(it.url) },
                                         ]
                                         // Only show mpv for video articles (YouTube, .m4v, etc.)
                                         if (root.itemIsVideo(it) && root.playableUrl(it)) {
@@ -2038,6 +2220,7 @@ Rectangle {
                                             text: modelData.label
                                             color: bar.text
                                             font.pixelSize: 12
+                                            font.family: bar.fontFamily
                                         }
                                         MouseArea {
                                             id: actMa
@@ -2045,9 +2228,14 @@ Rectangle {
                                             hoverEnabled: true
                                             enabled: modelData.enabled
                                             cursorShape: Qt.PointingHandCursor
+                                            ToolTip.visible: containsMouse && modelData.id === "share"
+                                            ToolTip.text: "Copy article link to clipboard"
+                                            ToolTip.delay: 400
                                             onClicked: {
                                                 if (modelData.id === "browser")
                                                     root.openBrowser()
+                                                else if (modelData.id === "share")
+                                                    root.shareArticleLink()
                                                 else if (modelData.id === "mpv")
                                                     root.playMpv()
                                                 else if (modelData.id === "read")
@@ -2108,7 +2296,7 @@ Rectangle {
                 // Footer shortcuts
                 Text {
                     Layout.fillWidth: true
-                    text: "w/s or ↑/↓ list · Space/← expand · Enter/→ open article · j/k articles · / search · b browser · v mpv · r refresh · Esc"
+                    text: "w/s or ↑/↓ list · a/← Space expand · d/→ Enter open · j/k articles · / search · b browser · c share · v mpv · r refresh · Esc"
                           + (root.writable ? " · m item read · Shift+S star · Shift+R feed read · Shift+U feed unread" : "")
                     color: bar.overlay || bar.subtext
                     font.pixelSize: 11

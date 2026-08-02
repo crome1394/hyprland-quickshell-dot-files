@@ -34,6 +34,8 @@ import Quickshell.Io as Io
 // Dependencies:
 //   - required property var bar
 //   - required property Item barBg (for popup positioning)
+//   - property bool embedded (optional) — when true, omit pill chrome so a
+//     parent shell (shell.qml connectivityPill) can group Network + Bluetooth
 //   - Quickshell.Bluetooth (adapter + devices)
 //   - scripts/audio-control.sh (list-card-profiles / set-card-profile)
 //
@@ -53,6 +55,10 @@ Rectangle {
     required property var bar
     required property Item barBg
 
+    // When true, this widget is a section inside a shared connectivity pill
+    // (no own background/border; hover uses iconHoverBg like SysStats sections).
+    property bool embedded: false
+
     readonly property string audioControlScript: "/home/crome/.config/quickshell/scripts/audio-control.sh"
     readonly property string bluemanControlScript: "/home/crome/.config/quickshell/scripts/blueman-applet-control.sh"
 
@@ -70,14 +76,25 @@ Rectangle {
     property bool bluemanAutostartEnabled: true
     property string appletStatusMsg: ""
 
-    Layout.preferredWidth: btContent.implicitWidth + 14
-    Layout.preferredHeight: bar.pillHeight
+    // Standalone: full pill size. Embedded: content chip sized for shared shell.
+    implicitWidth: btContent.implicitWidth + (embedded ? 12 : 14)
+    implicitHeight: embedded ? (bar.pillHeight - 8) : bar.pillHeight
+    width: implicitWidth
+    height: implicitHeight
+    Layout.preferredWidth: implicitWidth
+    Layout.preferredHeight: implicitHeight
     Layout.alignment: Qt.AlignVCenter
 
-    radius: bar.pillRadius
-    color: btMouse.containsMouse ? bar.glassHover : bar.pillBg
-    border.width: bar.controlBorderWidth
-    border.color: btMouse.containsMouse ? bar.accent : bar.pillBorder
+    radius: embedded ? bar.workspaceRadius : bar.pillRadius
+    color: {
+        if (embedded)
+            return btMouse.containsMouse ? bar.iconHoverBg : "transparent"
+        return btMouse.containsMouse ? bar.glassHover : bar.pillBg
+    }
+    border.width: embedded ? 0 : bar.controlBorderWidth
+    border.color: embedded
+                 ? "transparent"
+                 : (btMouse.containsMouse ? bar.accent : bar.pillBorder)
 
     Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
     Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
@@ -269,7 +286,7 @@ Rectangle {
         }
 
         function batteryColor(pct) {
-            if (pct < 0) return bar ? bar.subtext : "#a6adc8"
+            if (pct < 0) return bar ? bar.subtext : "#b0b0b2"
             if (pct <= 15) return "#EF4444"
             if (pct <= 30) return "#F59E0B"
             return "#10B981"
@@ -449,10 +466,10 @@ Rectangle {
         }
 
         readonly property color pillGlyphColor: {
-            if (!hasAdapter || !powered) return bar ? bar.muted : "#6c7086"
-            if (discovering) return bar ? bar.accent : "#89b4fa"
-            if (connectedCount > 0) return bar ? bar.accent : "#89b4fa"
-            return bar ? bar.subtext : "#a6adc8"
+            if (!hasAdapter || !powered) return bar ? bar.muted : "#5c5c60"
+            if (discovering) return bar ? bar.accent : "#00c4f5"
+            if (connectedCount > 0) return bar ? bar.accent : "#00c4f5"
+            return bar ? bar.subtext : "#b0b0b2"
         }
     }
 
@@ -726,7 +743,7 @@ Rectangle {
                 }
                 color: bt.primaryBattery >= 0
                        ? bt.batteryColor(bt.primaryBattery)
-                       : (bar ? bar.subtext : "#a6adc8")
+                       : (bar ? bar.subtext : "#b0b0b2")
                 font.pixelSize: bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12
                 font.bold: true
                 font.family: bar.fontFamily

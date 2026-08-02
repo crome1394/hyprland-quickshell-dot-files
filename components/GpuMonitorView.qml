@@ -8,14 +8,14 @@ Item {
 
     required property var service
 
-    property color textColor: "#cdd6f4"
-    property color subtextColor: "#a6adc8"
-    property color accentColor: "#89b4fa"
-    property color surfaceColor: "#313244"
-    property color overlayColor: "#6c7086"
-    property color gaugeLowColor: "#a6e3a1"
-    property color gaugeMidColor: "#f9e2af"
-    property color gaugeHighColor: "#f38ba8"
+    property color textColor: "#ececee"
+    property color subtextColor: "#b0b0b2"
+    property color accentColor: "#00c4f5"
+    property color surfaceColor: "#1a1c1f"
+    property color overlayColor: "#5c5c60"
+    property color gaugeLowColor: "#3ecf8e"
+    property color gaugeMidColor: "#e8c56a"
+    property color gaugeHighColor: "#e85d6f"
 
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10

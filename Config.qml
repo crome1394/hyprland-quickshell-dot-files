@@ -63,50 +63,55 @@ QtObject {
     id: theme
 
     // =========================================================================
-    // BASE PALETTE (Catppuccin Mocha inspired + personal tweaks)
+    // BASE PALETTE (CachyOS window chrome — deep solid blacks + brand cyan)
     // =========================================================================
-    // These are the fundamental semantic colors. Most other colors derive from
-    // or reference these. Avoid using raw hex in widgets — use these or the
-    // glass* tokens below.
+    // Crisp, near-opaque dark chrome inspired by Dolphin / CachyOS Installer
+    // window surfaces (not the pink/blue wallpaper). Prefer deep blacks over
+    // washed mid-greys so wallpaper does not tint the bar.
+    //
+    // Solid reference: match terminal-true black (kitty default #000000), then
+    // step up only slightly for pills / hover so hierarchy stays visible.
+    //   bar #000000 · pills #0a0c0e · hover #16181c · labels #b0b0b2 · cyan #00c4f5
 
-    readonly property color bg:        "#3B3B3F"   // Main bar background base (rarely used directly due to glass)
-    readonly property color surface:   "#313244"   // Slightly lighter panels, buttons, input fields
-    readonly property color text:      "#cdd6f4"   // Primary readable text (clock, titles, active labels)
-    readonly property color subtext:   "#a6adc8"   // Secondary text (labels, inactive icons)
-    readonly property color overlay:   "#6c7086"   // Muted / placeholder / disabled text, help hints
+    readonly property color bg:        "#000000"   // True black (matches kitty / installer deep content)
+    readonly property color surface:   "#121416"   // Elevated panels / buttons on pure black
+    readonly property color text:      "#ececee"   // Primary readable text (high contrast on black)
+    readonly property color subtext:   "#b0b0b2"   // Secondary text (window labels)
+    readonly property color overlay:   "#5c5c60"   // Muted / placeholder / disabled
 
-    readonly property color accent:    '#00d3f8'   // Interactive highlights (hover borders, section titles, checkmarks)
-    readonly property color muted:     "#f38ba8"   // Muted / warning / error state (volume mute, high temp, DND badge)
+    readonly property color accent:    "#00c4f5"   // CachyOS cyan — crisp brand highlight
+    readonly property color muted:     "#e85d6f"   // Warning / error / mute / DND
 
     // Semantic / status colors
-    readonly property color todayBg:   '#00f7ff'   // Calendar "today" highlight circle
-    readonly property color weekday:   "#ff5c5c"   // Calendar weekday headers (M T W ...)
-    readonly property color clock:     "#ffffff"   // Clock text (stronger than normal text for readability)
+    readonly property color todayBg:   "#00d4ff"   // Calendar "today" (brighter cyan)
+    readonly property color weekday:   "#e85d6f"   // Calendar weekday headers
+    readonly property color clock:     "#ffffff"   // Clock text
 
     // =========================================================================
-    // GLASSMORPHIC TOKENS (frosted acrylic / mica style)
+    // SURFACE TOKENS (fully solid — true black bar, darker pills)
     // =========================================================================
-    // All the translucent layers that give the modern "glass" look.
-    // Order of opacity: glassPopup > glassPill > glass (bar background)
+    // All fills are alpha 1.0. No translucent glass. Hierarchy is pure black →
+    // slightly lifted greys only (no mid-grey that reads as "washed").
+    // Hierarchy: glassBg (true black) ≤ glassPill ≤ glassPopup ≤ glassHover
 
-    // Main bar background
-    readonly property color glassBg:          Qt.rgba(0.08, 0.08, 0.10, 0.52)
-    readonly property color glassBorder:      Qt.rgba(1, 1, 1, 0.10)
-    readonly property color glassHighlight:   Qt.rgba(1, 0, 0, 0)           // Top edge light (set to low alpha white for classic glass)
+    // Main bar — true black so it matches kitty, not a lifted charcoal
+    readonly property color glassBg:          "#000000"
+    // Near-invisible border (true black edge). White alpha borders soft-AA against wallpaper.
+    readonly property color glassBorder:      "#000000"
+    readonly property color glassHighlight:   "transparent"  // No white edge wash on the bar
 
-    // Pill-style containers (Workspaces, Audio, Clock, Tray, QuickLaunch, SysStats, Media when no media)
-    readonly property color glassPillBg:      Qt.rgba(0.06, 0.06, 0.08, 0.75)
-    readonly property color glassHover:       Qt.rgba(0.15, 0.15, 0.18, 0.65)  // Hover state for all pills
+    // Pills — one step above pure black (still deeper than old #141618)
+    readonly property color glassPillBg:      "#0a0c0e"
+    readonly property color glassHover:       "#16181c"  // Lifted hover without going mid-grey
 
-    // Popups (audio controls, media player, power menu, calendar, tray menus, help)
-    // Slightly more opaque + stronger highlight for readability over content
-    readonly property color glassPopupBg:         Qt.rgba(0.07, 0.07, 0.09, 0.90)
-    readonly property color glassPopupBorder:     Qt.rgba(1, 1, 1, 0.13)
-    readonly property color glassPopupHighlight:  Qt.rgba(1, 1, 1, 0.18)
+    // Popups — solid black chrome (same depth as bar; content needs max contrast)
+    readonly property color glassPopupBg:         "#000000"
+    readonly property color glassPopupBorder:     "#121416"  // Solid dark rim, no soft white AA
+    readonly property color glassPopupHighlight:  "transparent"
 
     // Convenience aliases used by many pills (prevents drift)
     readonly property color pillBg:     glassPillBg
-    readonly property color pillBorder: Qt.rgba(1, 1, 1, 0.08)
+    readonly property color pillBorder: "#0a0c0e"  // Matches pill fill; hover still uses accent
     readonly property color pillHover:  glassHover
 
     // =========================================================================
@@ -118,17 +123,15 @@ QtObject {
     // Pill-level hover (used by almost every bar widget)
     readonly property color pillHoverBorder: accent   // Border color on hover for all pills
 
-    // Per-item hover chips (QuickLaunch, SystemTray, SysStats, Clock, Audio,
-    // Workspaces). Change here to recolor all of those together.
-    // Default matches glassHover / PowerMenu pill; override freely.
-    readonly property color iconHoverBg: Qt.rgba(0, 0.55, 1, 0.58)
+    // Per-item hover chips — solid cyan-tinted dark (no soft alpha wash)
+    readonly property color iconHoverBg: "#0a3a48"
 
     // General control states (used inside popups and complex widgets)
-    readonly property color controlHoverBg:   glassHover                     // Hover background for buttons/controls
-    readonly property color controlActiveBg:  Qt.rgba(0.12, 0.12, 0.15, 0.70) // Pressed / toggled / active state
+    readonly property color controlHoverBg:   glassHover
+    readonly property color controlActiveBg:  "#16181c"
 
-    // Specific popup button hover (replaces previous hardcoded Qt.rgba values in AudioPill/PowerMenu)
-    readonly property color popupButtonHoverBg: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+    // Specific popup button hover
+    readonly property color popupButtonHoverBg: "#121416"
 
     // =========================================================================
     // RADII (corner rounding) — consistency is king
@@ -418,10 +421,15 @@ QtObject {
     //   qs ipc call freshRss refresh
 
     readonly property int freshRssPollIntervalMs:  60000  // badge poll while bar is up
-    readonly property int freshRssItemLimit:       80     // max unread/starred ids to load
+    readonly property int freshRssItemLimit:       80     // max unread/starred ids (when maxDays=0)
     // For All/Read scopes: recent articles pulled from *each* feed so quiet channels
     // (Dark Journalist, JRE, It's FOSS, …) still appear, not only high-volume feeds.
+    // Ignored when freshRssMaxDays > 0 (day window is the primary limit).
     readonly property int freshRssPerFeedLimit:    12
+    // Primary history window: only articles newer than this many days.
+    // When > 0, overrides per-feed and item-count caps (paginates until the window is covered).
+    // 0 = unlimited (use per-feed / item limits only).
+    readonly property int freshRssMaxDays:         30
     readonly property int freshRssWidth:           980
     readonly property int freshRssHeight:          640
     readonly property int freshRssMinWidth:        640
@@ -455,7 +463,7 @@ QtObject {
         "/home/crome/.config/quickshell/scripts/notification-sync.sh"
     ]
     readonly property int notificationSyncIntervalMs: 2500  // Ms between sync script runs
-    readonly property color notificationDndAccent: "#e85d5d"  // Red pill border + bell when DND is on
+    readonly property color notificationDndAccent: muted  // Warning red pill border + bell when DND is on
 
     // =========================================================================
     // KILL TARGET PILL (widgets/KillTargetPill.qml — xkill-style window picker)
@@ -580,9 +588,9 @@ QtObject {
     readonly property int  sliderMiniHeight: 5
 
     // Volume bar fallback fill (AudioPill overrides per-level via audioSpeaker/MicUtilColor)
-    readonly property color sliderFill:       '#00d3f8' // Default when no threshold binding is set
+    readonly property color sliderFill:       accent   // CachyOS cyan (#00c4f5)
     readonly property color sliderFillMuted:  muted     // Fill when device is muted
-    readonly property color sliderTrack:      surface  // Background track (slightly lighter than glass)
+    readonly property color sliderTrack:      surface  // Background track (titlebar chrome)
 
     // AudioPill volume color ramps (25% tiers — speaker and mic tuned independently)
     readonly property int audioUtilThreshold1: 25
@@ -645,14 +653,14 @@ QtObject {
     readonly property bool wsStartupCloseMagic: false  // Close magic on qs start (only if wsStartupWorkspace > 0). IPC: setWsStartupCloseMagic
 
     // Legacy workspace hover (unused by WorkspacesPill — uses iconHoverBg now).
-    readonly property color wsHoverYellow: '#dbfdfc'           // Kept for reference / other callers
-    readonly property color wsActiveBg:    Qt.rgba(0.53, 0.69, 0.96, 0.22)  // Active workspace glass
-    readonly property color wsActiveBorder: Qt.rgba(0.53, 0.69, 0.96, 0.6)
-    readonly property color wsActiveText:  "#e0e7ff"
+    readonly property color wsHoverYellow: "#b8f4ff"           // Soft cyan hover reference
+    readonly property color wsActiveBg:    "#0a3a48"   // Active workspace — solid cyan-tinted dark
+    readonly property color wsActiveBorder: accent     // CachyOS cyan
+    readonly property color wsActiveText:  "#e6f9ff"
     readonly property color wsInactiveText: clock   // Falls back to bar.clock in delegate
 
     // Legacy names some older code paths may still reference
-    readonly property color wsText:        "#64748b"
+    readonly property color wsText:        "#7a7a80"
     readonly property color wsActiveTextLegacy: wsActiveText   // (the alias in shell.qml maps wsActiveText → this)
 
     readonly property int  wsButtonWidth:   42   // Width of each workspace pill button
@@ -740,7 +748,7 @@ QtObject {
     readonly property int  statGaugeWidth:   73
     readonly property int  statGaugeHeight:   8
     readonly property int  statGaugeRadius:   4
-    readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.09)  // Bar background track
+    readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.07)  // Bar background track on deep black
 
     // Utilization % bar and text color by load level (green → yellow → orange → red).
     readonly property color statUtilTier1: "#10B981"   // Low load (0% up to first threshold)
@@ -754,9 +762,9 @@ QtObject {
     readonly property int statUtilThreshold3: 75
 
     // CPU/GPU temperature text colors (Memory shows used GiB instead — uses subtext color).
-    readonly property color statTempCool: "#cdd6f4"   // Normal temperature
-    readonly property color statTempWarm: "#f9e2af"   // Getting warm
-    readonly property color statTempHot:  "#f38ba8"   // Hot
+    readonly property color statTempCool: text        // Normal temperature (primary text)
+    readonly property color statTempWarm: "#e8c56a"   // Getting warm
+    readonly property color statTempHot:  muted       // Hot
 
     // Temperatures in °C where the label switches cool → warm → hot.
     readonly property int statTempWarmAt: 70
@@ -786,8 +794,8 @@ QtObject {
     // Animated bars behind the media pill when music is playing.
     readonly property int  cavaBarCount:     40   // Number of vertical bars
     readonly property int  cavaBarGap:        1   // Pixels between bars
-    readonly property color cavaInactive:    Qt.rgba(1, 1, 1, 0.18)  // Bar color when silent
-    readonly property color cavaActive:      Qt.rgba(0.55, 0.71, 0.98, 0.35)  // Bar color when audio plays
+    readonly property color cavaInactive:    Qt.rgba(1, 1, 1, 0.16)  // Bar color when silent
+    readonly property color cavaActive:      Qt.rgba(0.0, 0.77, 0.96, 0.38)  // CachyOS cyan when audio plays
     readonly property int  cavaAnimFast:     95   // Animation speed (ms) when media is playing
     readonly property int  cavaAnimSlow:    420   // Animation speed (ms) when idle (saves CPU)
 
@@ -811,13 +819,13 @@ QtObject {
     readonly property int sysmonDefaultPollInterval: 1500
 
     // Shared active-tab chip style (HyprConfigInsp tab bar)
-    readonly property color panelTabActiveBg:   Qt.rgba(0.55, 0.70, 0.96, 0.18)
+    readonly property color panelTabActiveBg:   "#0a3a48"  // solid cyan-tinted dark
     readonly property color panelTabActiveBorder: accent
 
     // Gauge color ramp for CircularGauge (CPU/GPU/memory/temp). <65% / 65–85% / >85%
-    readonly property color gaugeLow:  "#a6e3a1"
-    readonly property color gaugeMid:  "#f9e2af"
-    readonly property color gaugeHigh: "#f38ba8"
+    readonly property color gaugeLow:  "#3ecf8e"
+    readonly property color gaugeMid:  "#e8c56a"
+    readonly property color gaugeHigh: muted
 
     // =========================================================================
     // HYPR CONFIG INSPECTOR (HyprConfigInsp.qml floating overlay)
@@ -859,7 +867,7 @@ QtObject {
     readonly property color inspWindowHighlight:  glassPopupHighlight
     readonly property bool  inspUseGradient:      false
     readonly property color inspGradientTop:      glassPopupBg
-    readonly property color inspGradientBottom:   Qt.rgba(0.05, 0.05, 0.08, 0.94)
+    readonly property color inspGradientBottom:   "#000000"  // solid true black
 
     // --- Tab bar (wrapping Flow of chips + vertical scrollbar when many tabs)
     readonly property int inspTabBarMaxHeight: 102
@@ -879,7 +887,7 @@ QtObject {
     readonly property int inspSearchRadius:    6
     readonly property int inspSearchPadding:   4
     readonly property int inspSearchFontSize:   12          //14
-    readonly property color inspSearchSelectionBg: Qt.rgba(0.55, 0.70, 0.96, 0.35)
+    readonly property color inspSearchSelectionBg: "#0a4a5c"  // solid cyan selection
 
     // --- Header (title row, version/distro, keyboard hints)
     readonly property int inspTitleFontSize:    18
@@ -920,10 +928,10 @@ QtObject {
     readonly property int inspEnvDescColMinWidth:  320    // minimum width for Description column
 
     // --- Key binding modifier pills (Catppuccin semantic colors)
-    readonly property color inspKeyPillSuper:   "#89b4fa"
-    readonly property color inspKeyPillShift:   "#fab387"
-    readonly property color inspKeyPillCtrl:    "#cba6f7"
-    readonly property color inspKeyPillAlt:    "#94e2d5"
+    readonly property color inspKeyPillSuper:   "#00c4f5"  // CachyOS cyan
+    readonly property color inspKeyPillShift:   "#e8a06a"
+    readonly property color inspKeyPillCtrl:    "#8b7cf0"
+    readonly property color inspKeyPillAlt:     "#2dd4bf"  // teal sibling of brand cyan
     readonly property color inspKeyPillDefault: overlay
     readonly property color inspKeyPillTextOnDark:  "#ffffff"
     readonly property color inspKeyPillTextOnLight: "#000000"
@@ -933,13 +941,13 @@ QtObject {
     readonly property int inspKeyPillFontSize: 11
 
     // --- Environment variable semantic colors (keys + values)
-    readonly property color inspEnvKeyHighlight: "#94e2d5"   // graphics/wayland-related keys
-    readonly property color inspEnvValueTrue:      "#a6e3a1"   // 1, true, enabled
-    readonly property color inspEnvValueFalse:     "#fab387"   // 0, false, disabled
-    readonly property color inspEnvValueTech:      "#89dceb"   // nvidia, wayland, opengl, direct
+    readonly property color inspEnvKeyHighlight: "#2dd4bf"   // graphics/wayland-related keys
+    readonly property color inspEnvValueTrue:      "#3ecf8e"   // 1, true, enabled
+    readonly property color inspEnvValueFalse:     "#e8a06a"   // 0, false, disabled
+    readonly property color inspEnvValueTech:      "#00c4f5"   // nvidia, wayland, opengl, direct
     readonly property color inspEnvValuePath:      subtext      // filesystem paths
-    readonly property color inspEnvValueTheme:     "#cba6f7"   // theme/platform strings
-    readonly property color inspEnvValueTerminal:  "#89b4fa"   // TERMINAL, hyprland refs
+    readonly property color inspEnvValueTheme:     "#8b7cf0"   // theme/platform strings
+    readonly property color inspEnvValueTerminal:  "#5ecbff"   // TERMINAL, hyprland refs
 
     // Prefixes that mark an env *key* as graphics/wayland-related (highlighted in Variable column)
     readonly property var inspEnvHighlightPrefixes: [
@@ -1004,9 +1012,9 @@ QtObject {
     // =========================================================================
     // DIVIDERS & SUBTLE LINES
     // =========================================================================
-    readonly property color divider:         Qt.rgba(1, 1, 1, 0.12)   // Standard subtle divider
-    readonly property color dividerSubtle:   Qt.rgba(1, 1, 1, 0.06)   // Very faint divider (e.g. between minor elements)
-    readonly property color dividerStrong:   "#45475a"                // Used in popups for section lines
+    readonly property color divider:         "#1a1c1e"   // Solid divider on pure black (no soft white AA)
+    readonly property color dividerSubtle:   "#121416"   // Fainter solid divider
+    readonly property color dividerStrong:   "#2a2c30"   // Section lines
     readonly property int  dividerThickness: 1
 
     // =========================================================================
@@ -1014,7 +1022,7 @@ QtObject {
     // =========================================================================
     readonly property color menuCheckMark:     text    // ✓ / ● glyphs (not accent — avoids purple GTK clash)
     readonly property color menuUncheckedMark: overlay // ○ / empty radio ring
-    readonly property color menuCheckedRow:  Qt.rgba(0, 0.83, 0.97, 0.10)  // subtle highlight on checked items
+    readonly property color menuCheckedRow:  "#0a3a48"  // solid cyan-tinted dark on checked items
 
     // =========================================================================
     // TRAY MENU BUTTON TYPE ENUMS (mirror of QsMenuButtonType for safety)

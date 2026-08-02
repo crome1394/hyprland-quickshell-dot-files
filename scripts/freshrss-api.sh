@@ -98,16 +98,19 @@ rss_url() {
 # ── RSS parser (anonymous / no API password) ──────────────────────────────────
 parse_rss_items() {
     local limit="${1:-50}"
+    local max_days="${2:-0}"
     need_cmd python3
     local xml
     xml="$(curl -sS -m 25 "$(rss_url)")" || json_err "failed to fetch public RSS"
-    FRESHRSS_BASE_URL="$FRESHRSS_BASE_URL" LIMIT="$limit" python3 - "$xml" <<'PY'
-import json, os, re, sys, hashlib
+    FRESHRSS_BASE_URL="$FRESHRSS_BASE_URL" LIMIT="$limit" MAX_DAYS="$max_days" python3 - "$xml" <<'PY'
+import json, os, re, sys, hashlib, time
 from xml.etree import ElementTree as ET
 from email.utils import parsedate_to_datetime
 
 xml = sys.argv[1] if len(sys.argv) > 1 else sys.stdin.read()
 limit = int(os.environ.get("LIMIT", "50"))
+max_days = max(0, int(os.environ.get("MAX_DAYS", "0") or 0))
+cutoff_ts = (int(time.time()) - max_days * 86400) if max_days > 0 else 0
 base = os.environ.get("FRESHRSS_BASE_URL", "")
 
 try:
@@ -227,7 +230,8 @@ def to_epoch(pub: str) -> int:
         return 0
 
 items_out = []
-for item in channel.findall("item")[: max(1, min(limit, 200))]:
+_take = 5000 if max_days > 0 else max(1, min(limit, 200))
+for item in channel.findall("item")[:_take]:
     title = findtext_any(item, ["title"]) or "(no title)"
     link = findtext_any(item, ["link"]) or ""
     guid = findtext_any(item, ["guid"]) or link or title
@@ -276,8 +280,12 @@ for item in channel.findall("item")[: max(1, min(limit, 200))]:
         "pubDate": pub,
     })
 
-# Newest first
+# Newest first + day window
 items_out.sort(key=lambda x: x.get("created_on_time") or 0, reverse=True)
+if cutoff_ts > 0:
+    items_out = [x for x in items_out if int(x.get("created_on_time") or 0) >= cutoff_ts]
+elif limit:
+    items_out = items_out[: max(1, min(limit, 200))]
 
 # unread badge: try HTML title "(N) …"
 count = len(items_out)
@@ -445,24 +453,27 @@ PY
 # Fetch recent items from EVERY feed via Google Reader API (covers quiet channels).
 # Perf: parallel feed streams, cached auth, truncated HTML/text for the list payload.
 # Env: FRESHRSS_BASE_URL, FRESHRSS_USER, FRESHRSS_API_PASSWORD
-# Args: scope(all|read) limit_total per_feed
+# Args: scope(all|read) limit_total per_feed [max_days]
+# max_days > 0: primary history window; paginates per feed and ignores per_feed/item soft caps.
 fetch_greader_per_feed() {
     local scope="$1"
     local limit="$2"
     local per_feed="$3"
+    local max_days="${4:-0}"
     local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/quickshell"
     mkdir -p "$cache_dir" 2>/dev/null || true
     FRESHRSS_BASE_URL="$FRESHRSS_BASE_URL" \
     FRESHRSS_USER="$FRESHRSS_USER" \
     FRESHRSS_API_PASSWORD="$FRESHRSS_API_PASSWORD" \
     FRESHRSS_AUTH_CACHE="${cache_dir}/freshrss-greader.auth" \
-    python3 - "$scope" "$limit" "$per_feed" <<'PY'
+    python3 - "$scope" "$limit" "$per_feed" "$max_days" <<'PY'
 import json, os, re, sys, time, urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 scope = sys.argv[1]
 limit = int(sys.argv[2])
 per_feed = max(1, min(int(sys.argv[3]), 40))
+max_days = max(0, int(sys.argv[4]) if len(sys.argv) > 4 else 0)
 base = os.environ.get("FRESHRSS_BASE_URL", "http://10.74.10.8").rstrip("/")
 user = os.environ.get("FRESHRSS_USER", "admin")
 pw = os.environ.get("FRESHRSS_API_PASSWORD", "")
@@ -473,6 +484,11 @@ TEXT_MAX = 1200
 SUMMARY_MAX = 220
 # Parallel stream fetches (LAN FreshRSS handles this fine).
 WORKERS = min(12, max(4, (os.cpu_count() or 4)))
+# Day-window mode: primary limit (overrides per-feed / item soft caps).
+now_ts = int(time.time())
+cutoff_ts = (now_ts - max_days * 86400) if max_days > 0 else 0
+PAGE_N = 50 if max_days > 0 else per_feed
+MAX_PAGES = 20 if max_days > 0 else 1
 
 def http(method, url, data=None, headers=None, timeout=25):
     h = {"User-Agent": "quickshell-freshrss/1.2"}
@@ -627,72 +643,91 @@ def fetch_feed(sub):
     if m:
         fid = int(m.group(1))
     enc = urllib.parse.quote(stream, safe="")
-    url = f"{base}/api/greader.php/reader/api/0/stream/contents/{enc}?n={per_feed}&output=json"
+    rows = []
+    cont = None
     try:
-        data = json.loads(http("GET", url, headers=auth_h, timeout=20).decode("utf-8", "replace"))
+        for _page in range(MAX_PAGES):
+            q = {"n": str(PAGE_N), "output": "json"}
+            if cont:
+                q["c"] = cont
+            url = (
+                f"{base}/api/greader.php/reader/api/0/stream/contents/{enc}?"
+                + urllib.parse.urlencode(q)
+            )
+            data = json.loads(http("GET", url, headers=auth_h, timeout=25).decode("utf-8", "replace"))
+            page_items = data.get("items") or []
+            if not page_items:
+                break
+            hit_old = False
+            for it in page_items:
+                pub = int(it.get("published") or it.get("updated") or 0)
+                if cutoff_ts > 0 and pub > 0 and pub < cutoff_ts:
+                    hit_old = True
+                    continue  # skip older than day window
+                iid = greader_id_to_fever(it.get("id") or "")
+                if not iid:
+                    continue
+                cats = it.get("categories") or []
+                is_read = 1 if any(c.endswith("/state/com.google/read") for c in cats) else 0
+                is_saved = 1 if any(c.endswith("/state/com.google/starred") for c in cats) else 0
+                if scope == "read" and not is_read:
+                    continue
+                if scope == "saved" and not is_saved:
+                    continue
+
+                link = ""
+                for alt in (it.get("canonical") or []) + (it.get("alternate") or []):
+                    if alt.get("href"):
+                        link = alt["href"]
+                        break
+                html = ""
+                if isinstance(it.get("content"), dict):
+                    html = it["content"].get("content") or ""
+                if not html and isinstance(it.get("summary"), dict):
+                    html = it["summary"].get("content") or ""
+                media, is_vid = extract_media(html, link, ftitle, site)
+                plain = strip_html(html)
+                if len(html) > HTML_MAX:
+                    html = html[:HTML_MAX] + "…"
+                if len(plain) > TEXT_MAX:
+                    plain = plain[:TEXT_MAX] + "…"
+                origin = it.get("origin") or {}
+                feed_title = origin.get("title") or ftitle
+                gtitle = group_title
+                for c in cats:
+                    if "/label/" in c:
+                        gtitle = urllib.parse.unquote(c.split("/label/", 1)[-1].replace("+", " "))
+                        break
+                category = feed_title or gtitle or "Other"
+                summary = plain[:SUMMARY_MAX] + ("…" if len(plain) > SUMMARY_MAX else "")
+                rows.append({
+                    "id": iid,
+                    "id_hash": iid,
+                    "feed_id": fid,
+                    "feed_title": feed_title,
+                    "group_id": 0,
+                    "group_title": gtitle,
+                    "category": category,
+                    "title": it.get("title") or "(no title)",
+                    "author": it.get("author") or "",
+                    "url": link,
+                    "html": html,
+                    "text": plain,
+                    "summary": summary,
+                    "is_read": is_read,
+                    "is_saved": is_saved,
+                    "is_video": is_vid,
+                    "media_url": media,
+                    "created_on_time": pub,
+                    "pubDate": "",
+                })
+            if max_days <= 0:
+                break  # single page when using per_feed
+            cont = data.get("continuation")
+            if hit_old or not cont:
+                break
     except Exception as e:
         return [], f"{stream}: {e}"
-
-    rows = []
-    for it in data.get("items") or []:
-        iid = greader_id_to_fever(it.get("id") or "")
-        if not iid:
-            continue
-        cats = it.get("categories") or []
-        is_read = 1 if any(c.endswith("/state/com.google/read") for c in cats) else 0
-        is_saved = 1 if any(c.endswith("/state/com.google/starred") for c in cats) else 0
-        if scope == "read" and not is_read:
-            continue
-        if scope == "saved" and not is_saved:
-            continue
-
-        link = ""
-        for alt in (it.get("canonical") or []) + (it.get("alternate") or []):
-            if alt.get("href"):
-                link = alt["href"]
-                break
-        html = ""
-        if isinstance(it.get("content"), dict):
-            html = it["content"].get("content") or ""
-        if not html and isinstance(it.get("summary"), dict):
-            html = it["summary"].get("content") or ""
-        media, is_vid = extract_media(html, link, ftitle, site)
-        plain = strip_html(html)
-        # Trim for QML: full remote HTML for 30×N items is multi‑MB and slow to parse.
-        if len(html) > HTML_MAX:
-            html = html[:HTML_MAX] + "…"
-        if len(plain) > TEXT_MAX:
-            plain = plain[:TEXT_MAX] + "…"
-        origin = it.get("origin") or {}
-        feed_title = origin.get("title") or ftitle
-        gtitle = group_title
-        for c in cats:
-            if "/label/" in c:
-                gtitle = urllib.parse.unquote(c.split("/label/", 1)[-1].replace("+", " "))
-                break
-        category = feed_title or gtitle or "Other"
-        summary = plain[:SUMMARY_MAX] + ("…" if len(plain) > SUMMARY_MAX else "")
-        rows.append({
-            "id": iid,
-            "id_hash": iid,
-            "feed_id": fid,
-            "feed_title": feed_title,
-            "group_id": 0,
-            "group_title": gtitle,
-            "category": category,
-            "title": it.get("title") or "(no title)",
-            "author": it.get("author") or "",
-            "url": link,
-            "html": html,
-            "text": plain,
-            "summary": summary,
-            "is_read": is_read,
-            "is_saved": is_saved,
-            "is_video": is_vid,
-            "media_url": media,
-            "created_on_time": int(it.get("published") or it.get("updated") or 0),
-            "pubDate": "",
-        })
     return rows, None
 
 out = []
@@ -710,13 +745,21 @@ with ThreadPoolExecutor(max_workers=WORKERS) as pool:
             iid = row["id"]
             if iid in seen:
                 continue
+            # Safety filter
+            if cutoff_ts > 0 and int(row.get("created_on_time") or 0) > 0:
+                if int(row["created_on_time"]) < cutoff_ts:
+                    continue
             seen.add(iid)
             out.append(row)
 
-# Newest first. Keep per-feed coverage (soft cap only).
+# Newest first.
 out.sort(key=lambda x: x.get("created_on_time") or 0, reverse=True)
-soft_cap = max(limit, per_feed * max(1, len(feeds)))
-soft_cap = min(soft_cap, 800)
+if max_days > 0:
+    # Day window is authoritative — generous safety cap only.
+    soft_cap = 5000
+else:
+    soft_cap = max(limit, per_feed * max(1, len(feeds)))
+    soft_cap = min(soft_cap, 800)
 out = out[:soft_cap]
 
 print(json.dumps({
@@ -727,6 +770,8 @@ print(json.dumps({
     "scope": scope,
     "source": "greader-per-feed",
     "per_feed": per_feed,
+    "max_days": max_days,
+    "cutoff": cutoff_ts,
     "feeds": len(feeds),
     "workers": WORKERS,
     "ms": int((time.time() - t0) * 1000),
@@ -739,18 +784,23 @@ PY
 }
 
 cmd_items() {
-    # items [limit] [scope] [per_feed]
+    # items [limit] [scope] [per_feed] [max_days]
     #   scope: unread (default) | all | saved | read
-    #   per_feed: used for all/read — recent items taken from each feed (default 12)
+    #   per_feed: All/Read when max_days=0
+    #   max_days: when >0, primary history window (overrides per-feed/item soft caps)
     local limit="${1:-50}"
     local scope="${2:-unread}"
     local per_feed="${3:-12}"
+    local max_days="${4:-0}"
     case "$scope" in
         unread|all|saved|read|starred) ;;
         *) scope="unread" ;;
     esac
     # accept alias
     [[ "$scope" == "starred" ]] && scope="saved"
+    if ! [[ "$max_days" =~ ^[0-9]+$ ]]; then
+        max_days=0
+    fi
 
     need_cmd curl
     need_cmd jq
@@ -762,7 +812,7 @@ cmd_items() {
         if [[ "$auth" == "1" ]]; then
             # all/read: per-feed Google Reader stream so quiet channels still appear
             if [[ "$scope" == "all" || "$scope" == "read" ]]; then
-                fetch_greader_per_feed "$scope" "$limit" "$per_feed"
+                fetch_greader_per_feed "$scope" "$limit" "$per_feed" "$max_days"
                 return 0
             fi
 
@@ -808,13 +858,15 @@ cmd_items() {
             feeds="$(fever_post "api&feeds" 2>/dev/null || echo '{}')"
             groups="$(fever_post "api&groups" 2>/dev/null || echo '{}')"
             # Pass scope for optional client-side filter (read = only is_read)
-            python3 - "$items" "$feeds" "$groups" "$limit" "$scope" <<'PY'
-import json, sys, re
+            python3 - "$items" "$feeds" "$groups" "$limit" "$scope" "$max_days" <<'PY'
+import json, sys, re, time
 items_blob = json.loads(sys.argv[1])
 feeds_blob = json.loads(sys.argv[2]) if sys.argv[2] else {}
 groups_blob = json.loads(sys.argv[3]) if sys.argv[3] else {}
 limit = int(sys.argv[4])
 scope = sys.argv[5] if len(sys.argv) > 5 else "unread"
+max_days = max(0, int(sys.argv[6]) if len(sys.argv) > 6 else 0)
+cutoff_ts = (int(time.time()) - max_days * 86400) if max_days > 0 else 0
 
 feed_map = {}
 for f in feeds_blob.get("feeds") or []:
@@ -946,9 +998,16 @@ for it in items_blob.get("items") or []:
 if scope == "read":
     out = [x for x in out if int(x.get("is_read") or 0) == 1]
 
-# Newest first (and cap)
+# Day window (primary when max_days > 0)
+if cutoff_ts > 0:
+    out = [x for x in out if int(x.get("created_on_time") or 0) >= cutoff_ts]
+
+# Newest first (and cap) — day window overrides item soft-cap
 out.sort(key=lambda x: x.get("created_on_time") or 0, reverse=True)
-out = out[: max(1, min(limit, 200))]
+if max_days > 0:
+    out = out[:5000]
+else:
+    out = out[: max(1, min(limit, 200))]
 
 print(json.dumps({
     "ok": True,
@@ -956,6 +1015,7 @@ print(json.dumps({
     "auth": True,
     "writable": True,
     "scope": scope,
+    "max_days": max_days,
     "count": len(out),
     "total": items_blob.get("total_items") or len(out),
     "items": out,
@@ -964,7 +1024,7 @@ PY
             return 0
         fi
     fi
-    parse_rss_items "$limit"
+    parse_rss_items "$limit" "$max_days"
 }
 
 cmd_item() {
@@ -1228,9 +1288,10 @@ Usage: freshrss-api.sh <command> [args]
 
 Commands:
   status                 Mode, auth, unread/item count
-  items [limit] [scope] [per_feed]
+  items [limit] [scope] [per_feed] [max_days]
                          scope: unread (default) | all | read | saved
-                         all/read use Google Reader per-feed fetch (per_feed default 12)
+                         all/read: GReader per-feed (per_feed default 12)
+                         max_days>0: only last N days (overrides per-feed/item soft caps)
   item <id>              Single entry
   mark-read <id>         Mark one item read (Fever)
   mark-unread <id>       Mark one item unread (Fever)

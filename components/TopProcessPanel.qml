@@ -10,11 +10,11 @@ Item {
     required property string title
     required property string mode
 
-    property color textColor: "#cdd6f4"
-    property color subtextColor: "#a6adc8"
-    property color accentColor: "#89b4fa"
-    property color surfaceColor: "#313244"
-    property color overlayColor: "#6c7086"
+    property color textColor: "#ececee"
+    property color subtextColor: "#b0b0b2"
+    property color accentColor: "#00c4f5"
+    property color surfaceColor: "#1a1c1f"
+    property color overlayColor: "#5c5c60"
     property string emptyText: ""
 
     property bool groupedView: true

@@ -366,7 +366,7 @@ Glassmorphic bar pill for day-to-day NetworkManager control via **Quickshell.Net
 |---------|---------|
 | **WiFi radio** | Header **WiFi on/off** — software rfkill for all wireless devices |
 | **Networking** | Header **Net on/off** — `nmcli networking` global switch (green when on) |
-| **nm-applet** | Header **Applet on/off** starts or stops `nm-applet` for the **session** only; use IPC `enableApplet` / `disableApplet` to persist across reboot |
+| **nm-applet** | Footer **Applet on/off**: left-click = session start/stop; right-click = sticky disable/enable (survives reboot via XDG autostart mask + `systemctl --user disable`). Amber border when sticky-disabled. IPC: `disableApplet` / `enableApplet` / `setAppletAutostart` |
 | **Adapters** | Wired and WiFi devices with state, active connection name, IPv4, link speed; Disconnect / Connect / Details / Edit / Autoconnect |
 | **Connections** | Dropdown of saved NM profiles (activate by selection); **Editor** opens `nm-connection-editor` for the selected profile |
 | **Connection info** | Details panel (nm-applet *Connection Information* style): interface, MAC, cable/link, IPv4/IPv6, gateway, DNS, routes; click row to copy |
@@ -414,26 +414,30 @@ Visibility (show/hide the pill itself) stays on the `shell` target. Actions belo
 | `activateConnection` | `uuid` or `name` | Bring a saved profile up |
 | `deactivateConnection` | `uuid` or `name` | Bring a profile down |
 
-**Applet note:** Header **Applet on/off** and `startApplet` / `stopApplet` / `toggleApplet` only affect the **current session**. After reboot, `nm-applet.service` may start again if still enabled.
+**Applet note (same pattern as Bluetooth / Blueman):**
 
-To **keep the applet off across reboots** (disable the user unit + stop the process):
+| Action | Session only? | Survives reboot? |
+|--------|---------------|------------------|
+| Footer left-click / `startApplet` / `stopApplet` / `toggleApplet` | Yes | No (if still enabled at login) |
+| Footer right-click / `disableApplet` / `setAppletAutostart false` | Stops now | **Yes — stays off** |
+| Footer right-click (when sticky-off) / `enableApplet` | Starts now | **Yes — starts at login** |
+
+Sticky disable writes `~/.config/autostart/nm-applet.desktop` (`Hidden=true`) to mask `/etc/xdg/autostart/nm-applet.desktop`, and runs `systemctl --user disable nm-applet.service`.
 
 ```bash
+# Keep off after reboot (recommended when using the Network pill)
 qs ipc call networkPill disableApplet
 # equivalent:
 qs ipc call networkPill setAppletAutostart false
-```
 
-To bring autostart back:
-
-```bash
+# Bring login autostart back
 qs ipc call networkPill enableApplet
-# or:
 qs ipc call networkPill setAppletAutostart true
-```
 
-Check unit state anytime: `systemctl --user is-enabled nm-applet.service` or  
-`~/.config/quickshell/scripts/network-control.sh applet status`.
+# Check
+~/.config/quickshell/scripts/network-control.sh applet status
+systemctl --user is-enabled nm-applet.service
+```
 
 ```bash
 # Pill visibility (shell target)

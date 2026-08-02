@@ -88,7 +88,8 @@
 // Current layout:
 //   LEFT:   App Launcher, Quick Launch, Media Player
 //   CENTER: Workspaces
-//   RIGHT:  System Stats, System Tray, Bluetooth, Audio, Clock, Notifications, Power
+//   RIGHT:  System Stats, System Tray, Connectivity (Network+Bluetooth),
+//           Audio, Clock, Notifications, Power
 //
 // Why CENTER is special: left and right zones are different widths, so a widget
 // placed "between" them would look off-center. CENTER ZONE is pinned to the
@@ -627,14 +628,7 @@ ShellRoot {
                 radius: parent.radius
             }
 
-            Rectangle {
-                anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 1
-                color: Qt.rgba(0, 0, 0, 0.25)
-                radius: parent.radius
-            }
+            // Bottom edge strip removed — soft shadow washed true-black chrome
 
             RowLayout {
                 anchors.fill: parent
@@ -785,34 +779,55 @@ ShellRoot {
                         color: bar.divider
                     }
 
-                    // ─ Network ─
-                    NetworkPill {
-                        id: networkPill
-                        visible: root.showNetworkPill
-                        bar: bar
-                        barBg: barBg
-                    }
-
-                    // ── divider ──
+                    // ─ Connectivity (Network + Bluetooth in one shared pill) ─
+                    // Widgets stay separate files; embedded: true strips their own
+                    // chrome so this shell is the single visual capsule.
                     Rectangle {
-                        visible: root.showNetworkPill && (root.showBluetoothPill || root.showAudioPill)
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
+                        id: connectivityPill
+                        visible: root.showNetworkPill || root.showBluetoothPill
+                        Layout.preferredHeight: bar.pillHeight
+                        Layout.preferredWidth: connectivityRow.implicitWidth + 10
                         Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
+                        radius: bar.pillRadius
+                        color: bar.pillBg
+                        border.width: bar.controlBorderWidth
+                        border.color: bar.pillBorder
 
-                    // ─ Bluetooth ─
-                    BluetoothPill {
-                        id: bluetoothPill
-                        visible: root.showBluetoothPill
-                        bar: bar
-                        barBg: barBg
+                        Row {
+                            id: connectivityRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            NetworkPill {
+                                id: networkPill
+                                embedded: true
+                                visible: root.showNetworkPill
+                                bar: bar
+                                barBg: barBg
+                            }
+
+                            // Thin inner separator (same style as SysStats sections)
+                            Rectangle {
+                                visible: root.showNetworkPill && root.showBluetoothPill
+                                width: bar.dividerThickness
+                                height: 17
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: bar.divider
+                            }
+
+                            BluetoothPill {
+                                id: bluetoothPill
+                                embedded: true
+                                visible: root.showBluetoothPill
+                                bar: bar
+                                barBg: barBg
+                            }
+                        }
                     }
 
                     // ── divider ──
                     Rectangle {
-                        visible: root.showBluetoothPill && root.showAudioPill
+                        visible: (root.showNetworkPill || root.showBluetoothPill) && root.showAudioPill
                         Layout.preferredWidth: bar.dividerThickness
                         Layout.preferredHeight: 18
                         Layout.alignment: Qt.AlignVCenter

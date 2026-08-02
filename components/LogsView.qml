@@ -11,15 +11,15 @@ Item {
     property string globalFilter: ""
     property bool active: false
 
-    property color textColor: "#cdd6f4"
-    property color subtextColor: "#a6adc8"
-    property color accentColor: "#89b4fa"
-    property color surfaceColor: "#313244"
-    property color overlayColor: "#6c7086"
-    property color errorColor: "#f38ba8"
-    property color warnColor: "#f9e2af"
-    property color infoColor: "#89b4fa"
-    property color debugColor: "#6c7086"
+    property color textColor: "#ececee"
+    property color subtextColor: "#b0b0b2"
+    property color accentColor: "#00c4f5"
+    property color surfaceColor: "#1a1c1f"
+    property color overlayColor: "#5c5c60"
+    property color errorColor: "#e85d6f"
+    property color warnColor: "#e8c56a"
+    property color infoColor: "#00c4f5"
+    property color debugColor: "#5c5c60"
 
     readonly property string fetchScript: "/home/crome/.config/quickshell/scripts/log-fetch.sh"
     readonly property var lineCounts: [50, 100, 200, 500]

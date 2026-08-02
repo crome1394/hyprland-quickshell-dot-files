@@ -991,10 +991,10 @@ Item {
 
     function ansi16(code) {
         const palette = {
-            30: "#1e1e2e", 31: "#f38ba8", 32: "#a6e3a1", 33: "#f9e2af",
-            34: "#89b4fa", 35: "#cba6f7", 36: "#94e2de", 37: "#cdd6f4",
-            90: "#6c7086", 91: "#f38ba8", 92: "#a6e3a1", 93: "#f9e2af",
-            94: "#89b4fa", 95: "#cba6f7", 96: "#94e2de", 97: "#ffffff"
+            30: "#141618", 31: "#e85d6f", 32: "#3ecf8e", 33: "#e8c56a",
+            34: "#00c4f5", 35: "#8b7cf0", 36: "#2dd4bf", 37: "#ececee",
+            90: "#5c5c60", 91: "#e85d6f", 92: "#3ecf8e", 93: "#e8c56a",
+            94: "#00c4f5", 95: "#8b7cf0", 96: "#2dd4bf", 97: "#ffffff"
         }
         return palette[code] || null
     }
