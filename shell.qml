@@ -1455,10 +1455,6 @@ ShellRoot {
         property alias freshRssFiltersExpanded: root.freshRssFiltersExpanded
         readonly property alias freshRssSecretsReadScript: cfg.freshRssSecretsReadScript
         readonly property alias freshRssSecretsWriteScript: cfg.freshRssSecretsWriteScript
-        function setFreshRssFiltersExpanded(enabled) {
-            root.freshRssFiltersExpanded = !!enabled
-            persistBarLayout()
-        }
         function wsIconForId(id) { return cfg.wsIconForId(id) }
         function wsIsSpecialName(name) { return cfg.wsIsSpecialName(name) }
 
