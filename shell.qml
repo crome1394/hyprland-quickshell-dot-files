@@ -1455,6 +1455,7 @@ ShellRoot {
         property alias freshRssFiltersExpanded: root.freshRssFiltersExpanded
         readonly property alias freshRssSecretsReadScript: cfg.freshRssSecretsReadScript
         readonly property alias freshRssSecretsWriteScript: cfg.freshRssSecretsWriteScript
+        readonly property alias freshRssConnectionTestScript: cfg.freshRssConnectionTestScript
         function wsIconForId(id) { return cfg.wsIconForId(id) }
         function wsIsSpecialName(name) { return cfg.wsIsSpecialName(name) }
 

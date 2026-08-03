@@ -602,6 +602,7 @@ QtObject {
     // Scripts for Options panel credentials UI
     readonly property string freshRssSecretsReadScript:  "/home/crome/.config/quickshell/scripts/freshrss-secrets-read.sh"
     readonly property string freshRssSecretsWriteScript: "/home/crome/.config/quickshell/scripts/freshrss-secrets-write.sh"
+    readonly property string freshRssConnectionTestScript: "/home/crome/.config/quickshell/scripts/freshrss-connection-test.sh"
 
     // =========================================================================
     // NOTIFICATION BELL (widgets/NotificationBell.qml)

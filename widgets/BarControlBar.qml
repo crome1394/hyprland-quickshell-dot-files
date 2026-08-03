@@ -375,6 +375,19 @@ Item {
         frSecretsReadProcess.exec([script])
     }
 
+    function frBuildCredArgs(script) {
+        const host = (root.frHost || "").trim()
+        if (!host.length)
+            return null
+        let scheme = (root.frScheme || "https").toLowerCase()
+        if (scheme !== "http")
+            scheme = "https"
+        const args = [script, "--scheme", scheme, "--host", host, "--user", (root.frUser || "admin").trim()]
+        if (root.frPassword.length)
+            args.push("--password", root.frPassword)
+        return args
+    }
+
     function saveFreshRssSecrets() {
         const script = bar.freshRssSecretsWriteScript || ""
         if (!script.length) {
@@ -383,20 +396,32 @@ Item {
         }
         if (frSecretsWriteProcess.running)
             return
-        const host = (root.frHost || "").trim()
-        if (!host.length) {
+        const args = root.frBuildCredArgs(script)
+        if (!args) {
             root.frStatus = "host required"
             return
         }
-        let scheme = (root.frScheme || "https").toLowerCase()
-        if (scheme !== "http")
-            scheme = "https"
-        const args = [script, "--scheme", scheme, "--host", host, "--user", (root.frUser || "admin").trim()]
-        if (root.frPassword.length)
-            args.push("--password", root.frPassword)
         root.frStatus = "Saving…"
         root.frLoading = true
         frSecretsWriteProcess.exec(args)
+    }
+
+    function testFreshRssConnection() {
+        const script = bar.freshRssConnectionTestScript || ""
+        if (!script.length) {
+            root.frStatus = "test script missing"
+            return
+        }
+        if (frConnectionTestProcess.running)
+            return
+        const args = root.frBuildCredArgs(script)
+        if (!args) {
+            root.frStatus = "host required"
+            return
+        }
+        root.frStatus = "Testing…"
+        root.frLoading = true
+        frConnectionTestProcess.exec(args)
     }
 
     function setOptNumber(setterName, value) {
@@ -1095,6 +1120,37 @@ Item {
             root.frLoading = false
             if (code !== 0)
                 root.frStatus = "Save failed"
+        }
+    }
+
+    Io.Process {
+        id: frConnectionTestProcess
+        running: false
+        stdout: Io.StdioCollector {
+            id: frConnectionTestStdout
+            onStreamFinished: {
+                root.frLoading = false
+                const text = (frConnectionTestStdout.text || "").trim()
+                if (text.startsWith("{")) {
+                    try {
+                        const j = JSON.parse(text)
+                        if (j.ok)
+                            root.frStatus = j.message || ("OK · " + (j.mode || "connected"))
+                        else
+                            root.frStatus = j.message || ("Failed · " + (j.error || "connection failed"))
+                    } catch (e) {
+                        root.frStatus = "Test parse error"
+                    }
+                } else {
+                    root.frStatus = text.length ? text : "Test failed"
+                }
+                root.optionsTick++
+            }
+        }
+        onExited: (code) => {
+            root.frLoading = false
+            if (code !== 0 && !(frConnectionTestStdout.text || "").trim())
+                root.frStatus = "Test failed"
         }
     }
 
@@ -4132,10 +4188,47 @@ Item {
                                     Text {
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
-                                        text: root.frLoading ? "…" : (root.frStatus || "Fill host · Save writes external env")
-                                        color: bar.subtext
+                                        text: root.frLoading
+                                              ? "…"
+                                              : (root.frStatus || "Test connection · Save writes external env")
+                                        color: {
+                                            const s = root.frStatus || ""
+                                            if (s.indexOf("OK") === 0 || s.indexOf("Saved") === 0)
+                                                return root.onGreen
+                                            if (s.indexOf("Failed") === 0 || s.indexOf("failed") >= 0 || s.indexOf("error") >= 0)
+                                                return root.offRed
+                                            return bar.subtext
+                                        }
                                         font.pixelSize: 11
                                         font.family: bar.fontFamily
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 28
+                                        Layout.preferredWidth: frTestLbl.implicitWidth + 16
+                                        radius: root.chipR
+                                        color: frTestMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: frTestMa.containsMouse ? bar.accent : bar.pillBorder
+                                        opacity: root.frLoading ? 0.6 : 1.0
+                                        Text {
+                                            id: frTestLbl
+                                            anchors.centerIn: parent
+                                            text: "Test"
+                                            color: frTestMa.containsMouse ? bar.accent : bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: frTestMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: !root.frLoading
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.testFreshRssConnection()
+                                            ToolTip.visible: containsMouse
+                                            ToolTip.delay: bar.tooltipDelay
+                                            ToolTip.text: "Probe server with form values (does not Save)"
+                                        }
                                     }
                                     Rectangle {
                                         Layout.preferredHeight: 28
@@ -4144,6 +4237,7 @@ Item {
                                         color: frSaveMa.containsMouse ? bar.glassHover : bar.pillBg
                                         border.width: 1
                                         border.color: frSaveMa.containsMouse ? bar.accent : bar.pillBorder
+                                        opacity: root.frLoading ? 0.6 : 1.0
                                         Text {
                                             id: frSaveLbl
                                             anchors.centerIn: parent
@@ -4156,8 +4250,12 @@ Item {
                                             id: frSaveMa
                                             anchors.fill: parent
                                             hoverEnabled: true
+                                            enabled: !root.frLoading
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: root.saveFreshRssSecrets()
+                                            ToolTip.visible: containsMouse
+                                            ToolTip.delay: bar.tooltipDelay
+                                            ToolTip.text: "Write ~/.config/freshrss-quickshell/freshrss.env"
                                         }
                                     }
                                 }
