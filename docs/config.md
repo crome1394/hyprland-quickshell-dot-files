@@ -25,14 +25,15 @@ The file is named `Config.qml` (capital **C**) because QML requires that naming 
 
 Search for **SYS STATS PILL** for the compact bar widget (CPU | Memory | GPU), and **popupStats** for the large right-click dropdowns.
 
-**Bar pill size** — if the glass border is too narrow or numbers stick out past the edges:
+**Bar pill size** — snug to content by default. Raise these only if you want more room:
 
 | Property | What it does | Default |
 |----------|--------------|---------|
-| `statPillWidth` | Total width of the pill border in pixels. **Change this first.** | `640` |
-| `statPillSectionWidth` | Width of each column (CPU, Memory, GPU) | `190` |
-| `statPillSpacing` | Gap between columns | `10` |
-| `statPillPaddingH` | Left/right padding inside the border | `12` |
+| `statPillPaddingH` | Left/right padding inside the border. Raise first if text feels flush to the glass. | `10` |
+| `statPillSpacing` | Gap between columns (divider centered in the slot) | `8` |
+| `statGaugeWidth` | Width of the util bar in each column | `56` |
+| `statPillSectionWidth` | Optional minimum column width (`0` = hug content) | `0` |
+| `statPillWidth` | Optional preferred pill width (`0` = fit content; larger values add side space with content centered) | `0` |
 
 **Bar pill colors** — utilization bar tiers (`statUtilTier1`–`4`, `statUtilThreshold1`–`3`) and CPU/GPU temperature label colors (`statTempCool` / `Warm` / `Hot`, `statTempWarmAt` / `HotAt`).
 

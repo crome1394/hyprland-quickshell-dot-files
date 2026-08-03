@@ -889,30 +889,33 @@ QtObject {
     // SYS STATS PILL (widgets/SysStatsPill.qml — CPU | Memory | GPU)
     // =========================================================================
     // The centered bar pill that shows live CPU, Memory, and GPU stats.
-    // Left-click CPU or Memory opens btop; left-click GPU opens nvtop.
-    // Right-click any section for the detailed metrics popup (see popupStats* above).
+    // Left-click a section opens its metrics popup; right-click CPU/Memory launches
+    // btop, right-click GPU launches nvtop (see popupStats* above for popup size).
     //
-    // If the glass border looks too narrow or text sticks out past the edges,
-    // increase statPillWidth first. Then tweak section width and padding if needed.
+    // Layout notes (SysStatsPill.qml) — snug by default, still readable:
+    //   - Sections hug label + gauge + values (Memory wider than CPU/GPU).
+    //   - Pill width fits content + padding (no empty side ballast).
+    //   - statPillWidth / statPillSectionWidth only expand if you raise them above 0.
+    // If text ever clips, raise statPillPaddingH or statPillSpacing slightly.
 
-    // Total width of the pill in pixels — the outer glass border you see on the bar.
-    // This is independent of the three columns inside; raise base if content overflows.
-    readonly property int  statPillWidth: sp(640)
+    // Optional preferred pill width. 0 = fit content (default, no wasted side space).
+    // Set e.g. sp(640) only if you want intentional extra width with centered content.
+    readonly property int  statPillWidth: 0
 
-    // Width of each clickable column (CPU, Memory, GPU) inside the pill.
-    // Wider columns give more room for the label, bar, and numbers.
-    readonly property int  statPillSectionWidth: sp(190)
+    // Optional minimum column width. 0 = hug content (default). Raise to force equal
+    // wider columns (e.g. sp(200)) if you prefer uniform section hit-targets.
+    readonly property int  statPillSectionWidth: 0
 
-    // Empty space between the three columns (the thin vertical dividers sit here).
-    readonly property int  statPillSpacing: sp(10)
+    // Gap between columns (divider is centered in this slot — not double-spaced).
+    readonly property int  statPillSpacing: sp(8)
 
     // Left and right padding inside the pill border so text is not flush to the edge.
-    readonly property int  statPillPaddingH: sp(12)
+    readonly property int  statPillPaddingH: sp(10)
 
     // Small horizontal utilization bars (the colored fill behind the % numbers).
-    readonly property int  statGaugeWidth:   sp(73)
-    readonly property int  statGaugeHeight:   sp(8)
-    readonly property int  statGaugeRadius:   sp(4)
+    readonly property int  statGaugeWidth:   sp(56)
+    readonly property int  statGaugeHeight:   sp(7)
+    readonly property int  statGaugeRadius:   sp(3)
     readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.07)  // Bar background track on deep black
 
     // Utilization % bar and text color by load level (green → yellow → orange → red).

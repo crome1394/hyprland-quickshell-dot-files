@@ -11,8 +11,9 @@ import "../components"
 //
 // Purpose:
 //   Overlay gauges showing CPU + Memory + GPU utilization (and temps for CPU/GPU).
-//   Left-click each third opens a metrics dropdown (Cpu/Memory/GpuMonitorView).
+//   Left-click each section opens a metrics dropdown (Cpu/Memory/GpuMonitorView).
 //   Right-click CPU/Memory launches btop; right-click GPU launches nvtop.
+//   Content is centered in the pill; sections grow to fit labels (esp. Memory).
 //   Automatically hides when media is playing.
 //
 // Theme Properties Consumed:
@@ -26,7 +27,8 @@ import "../components"
 //     bar.statTempHotAt, bar.statTempColor(), bar.statValueSeparator
 //   - bar.divider, bar.fontFamily, bar.tooltipDelay, bar.popupAnchorY()
 //   - bar.popupStatsCpu/Mem/Gpu Width/Height and per-section position tokens (AnchorX, AnchorWholePill, OffsetX/Y, BarGap)
-//   - bar.statPillWidth (total border width), bar.statPillSectionWidth, bar.statPillSpacing, bar.statPillPaddingH
+//   - bar.statPillWidth / statPillSectionWidth (optional mins; 0 = hug content),
+//     bar.statPillSpacing, bar.statPillPaddingH
 //   - bar.popupStatsLiveUpdates, bar.popupStatsPersistPause
 //   - bar.surface, bar.overlay, bar.gaugeLow/Mid/High (metrics popup views)
 //
@@ -54,19 +56,41 @@ Rectangle {
     readonly property int _font: Math.max(9, Math.round(13 * _ws))
     readonly property int _gaugeW: Math.max(18, Math.round(bar.statGaugeWidth * _ws))
     readonly property int _gaugeH: Math.max(4, Math.round(bar.statGaugeHeight * _ws))
-    readonly property int _secW: Math.max(72, Math.round(bar.statPillSectionWidth * _ws))
-    readonly property int _rowGap: Math.max(3, Math.round(7 * _ws))
-    readonly property int _valGap: Math.max(2, Math.round(4 * _ws))
+    // Optional minimum section width (0 = hug content). Sections never clip.
+    readonly property int _secMinW: Math.max(0, Math.round(bar.statPillSectionWidth * _ws))
+    readonly property int _rowGap: Math.max(3, Math.round(5 * _ws))
+    readonly property int _valGap: Math.max(2, Math.round(3 * _ws))
+    readonly property int _secInnerPad: Math.max(3, Math.round(4 * _ws))
+    readonly property int _secH: Math.max(20, Math.round(26 * _ws))
     // Options: which gauges appear on the pill
     readonly property bool _showCpu: bar.showStatCpu !== undefined ? !!bar.showStatCpu : true
     readonly property bool _showMem: bar.showStatMem !== undefined ? !!bar.showStatMem : true
     readonly property bool _showGpu: bar.showStatGpu !== undefined ? !!bar.showStatGpu : true
     readonly property int _nSec: (_showCpu ? 1 : 0) + (_showMem ? 1 : 0) + (_showGpu ? 1 : 0)
     readonly property int _padH: Math.max(4, Math.round(bar.statPillPaddingH * _ws))
-    readonly property int _secGap: Math.max(2, Math.round(bar.statPillSpacing * _ws))
-    Layout.preferredWidth: _nSec <= 0
-        ? 0
-        : Math.round(_padH * 2 + _secW * _nSec + _secGap * Math.max(0, _nSec - 1))
+    // Full slot between sections (divider centered inside; Row spacing is 0).
+    readonly property int _sepW: Math.max(6, Math.round(bar.statPillSpacing * _ws))
+    readonly property int _nSep: Math.max(0, _nSec - 1)
+    function _sectionW(inner) {
+        return Math.max(_secMinW, Math.ceil(inner.implicitWidth) + _secInnerPad * 2)
+    }
+    readonly property int _contentW: {
+        if (_nSec <= 0)
+            return 0
+        var cpuW = _showCpu ? _sectionW(cpuInner) : 0
+        var memW = _showMem ? _sectionW(memInner) : 0
+        var gpuW = _showGpu ? _sectionW(gpuInner) : 0
+        return cpuW + memW + gpuW + _nSep * _sepW
+    }
+    // Snug to content + padding. statPillWidth only expands if set larger intentionally.
+    readonly property int _pillW: {
+        if (_nSec <= 0)
+            return 0
+        var fitted = _padH * 2 + _contentW
+        var configured = Math.round(bar.statPillWidth * _ws)
+        return configured > fitted ? configured : fitted
+    }
+    Layout.preferredWidth: _pillW
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
     visible: !mediaActive && sysStatsReady && _nSec > 0
@@ -322,23 +346,21 @@ Rectangle {
         radius: parent.radius
     }
 
+    // Centered content cluster — snug to text; equal side padding only if
+    // statPillWidth intentionally expands the pill past content.
     Row {
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: Math.max(4, Math.round(bar.statPillPaddingH * root._ws))
-        anchors.rightMargin: Math.max(4, Math.round(bar.statPillPaddingH * root._ws))
-        spacing: Math.max(2, Math.round(bar.statPillSpacing * root._ws))
+        id: statsRow
+        anchors.centerIn: parent
+        spacing: 0
 
         // ----- CPU -----
         Rectangle {
             id: cpuSection
             visible: root._showCpu
-            width: root._secW
-            height: 26
+            width: root._sectionW(cpuInner)
+            height: root._secH
             radius: bar.workspaceRadius
             color: cpuClick.containsMouse ? bar.iconHoverBg : "transparent"
-            clip: true
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
@@ -362,6 +384,7 @@ Rectangle {
             }
 
             Row {
+                id: cpuInner
                 anchors.centerIn: parent
                 spacing: root._rowGap
 
@@ -427,22 +450,28 @@ Rectangle {
             }
         }
 
-        Rectangle {
-            width: 1
-            height: 17
-            color: bar.divider
-            anchors.verticalCenter: parent.verticalCenter
+        // Separator slot: one gap budget with the divider centered (no double spacing).
+        Item {
+            visible: root._showCpu && (root._showMem || root._showGpu)
+            width: root._sepW
+            height: root._secH
+
+            Rectangle {
+                width: 1
+                height: Math.max(12, Math.round(15 * root._ws))
+                anchors.centerIn: parent
+                color: bar.divider
+            }
         }
 
         // ----- Memory -----
         Rectangle {
             id: memSection
             visible: root._showMem
-            width: root._secW
-            height: 26
+            width: root._sectionW(memInner)
+            height: root._secH
             radius: bar.workspaceRadius
             color: memClick.containsMouse ? bar.iconHoverBg : "transparent"
-            clip: true
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
@@ -466,6 +495,7 @@ Rectangle {
             }
 
             Row {
+                id: memInner
                 anchors.centerIn: parent
                 spacing: root._rowGap
 
@@ -531,22 +561,27 @@ Rectangle {
             }
         }
 
-        Rectangle {
-            width: 1
-            height: 17
-            color: bar.divider
-            anchors.verticalCenter: parent.verticalCenter
+        Item {
+            visible: root._showMem && root._showGpu
+            width: root._sepW
+            height: root._secH
+
+            Rectangle {
+                width: 1
+                height: Math.max(12, Math.round(15 * root._ws))
+                anchors.centerIn: parent
+                color: bar.divider
+            }
         }
 
         // ----- GPU -----
         Rectangle {
             id: gpuSection
             visible: root._showGpu
-            width: root._secW
-            height: 26
+            width: root._sectionW(gpuInner)
+            height: root._secH
             radius: bar.workspaceRadius
             color: gpuClick.containsMouse ? bar.iconHoverBg : "transparent"
-            clip: true
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
@@ -570,6 +605,7 @@ Rectangle {
             }
 
             Row {
+                id: gpuInner
                 anchors.centerIn: parent
                 spacing: root._rowGap
 
@@ -626,7 +662,7 @@ Rectangle {
                     }
                     Text {
                         text: root.gpuTemp + "°"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.bold: true
                         font.family: bar.fontFamily
                         color: bar.statTempColor(root.gpuTemp)

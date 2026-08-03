@@ -4,6 +4,7 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
 
 ## 2026-08 — Control bar & FreshRSS
 
+- **SysStats pill layout:** center CPU/Memory/GPU; sections hug content (Memory no longer clips); snug fit with no empty side ballast; single separator slots between visible gauges.
 - Control strip: Position, Wallpaper, Widgets, Options, Launch, Autostart, **Services**, **Keybinds**, Clock (toolbar on bottom).
 - **Keybinds** panel: browse `keybindings.lua` by category; edit key chord / category / description (in-place write + backup; Reload Hypr separate).
 - **Services** panel: systemd user/system units with filter + Start/Stop/Restart (reuses Inspector `ServicesView`).
