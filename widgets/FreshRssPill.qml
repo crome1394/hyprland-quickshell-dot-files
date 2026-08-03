@@ -52,6 +52,13 @@ Rectangle {
     property string dateFilter: "all" // all | today | week
     property string searchQuery: ""
 
+    // Filters panel (search / max days / per feed) — default from Config / bar Options
+    property bool filtersExpanded: (bar.freshRssFiltersExpanded !== undefined)
+                                   ? !!bar.freshRssFiltersExpanded
+                                   : (th.freshRssFiltersExpandedDefault !== undefined
+                                      ? !!th.freshRssFiltersExpandedDefault
+                                      : true)
+
     // How many articles to pull (adjustable in the window UI)
     // - maxDays: primary history window (default 30). When > 0, overrides per-feed/item caps.
     // - perFeedLimit: All/Read when maxDays === 0
@@ -1341,67 +1348,10 @@ Rectangle {
                     }
                 }
 
-                // Search + filters row
+                // View controls (always visible)
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 32
-                        radius: 8
-                        color: Qt.rgba(0, 0, 0, 0.22)
-                        border.width: 1
-                        border.color: searchField.activeFocus ? bar.accent : (bar.pillBorder || bar.divider)
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 8
-                            spacing: 6
-
-                            Text {
-                                text: "⌕"
-                                color: bar.subtext
-                                font.pixelSize: 14
-                            }
-                            TextInput {
-                                id: searchField
-                                Layout.fillWidth: true
-                                color: bar.text
-                                font.pixelSize: 13
-                                font.family: bar.fontFamily
-                                clip: true
-                                selectByMouse: true
-                                selectedTextColor: bar.bg || "#111"
-                                selectionColor: bar.accent
-                                onTextChanged: root.searchQuery = text
-
-                                Text {
-                                    anchors.fill: parent
-                                    visible: !searchField.text && !searchField.activeFocus
-                                    text: "Search title, feed, author…"
-                                    color: bar.subtext
-                                    font.pixelSize: 13
-                                }
-                            }
-                            Text {
-                                visible: searchField.text.length > 0
-                                text: "✕"
-                                color: bar.subtext
-                                font.pixelSize: 12
-                                MouseArea {
-                                    anchors.fill: parent
-                                    anchors.margins: -4
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        searchField.text = ""
-                                        root.searchQuery = ""
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     // Date chips
                     Repeater {
@@ -1505,6 +1455,8 @@ Rectangle {
                         }
                     }
 
+                    Item { Layout.fillWidth: true }
+
                     // Expand / collapse all categories
                     Rectangle {
                         radius: 6
@@ -1552,253 +1504,383 @@ Rectangle {
                     }
                 }
 
-                // Primary history window (overrides per-feed / item caps when > 0)
-                RowLayout {
+                // ===== Filters (collapsible): search, max days, per feed =====
+                ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: 6
 
-                    Text {
-                        text: "Max days:"
-                        color: bar.subtext
-                        font.pixelSize: 12
-                        font.bold: true
-                    }
-
+                    // Header
                     Rectangle {
-                        radius: 6
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        color: daysMinusMa.containsMouse ? bar.iconHoverBg : "transparent"
-                        border.width: 1
-                        border.color: bar.pillBorder
-                        Text {
-                            anchors.centerIn: parent
-                            text: "−"
-                            color: bar.text
-                            font.pixelSize: 16
-                            font.bold: true
-                        }
-                        MouseArea {
-                            id: daysMinusMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.nudgeMaxDays(-1)
-                        }
-                    }
-
-                    Text {
-                        text: root.maxDays > 0 ? String(root.maxDays) : "∞"
-                        color: bar.accent
-                        font.pixelSize: 13
-                        font.bold: true
-                        font.family: bar.fontMono
-                        Layout.preferredWidth: 36
-                        horizontalAlignment: Text.AlignHCenter
-                    }
-
-                    Rectangle {
-                        radius: 6
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        color: daysPlusMa.containsMouse ? bar.iconHoverBg : "transparent"
-                        border.width: 1
-                        border.color: bar.pillBorder
-                        Text {
-                            anchors.centerIn: parent
-                            text: "+"
-                            color: bar.text
-                            font.pixelSize: 16
-                            font.bold: true
-                        }
-                        MouseArea {
-                            id: daysPlusMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.nudgeMaxDays(1)
-                        }
-                    }
-
-                    Repeater {
-                        model: root.maxDaysChoices
-                        delegate: Rectangle {
-                            required property var modelData
-                            radius: 6
-                            implicitHeight: 26
-                            implicitWidth: daysPresetTxt.implicitWidth + 12
-                            readonly property bool active: root.maxDays === modelData
-                            color: active
-                                   ? Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.28)
-                                   : (daysPresetMa.containsMouse ? bar.iconHoverBg : "transparent")
-                            border.width: 1
-                            border.color: active ? bar.accent : bar.pillBorder
-                            Text {
-                                id: daysPresetTxt
-                                anchors.centerIn: parent
-                                text: modelData === 0 ? "∞" : String(modelData)
-                                color: bar.text
-                                font.pixelSize: 11
-                                font.family: bar.fontMono
-                            }
-                            MouseArea {
-                                id: daysPresetMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.setMaxDays(modelData)
-                            }
-                        }
-                    }
-
-                    Text {
                         Layout.fillWidth: true
-                        text: root.maxDays > 0
-                              ? "history window (overrides per-feed / item limits)"
-                              : "unlimited history — use per-feed / item limits below"
-                        color: bar.subtext
-                        font.pixelSize: 11
-                        elide: Text.ElideRight
-                    }
-                }
-
-                // Secondary amount controls (used when maxDays === 0)
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-                    opacity: root.maxDays > 0 ? 0.45 : 1.0
-
-                    Text {
-                        text: (root.readScope === "all" || root.readScope === "read")
-                              ? "Per feed:"
-                              : "Max items:"
-                        color: bar.subtext
-                        font.pixelSize: 12
-                    }
-
-                    Rectangle {
+                        Layout.preferredHeight: 28
                         radius: 6
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        color: minusMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent"
+                        color: filtersHdrMa.containsMouse ? bar.iconHoverBg : "transparent"
                         border.width: 1
                         border.color: bar.pillBorder
-                        Text {
-                            anchors.centerIn: parent
-                            text: "−"
-                            color: bar.text
-                            font.pixelSize: 16
-                            font.bold: true
-                        }
-                        MouseArea {
-                            id: minusMa
+                        RowLayout {
                             anchors.fill: parent
-                            enabled: root.maxDays <= 0
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (root.readScope === "all" || root.readScope === "read")
-                                    root.nudgePerFeed(-1)
-                                else
-                                    root.nudgeItemLimit(-1)
-                            }
-                        }
-                    }
-
-                    Text {
-                        text: (root.readScope === "all" || root.readScope === "read")
-                              ? String(root.perFeedLimit)
-                              : String(root.itemLimit)
-                        color: bar.text
-                        font.pixelSize: 13
-                        font.bold: true
-                        font.family: bar.fontMono
-                        Layout.preferredWidth: 36
-                        horizontalAlignment: Text.AlignHCenter
-                    }
-
-                    Rectangle {
-                        radius: 6
-                        implicitWidth: 28
-                        implicitHeight: 28
-                        color: plusMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent"
-                        border.width: 1
-                        border.color: bar.pillBorder
-                        Text {
-                            anchors.centerIn: parent
-                            text: "+"
-                            color: bar.text
-                            font.pixelSize: 16
-                            font.bold: true
-                        }
-                        MouseArea {
-                            id: plusMa
-                            anchors.fill: parent
-                            enabled: root.maxDays <= 0
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (root.readScope === "all" || root.readScope === "read")
-                                    root.nudgePerFeed(1)
-                                else
-                                    root.nudgeItemLimit(1)
-                            }
-                        }
-                    }
-
-                    Repeater {
-                        model: (root.readScope === "all" || root.readScope === "read")
-                               ? [5, 10, 12, 15, 20, 30]
-                               : [20, 50, 80, 100, 150]
-                        delegate: Rectangle {
-                            required property var modelData
-                            radius: 6
-                            implicitHeight: 26
-                            implicitWidth: presetTxt.implicitWidth + 12
-                            readonly property bool active: {
-                                if (root.readScope === "all" || root.readScope === "read")
-                                    return root.perFeedLimit === modelData
-                                return root.itemLimit === modelData
-                            }
-                            color: active
-                                   ? Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.28)
-                                   : (presetMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent")
-                            border.width: 1
-                            border.color: active ? bar.accent : bar.pillBorder
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            spacing: 8
                             Text {
-                                id: presetTxt
-                                anchors.centerIn: parent
-                                text: String(modelData)
-                                color: bar.text
-                                font.pixelSize: 11
-                                font.family: bar.fontMono
+                                text: root.filtersExpanded ? "▾" : "▸"
+                                color: bar.subtext
+                                font.pixelSize: 12
+                                Layout.preferredWidth: 12
                             }
-                            MouseArea {
-                                id: presetMa
-                                anchors.fill: parent
-                                enabled: root.maxDays <= 0
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (root.readScope === "all" || root.readScope === "read")
-                                        root.setPerFeedLimit(modelData)
+                            Text {
+                                text: "Filters"
+                                color: bar.text
+                                font.pixelSize: 12
+                                font.bold: true
+                                font.family: bar.fontFamily
+                            }
+                            Text {
+                                visible: !root.filtersExpanded
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                                text: {
+                                    const bits = []
+                                    const q = (root.searchQuery || "").trim()
+                                    if (q.length)
+                                        bits.push("\"" + q + "\"")
+                                    if (root.maxDays > 0)
+                                        bits.push(root.maxDays + "d")
                                     else
-                                        root.setItemLimit(modelData)
+                                        bits.push("∞ days")
+                                    if (root.readScope === "all" || root.readScope === "read")
+                                        bits.push(root.perFeedLimit + "/feed")
+                                    else
+                                        bits.push("max " + root.itemLimit)
+                                    return bits.join(" · ")
+                                }
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                font.family: bar.fontFamily
+                            }
+                            Item { Layout.fillWidth: true; visible: root.filtersExpanded }
+                        }
+                        MouseArea {
+                            id: filtersHdrMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.filtersExpanded = !root.filtersExpanded
+                        }
+                    }
+
+                    ColumnLayout {
+                        visible: root.filtersExpanded
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        // Search
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 32
+                            radius: 8
+                            color: Qt.rgba(0, 0, 0, 0.22)
+                            border.width: 1
+                            border.color: searchField.activeFocus ? bar.accent : (bar.pillBorder || bar.divider)
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 8
+                                spacing: 6
+
+                                Text {
+                                    text: "⌕"
+                                    color: bar.subtext
+                                    font.pixelSize: 14
+                                }
+                                TextInput {
+                                    id: searchField
+                                    Layout.fillWidth: true
+                                    color: bar.text
+                                    font.pixelSize: 13
+                                    font.family: bar.fontFamily
+                                    clip: true
+                                    selectByMouse: true
+                                    selectedTextColor: bar.bg || "#111"
+                                    selectionColor: bar.accent
+                                    onTextChanged: root.searchQuery = text
+
+                                    Text {
+                                        anchors.fill: parent
+                                        visible: !searchField.text && !searchField.activeFocus
+                                        text: "Search title, feed, author…"
+                                        color: bar.subtext
+                                        font.pixelSize: 13
+                                    }
+                                }
+                                Text {
+                                    visible: searchField.text.length > 0
+                                    text: "✕"
+                                    color: bar.subtext
+                                    font.pixelSize: 12
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        anchors.margins: -4
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            searchField.text = ""
+                                            root.searchQuery = ""
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.maxDays > 0
-                              ? "(inactive while Max days is set)"
-                              : ((root.readScope === "all" || root.readScope === "read")
-                                 ? "articles per feed"
-                                 : "total for Unread / Starred")
-                        color: bar.subtext
-                        font.pixelSize: 11
-                        elide: Text.ElideRight
+                        // Max days
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                text: "Max days:"
+                                color: bar.subtext
+                                font.pixelSize: 12
+                                font.bold: true
+                            }
+
+                            Rectangle {
+                                radius: 6
+                                implicitWidth: 28
+                                implicitHeight: 28
+                                color: daysMinusMa.containsMouse ? bar.iconHoverBg : "transparent"
+                                border.width: 1
+                                border.color: bar.pillBorder
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "−"
+                                    color: bar.text
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                }
+                                MouseArea {
+                                    id: daysMinusMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.nudgeMaxDays(-1)
+                                }
+                            }
+
+                            Text {
+                                text: root.maxDays > 0 ? String(root.maxDays) : "∞"
+                                color: bar.accent
+                                font.pixelSize: 13
+                                font.bold: true
+                                font.family: bar.fontMono
+                                Layout.preferredWidth: 36
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            Rectangle {
+                                radius: 6
+                                implicitWidth: 28
+                                implicitHeight: 28
+                                color: daysPlusMa.containsMouse ? bar.iconHoverBg : "transparent"
+                                border.width: 1
+                                border.color: bar.pillBorder
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "+"
+                                    color: bar.text
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                }
+                                MouseArea {
+                                    id: daysPlusMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.nudgeMaxDays(1)
+                                }
+                            }
+
+                            Repeater {
+                                model: root.maxDaysChoices
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    radius: 6
+                                    implicitHeight: 26
+                                    implicitWidth: daysPresetTxt.implicitWidth + 12
+                                    readonly property bool active: root.maxDays === modelData
+                                    color: active
+                                           ? Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.28)
+                                           : (daysPresetMa.containsMouse ? bar.iconHoverBg : "transparent")
+                                    border.width: 1
+                                    border.color: active ? bar.accent : bar.pillBorder
+                                    Text {
+                                        id: daysPresetTxt
+                                        anchors.centerIn: parent
+                                        text: modelData === 0 ? "∞" : String(modelData)
+                                        color: bar.text
+                                        font.pixelSize: 11
+                                        font.family: bar.fontMono
+                                    }
+                                    MouseArea {
+                                        id: daysPresetMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.setMaxDays(modelData)
+                                    }
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.maxDays > 0
+                                      ? "history window (overrides per-feed / item limits)"
+                                      : "unlimited history — use per-feed / item limits below"
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        // Per feed / max items
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            opacity: root.maxDays > 0 ? 0.45 : 1.0
+
+                            Text {
+                                text: (root.readScope === "all" || root.readScope === "read")
+                                      ? "Per feed:"
+                                      : "Max items:"
+                                color: bar.subtext
+                                font.pixelSize: 12
+                            }
+
+                            Rectangle {
+                                radius: 6
+                                implicitWidth: 28
+                                implicitHeight: 28
+                                color: minusMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent"
+                                border.width: 1
+                                border.color: bar.pillBorder
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "−"
+                                    color: bar.text
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                }
+                                MouseArea {
+                                    id: minusMa
+                                    anchors.fill: parent
+                                    enabled: root.maxDays <= 0
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (root.readScope === "all" || root.readScope === "read")
+                                            root.nudgePerFeed(-1)
+                                        else
+                                            root.nudgeItemLimit(-1)
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: (root.readScope === "all" || root.readScope === "read")
+                                      ? String(root.perFeedLimit)
+                                      : String(root.itemLimit)
+                                color: bar.text
+                                font.pixelSize: 13
+                                font.bold: true
+                                font.family: bar.fontMono
+                                Layout.preferredWidth: 36
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            Rectangle {
+                                radius: 6
+                                implicitWidth: 28
+                                implicitHeight: 28
+                                color: plusMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent"
+                                border.width: 1
+                                border.color: bar.pillBorder
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "+"
+                                    color: bar.text
+                                    font.pixelSize: 16
+                                    font.bold: true
+                                }
+                                MouseArea {
+                                    id: plusMa
+                                    anchors.fill: parent
+                                    enabled: root.maxDays <= 0
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (root.readScope === "all" || root.readScope === "read")
+                                            root.nudgePerFeed(1)
+                                        else
+                                            root.nudgeItemLimit(1)
+                                    }
+                                }
+                            }
+
+                            Repeater {
+                                model: (root.readScope === "all" || root.readScope === "read")
+                                       ? [5, 10, 12, 15, 20, 30]
+                                       : [20, 50, 80, 100, 150]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    radius: 6
+                                    implicitHeight: 26
+                                    implicitWidth: presetTxt.implicitWidth + 12
+                                    readonly property bool active: {
+                                        if (root.readScope === "all" || root.readScope === "read")
+                                            return root.perFeedLimit === modelData
+                                        return root.itemLimit === modelData
+                                    }
+                                    color: active
+                                           ? Qt.rgba(bar.accent.r, bar.accent.g, bar.accent.b, 0.28)
+                                           : (presetMa.containsMouse && root.maxDays <= 0 ? bar.iconHoverBg : "transparent")
+                                    border.width: 1
+                                    border.color: active ? bar.accent : bar.pillBorder
+                                    Text {
+                                        id: presetTxt
+                                        anchors.centerIn: parent
+                                        text: String(modelData)
+                                        color: bar.text
+                                        font.pixelSize: 11
+                                        font.family: bar.fontMono
+                                    }
+                                    MouseArea {
+                                        id: presetMa
+                                        anchors.fill: parent
+                                        enabled: root.maxDays <= 0
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (root.readScope === "all" || root.readScope === "read")
+                                                root.setPerFeedLimit(modelData)
+                                            else
+                                                root.setItemLimit(modelData)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.maxDays > 0
+                                      ? "(inactive while Max days is set)"
+                                      : ((root.readScope === "all" || root.readScope === "read")
+                                         ? "articles per feed"
+                                         : "total for Unread / Starred")
+                                color: bar.subtext
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                        }
                     }
                 }
 

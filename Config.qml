@@ -565,12 +565,15 @@ QtObject {
     // =========================================================================
     // FRESHRSS READER (widgets/FreshRssPill.qml + scripts/freshrss-api.sh)
     // =========================================================================
-    // Server: set FRESHRSS_BASE_URL in secrets/freshrss.env (default http://10.74.10.8).
-    // Without FRESHRSS_API_PASSWORD the client uses public RSS (anonymous, read-only).
-    // With API password (Profile → API password, not web login) Fever mode enables mark/star.
+    // Server + credentials (outside git):
+    //   ~/.config/freshrss-quickshell/freshrss.env
+    //   FRESHRSS_BASE_URL / FRESHRSS_USER / FRESHRSS_API_PASSWORD
+    // Without API password the client uses public RSS (anonymous, read-only).
+    // API password = Profile → API password (not web form login).
+    // Edit via control bar Options → FreshRSS, or the env file by hand.
     //
     // Reader defaults (in FreshRssPill.qml):
-    //   readScope = "all" (read + unread), dateFilter = "all", categories start collapsed.
+    //   readScope = "all", dateFilter = "all", categories start collapsed.
     //
     // IPC:
     //   qs ipc call freshRss toggle
@@ -579,13 +582,15 @@ QtObject {
     readonly property int freshRssPollIntervalMs:  60000  // badge poll while bar is up
     readonly property int freshRssItemLimit:       80     // max unread/starred ids (when maxDays=0)
     // For All/Read scopes: recent articles pulled from *each* feed so quiet channels
-    // (Dark Journalist, JRE, It's FOSS, …) still appear, not only high-volume feeds.
+    // still appear, not only high-volume feeds.
     // Ignored when freshRssMaxDays > 0 (day window is the primary limit).
     readonly property int freshRssPerFeedLimit:    12
     // Primary history window: only articles newer than this many days.
-    // When > 0, overrides per-feed and item-count caps (paginates until the window is covered).
+    // When > 0, overrides per-feed and item-count caps.
     // 0 = unlimited (use per-feed / item limits only).
     readonly property int freshRssMaxDays:         30
+    // Filters panel (search / max days / per feed) open on reader start
+    readonly property bool freshRssFiltersExpandedDefault: true
     readonly property int freshRssWidth:           popupW(980)
     readonly property int freshRssHeight:          popupH(640)
     readonly property int freshRssMinWidth:        sp(640)
@@ -594,6 +599,9 @@ QtObject {
     readonly property int freshRssListMinWidth:    sp(180)   // drag limit — list pane
     readonly property int freshRssListMaxWidth:    sp(720)
     readonly property int freshRssDetailMinWidth:  sp(260)   // drag limit — article pane
+    // Scripts for Options panel credentials UI
+    readonly property string freshRssSecretsReadScript:  "/home/crome/.config/quickshell/scripts/freshrss-secrets-read.sh"
+    readonly property string freshRssSecretsWriteScript: "/home/crome/.config/quickshell/scripts/freshrss-secrets-write.sh"
 
     // =========================================================================
     // NOTIFICATION BELL (widgets/NotificationBell.qml)

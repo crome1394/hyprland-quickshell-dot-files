@@ -236,6 +236,7 @@ Item {
     function refreshOptions() {
         if (typeof bar.refreshOptionsState === "function")
             bar.refreshOptionsState()
+        root.refreshFreshRssSecrets()
         root.optionsTick++
         root.menuTick++
     }
@@ -342,8 +343,57 @@ Item {
             if (typeof bar.setShowEchoCancelInMenu === "function")
                 bar.setShowEchoCancelInMenu(on)
             break
+        case "setFreshRssFiltersExpanded":
+            if (typeof bar.setFreshRssFiltersExpanded === "function")
+                bar.setFreshRssFiltersExpanded(on)
+            break
         }
         Qt.callLater(root.refreshOptions)
+    }
+
+    // FreshRSS Options (server credentials — external env file)
+    property string frScheme: "https"
+    property string frHost: ""
+    property string frUser: ""
+    property string frPassword: ""
+    property bool frHasPassword: false
+    property string frStatus: ""
+    property bool frLoading: false
+
+    function refreshFreshRssSecrets() {
+        const script = bar.freshRssSecretsReadScript || ""
+        if (!script.length) {
+            root.frStatus = "read script missing"
+            return
+        }
+        if (frSecretsReadProcess.running)
+            return
+        root.frLoading = true
+        frSecretsReadProcess.exec([script])
+    }
+
+    function saveFreshRssSecrets() {
+        const script = bar.freshRssSecretsWriteScript || ""
+        if (!script.length) {
+            root.frStatus = "write script missing"
+            return
+        }
+        if (frSecretsWriteProcess.running)
+            return
+        const host = (root.frHost || "").trim()
+        if (!host.length) {
+            root.frStatus = "host required"
+            return
+        }
+        let scheme = (root.frScheme || "https").toLowerCase()
+        if (scheme !== "http")
+            scheme = "https"
+        const args = [script, "--scheme", scheme, "--host", host, "--user", (root.frUser || "admin").trim()]
+        if (root.frPassword.length)
+            args.push("--password", root.frPassword)
+        root.frStatus = "Saving…"
+        root.frLoading = true
+        frSecretsWriteProcess.exec(args)
     }
 
     function setOptNumber(setterName, value) {
@@ -968,6 +1018,73 @@ Item {
         }
     }
 
+    Io.Process {
+        id: frSecretsReadProcess
+        running: false
+        stdout: Io.StdioCollector {
+            id: frSecretsReadStdout
+            onStreamFinished: {
+                root.frLoading = false
+                const text = (frSecretsReadStdout.text || "").trim()
+                if (!text.startsWith("{")) {
+                    root.frStatus = "No secrets file yet"
+                    return
+                }
+                try {
+                    const j = JSON.parse(text)
+                    root.frScheme = j.scheme === "http" ? "http" : "https"
+                    root.frHost = j.host || ""
+                    root.frUser = j.user || ""
+                    root.frHasPassword = !!j.hasPassword
+                    root.frPassword = ""
+                    root.frStatus = j.exists
+                        ? ("Loaded · " + (j.hasPassword ? "API password set" : "no API password"))
+                        : "No secrets file — fill and Save"
+                } catch (e) {
+                    root.frStatus = "Parse error"
+                }
+                root.optionsTick++
+            }
+        }
+        onExited: (code) => {
+            root.frLoading = false
+            if (code !== 0)
+                root.frStatus = "Read failed"
+        }
+    }
+
+    Io.Process {
+        id: frSecretsWriteProcess
+        running: false
+        stdout: Io.StdioCollector {
+            id: frSecretsWriteStdout
+            onStreamFinished: {
+                root.frLoading = false
+                const text = (frSecretsWriteStdout.text || "").trim()
+                if (text.startsWith("{")) {
+                    try {
+                        const j = JSON.parse(text)
+                        root.frStatus = j.ok ? ("Saved · " + (j.baseUrl || "")) : "Save failed"
+                        root.frPassword = ""
+                        root.frHasPassword = !!j.hasPassword
+                    } catch (e) {
+                        root.frStatus = "Saved"
+                        root.frPassword = ""
+                    }
+                } else {
+                    root.frStatus = text.length ? text : "Saved"
+                    root.frPassword = ""
+                }
+                root.refreshFreshRssSecrets()
+            }
+        }
+        onExited: (code) => {
+            root.frLoading = false
+            if (code !== 0)
+                root.frStatus = "Save failed"
+        }
+    }
+
     // -------------------------------------------------------------------------
     // One popup: toolbar row + optional expandable panel (stays under grabFocus)
     // -------------------------------------------------------------------------
@@ -992,7 +1109,8 @@ Item {
 
         Rectangle {
             id: controlChrome
-            implicitWidth: Math.max(mainCol.implicitWidth + root.pad * 2, root.activeMenu === "wallpaper" ? 500 : 420)
+            implicitWidth: Math.max(mainCol.implicitWidth + root.pad * 2,
+                                    (root.activeMenu === "wallpaper" || root.activeMenu === "options") ? 500 : 420)
             implicitHeight: mainCol.implicitHeight + root.pad * 2
             radius: bar.popupRadius !== undefined ? bar.popupRadius : bar.barRadius
             color: bar.glassPopupBg
@@ -3760,6 +3878,247 @@ Item {
                                                     onClicked: root.setOptToggle("setMetricsLiveUpdates", !root.optMetricsLive())
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+
+                                // --- FreshRSS ---
+                                Text {
+                                    text: "FreshRSS"
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    font.family: bar.fontFamily
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "Server + credentials write to ~/.config/freshrss-quickshell/freshrss.env (outside git). API password = Profile → API password."
+                                    color: bar.overlay
+                                    font.pixelSize: 10
+                                    font.family: bar.fontFamily
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 0
+                                            Text {
+                                                text: "Filters expanded on open"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                            }
+                                            Text {
+                                                text: "Search / max days / per feed section"
+                                                color: bar.overlay
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: bar.freshRssFiltersExpanded ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: bar.freshRssFiltersExpanded ? "✓" : "✕"
+                                                    color: bar.freshRssFiltersExpanded ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setFreshRssFiltersExpanded", !bar.freshRssFiltersExpanded)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // Scheme
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        text: "Scheme"
+                                        color: bar.subtext
+                                        font.pixelSize: 12
+                                        font.family: bar.fontFamily
+                                        Layout.preferredWidth: 56
+                                    }
+                                    Repeater {
+                                        model: [
+                                            { id: "https", label: "HTTPS" },
+                                            { id: "http", label: "HTTP" }
+                                        ]
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            Layout.preferredHeight: 28
+                                            Layout.preferredWidth: frSchemeLbl.implicitWidth + 16
+                                            radius: root.chipR
+                                            color: root.frScheme === modelData.id
+                                                   ? (bar.controlActiveBg || Qt.rgba(0, 0.77, 0.96, 0.22))
+                                                   : (frSchemeMa.containsMouse ? bar.glassHover : bar.pillBg)
+                                            border.width: 1
+                                            border.color: root.frScheme === modelData.id ? bar.accent : bar.pillBorder
+                                            Text {
+                                                id: frSchemeLbl
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                color: root.frScheme === modelData.id ? bar.accent : bar.subtext
+                                                font.pixelSize: 11
+                                                font.family: bar.fontFamily
+                                            }
+                                            MouseArea {
+                                                id: frSchemeMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.frScheme = modelData.id
+                                            }
+                                        }
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                                // Host
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        text: "Host"
+                                        color: bar.subtext
+                                        font.pixelSize: 12
+                                        Layout.preferredWidth: 56
+                                    }
+                                    TextField {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 30
+                                        placeholderText: "freshrss.example or 10.74.10.8"
+                                        color: bar.text
+                                        placeholderTextColor: bar.overlay
+                                        font.pixelSize: 12
+                                        font.family: bar.fontFamily
+                                        text: root.frHost
+                                        onTextChanged: root.frHost = text
+                                        background: Rectangle {
+                                            radius: root.chipR
+                                            color: bar.pillBg
+                                            border.width: 1
+                                            border.color: parent.activeFocus ? bar.accent : bar.pillBorder
+                                        }
+                                    }
+                                }
+                                // User
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        text: "User"
+                                        color: bar.subtext
+                                        font.pixelSize: 12
+                                        Layout.preferredWidth: 56
+                                    }
+                                    TextField {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 30
+                                        placeholderText: "admin"
+                                        color: bar.text
+                                        placeholderTextColor: bar.overlay
+                                        font.pixelSize: 12
+                                        font.family: bar.fontFamily
+                                        text: root.frUser
+                                        onTextChanged: root.frUser = text
+                                        background: Rectangle {
+                                            radius: root.chipR
+                                            color: bar.pillBg
+                                            border.width: 1
+                                            border.color: parent.activeFocus ? bar.accent : bar.pillBorder
+                                        }
+                                    }
+                                }
+                                // API password (write-only)
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        text: "API pw"
+                                        color: bar.subtext
+                                        font.pixelSize: 12
+                                        Layout.preferredWidth: 56
+                                    }
+                                    TextField {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 30
+                                        echoMode: TextInput.Password
+                                        placeholderText: root.frHasPassword
+                                                         ? "•••• set (type to replace)"
+                                                         : "Profile → API password"
+                                        color: bar.text
+                                        placeholderTextColor: bar.overlay
+                                        font.pixelSize: 12
+                                        font.family: bar.fontFamily
+                                        text: root.frPassword
+                                        onTextChanged: root.frPassword = text
+                                        background: Rectangle {
+                                            radius: root.chipR
+                                            color: bar.pillBg
+                                            border.width: 1
+                                            border.color: parent.activeFocus ? bar.accent : bar.pillBorder
+                                        }
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                        text: root.frLoading ? "…" : (root.frStatus || "Fill host · Save writes external env")
+                                        color: bar.subtext
+                                        font.pixelSize: 11
+                                        font.family: bar.fontFamily
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 28
+                                        Layout.preferredWidth: frSaveLbl.implicitWidth + 16
+                                        radius: root.chipR
+                                        color: frSaveMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: frSaveMa.containsMouse ? bar.accent : bar.pillBorder
+                                        Text {
+                                            id: frSaveLbl
+                                            anchors.centerIn: parent
+                                            text: "Save server"
+                                            color: frSaveMa.containsMouse ? bar.accent : bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: frSaveMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.saveFreshRssSecrets()
                                         }
                                     }
                                 }

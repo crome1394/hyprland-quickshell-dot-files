@@ -9,7 +9,7 @@
 #   freshrss-api.sh open-browser <url>
 #   freshrss-api.sh play-mpv <url>
 #
-# Secrets: ~/.config/quickshell/secrets/freshrss.env
+# Secrets: ~/.config/freshrss-quickshell/freshrss.env (outside git)
 #   FRESHRSS_BASE_URL=http://10.74.10.8
 #   FRESHRSS_USER=admin
 #   FRESHRSS_API_PASSWORD=...   # optional; Profile → API password
@@ -18,7 +18,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QS_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SECRETS="${FRESHRSS_SECRETS:-${QS_ROOT}/secrets/freshrss.env}"
+# Secrets live outside the git tree (never commit passwords):
+#   ~/.config/freshrss-quickshell/freshrss.env
+# Override with FRESHRSS_SECRETS=/path/to/file
+_DEFAULT_SECRETS="${XDG_CONFIG_HOME:-$HOME/.config}/freshrss-quickshell/freshrss.env"
+_LEGACY_SECRETS="${QS_ROOT}/secrets/freshrss.env"
+if [[ -n "${FRESHRSS_SECRETS:-}" ]]; then
+    SECRETS="$FRESHRSS_SECRETS"
+elif [[ -f "$_DEFAULT_SECRETS" ]]; then
+    SECRETS="$_DEFAULT_SECRETS"
+else
+    SECRETS="$_LEGACY_SECRETS"
+fi
 
 json_err() {
     local msg="$1"

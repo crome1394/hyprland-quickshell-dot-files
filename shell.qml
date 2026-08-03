@@ -144,6 +144,8 @@ ShellRoot {
     property bool showStatGpu: true
     // Hide Echo cancel block in Audio popup when false (Options)
     property bool showEchoCancelInMenu: true
+    // FreshRSS reader: Filters section open on window start (Options + bar-layout.json)
+    property bool freshRssFiltersExpanded: true
 
     // Clock format string (Qt.formatDateTime); Config default, persisted override.
     property string clockFormat: "dddd, MM·dd·yyyy | HH:mm:ss"
@@ -289,6 +291,9 @@ ShellRoot {
             root.showStatMem = true
             root.showStatGpu = true
             root.showEchoCancelInMenu = true
+            root.freshRssFiltersExpanded = cfg.freshRssFiltersExpandedDefault !== undefined
+                ? !!cfg.freshRssFiltersExpandedDefault
+                : true
             root.wsMinimumShown = cfg.wsMinimumShown
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
             root.wsStartupWorkspace = cfg.wsStartupWorkspace
@@ -432,6 +437,8 @@ ShellRoot {
                 }
                 if (barLayoutAdapter.hasAudioMenuPrefs)
                     root.showEchoCancelInMenu = barLayoutAdapter.showEchoCancelInMenu
+                if (barLayoutAdapter.hasFreshRssPrefs)
+                    root.freshRssFiltersExpanded = barLayoutAdapter.freshRssFiltersExpanded
                 // Layout JSON
                 if (barLayoutAdapter.widgetLayoutJson && barLayoutAdapter.widgetLayoutJson.length > 2) {
                     try {
@@ -513,6 +520,8 @@ ShellRoot {
                 // Audio popup sections
                 property bool hasAudioMenuPrefs: false
                 property bool showEchoCancelInMenu: true
+                property bool hasFreshRssPrefs: false
+                property bool freshRssFiltersExpanded: true
             }
         }
 
@@ -566,6 +575,8 @@ ShellRoot {
             barLayoutAdapter.showStatGpu = root.showStatGpu
             barLayoutAdapter.hasAudioMenuPrefs = true
             barLayoutAdapter.showEchoCancelInMenu = root.showEchoCancelInMenu
+            barLayoutAdapter.hasFreshRssPrefs = true
+            barLayoutAdapter.freshRssFiltersExpanded = root.freshRssFiltersExpanded
             barLayoutFile.writeAdapter()
             // Clear guard after filesystem watcher has had a chance to fire.
             Qt.callLater(function() {
@@ -594,6 +605,10 @@ ShellRoot {
         }
         function setShowEchoCancelInMenu(enabled) {
             root.showEchoCancelInMenu = !!enabled
+            persistBarLayout()
+        }
+        function setFreshRssFiltersExpanded(enabled) {
+            root.freshRssFiltersExpanded = !!enabled
             persistBarLayout()
         }
         function setShowMagicWorkspacePill(enabled) {
@@ -1437,6 +1452,13 @@ ShellRoot {
         property alias showStatMem: root.showStatMem
         property alias showStatGpu: root.showStatGpu
         property alias showEchoCancelInMenu: root.showEchoCancelInMenu
+        property alias freshRssFiltersExpanded: root.freshRssFiltersExpanded
+        readonly property alias freshRssSecretsReadScript: cfg.freshRssSecretsReadScript
+        readonly property alias freshRssSecretsWriteScript: cfg.freshRssSecretsWriteScript
+        function setFreshRssFiltersExpanded(enabled) {
+            root.freshRssFiltersExpanded = !!enabled
+            persistBarLayout()
+        }
         function wsIconForId(id) { return cfg.wsIconForId(id) }
         function wsIsSpecialName(name) { return cfg.wsIsSpecialName(name) }
 
