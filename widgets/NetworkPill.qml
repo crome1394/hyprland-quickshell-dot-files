@@ -52,6 +52,10 @@ Rectangle {
     // When true, this widget is a section inside a shared connectivity pill
     // (no own background/border; hover uses iconHoverBg like SysStats sections).
     property bool embedded: false
+    // Horizontal scale only (BarControlBar Sizes). Height stays bar.pillHeight.
+    property real pillScale: 1.0
+    readonly property real _s: (pillScale > 0 ? pillScale : 1)
+    readonly property real _h: bar.pillHeight
 
     readonly property string controlScript: "/home/crome/.config/quickshell/scripts/network-control.sh"
 
@@ -85,8 +89,11 @@ Rectangle {
     property bool _suppressConnectionActivate: false
 
     // Standalone: full pill size. Embedded: content chip sized for shared shell.
-    implicitWidth: netContent.implicitWidth + (embedded ? 12 : 14)
-    implicitHeight: embedded ? (bar.pillHeight - 8) : bar.pillHeight
+    // Horizontal scale only: layout width grows with _s; content is x-scaled to match.
+    readonly property int _padW: embedded ? 12 : 14
+    readonly property int _naturalW: netContent.implicitWidth + _padW
+    implicitWidth: Math.round(_naturalW * _s)
+    implicitHeight: embedded ? Math.max(18, _h - 8) : _h
     width: implicitWidth
     height: implicitHeight
     Layout.preferredWidth: implicitWidth
@@ -933,20 +940,19 @@ Rectangle {
         anchors.centerIn: parent
         implicitWidth: pillRow.implicitWidth
         implicitHeight: pillRow.implicitHeight
-
         Row {
             id: pillRow
-            spacing: 6
+            spacing: Math.max(3, Math.round(6 * root._s))
             anchors.centerIn: parent
 
             Item {
-                width: bar.iconSizeTray
-                height: bar.iconSizeTray
+                width: Math.max(12, Math.round(bar.iconSizeTray * root._s))
+                height: Math.max(12, Math.round(bar.iconSizeTray * root._s))
                 anchors.verticalCenter: parent.verticalCenter
                 Text {
                     anchors.centerIn: parent
                     text: net.pillGlyph
-                    font.pixelSize: bar.iconSizeTray
+                    font.pixelSize: Math.max(12, Math.round(bar.iconSizeTray * root._s))
                     font.family: bar.fontFamily
                     color: net.pillGlyphColor
                 }
@@ -965,7 +971,7 @@ Rectangle {
                     return ""
                 }
                 color: bar ? bar.subtext : "#b0b0b2"
-                font.pixelSize: bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12
+                font.pixelSize: Math.max(9, Math.round((bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12) * root._s))
                 font.bold: true
                 font.family: bar.fontFamily
             }

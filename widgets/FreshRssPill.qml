@@ -401,7 +401,8 @@ Rectangle {
         collapseVersion++
     }
 
-    Layout.preferredWidth: Math.max(42, pillInner.implicitWidth + 16)
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("freshRss") : 1.0)
+    Layout.preferredWidth: Math.round(Math.max(42, pillInner.implicitWidth + 16) * _ws)
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 

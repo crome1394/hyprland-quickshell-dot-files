@@ -49,12 +49,13 @@ Rectangle {
     // Whether any media is currently playing (drives visibility + coupling with SysStatsPill)
     readonly property bool hasMedia: media.title !== ""
 
-    Layout.preferredWidth: 600
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("media") : 1.0)
+    Layout.preferredWidth: Math.round(600 * _ws)
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
     visible: hasMedia
     implicitWidth: 600
-    implicitHeight: bar.pillHeight
+    implicitHeight: Layout.preferredHeight
     radius: bar.pillRadius
     color: mediaHover.containsMouse ? bar.glassHover : bar.glassPillBg
     border.width: bar.controlBorderWidth

@@ -6,7 +6,7 @@
 // strip. Horizontally centered; stacks just inward from the main bar.
 //
 // Single PopupWindow (grabFocus). Toolbar buttons open panels:
-//   Position · Monitor · Widgets · Launch · Clock
+//   Position · Wallpaper · Widgets · Sizes · Launch · Clock
 //
 // =============================================================================
 
@@ -28,14 +28,7 @@ Item {
     readonly property int _reopenGuardMs: 220
     readonly property bool open: controlPopup.visible
 
-    property string displayFamily: ""
-    property int displayHz: 0
-    property string displayProfile: ""
-    property string displayStatus: ""
-    property bool displayBusy: false
-    property bool displayKnown: false
-
-    // "" | "position" | "monitor" | "widgets" | "launch" | "clock"
+    // "" | "position" | "wallpaper" | "widgets" | "sizes" | "launch" | "clock"
     property string activeMenu: ""
     property int menuTick: 0
 
@@ -50,41 +43,17 @@ Item {
     property string customCommand: ""
     property string customIcon: ""
 
-    readonly property string resolutionBin: {
-        if (bar.hyprResolutionBin && String(bar.hyprResolutionBin).length)
-            return String(bar.hyprResolutionBin)
-        return "hypr-resolution"
-    }
-
-    readonly property var familyModel: [
-        { id: "native", label: "Native", tip: "5120×1440 · scale 1 · 10-bit" },
-        { id: "perf",   label: "Perf",   tip: "3840×1080 · scale 0.75 · 8-bit (DPI-matched)" }
-    ]
-    readonly property var hzModel: [
-        { id: 60,  label: "60" },
-        { id: 120, label: "120" },
-        { id: 240, label: "240" }
-    ]
+    // Wallpaper panel
+    property var wallpaperImages: []
+    property string wallpaperDirDisplay: ""
+    property bool wallpaperLoading: false
+    property string wallpaperBusyPath: ""
+    property string wallpaperStatus: ""
 
     readonly property int pad: (bar.popupSpacingTight !== undefined) ? bar.popupSpacingTight : 6
     readonly property int chipH: Math.max(26, Math.round((bar.pillHeight || 36) * 0.78))
     readonly property int chipR: bar.buttonRadius !== undefined ? bar.buttonRadius : 8
     readonly property int panelMaxH: 420
-
-    function profileFor(family, hz) {
-        const f = String(family || "")
-        const h = Number(hz) || 0
-        if (f === "native") {
-            if (h === 60) return "native-60"
-            if (h === 120) return "native-120"
-            if (h === 240) return "native"
-        } else if (f === "perf") {
-            if (h === 60) return "perf-60"
-            if (h === 120) return "perf-120"
-            if (h === 240) return "perf"
-        }
-        return ""
-    }
 
     function hide() {
         root.activeMenu = ""
@@ -95,7 +64,6 @@ Item {
     }
 
     function show() {
-        refreshDisplayStatus()
         root.menuTick++
         controlPopup.visible = true
         root.scheduleReposition()
@@ -173,69 +141,6 @@ Item {
             root.activeMenu = name
         root.menuTick++
         root.scheduleReposition()
-    }
-
-    function refreshDisplayStatus() {
-        if (statusProcess.running)
-            return
-        statusProcess.exec([root.resolutionBin, "json"])
-    }
-
-    function applyDisplayStatus(j) {
-        if (!j || typeof j !== "object")
-            return
-        root.displayProfile = j.profile ? String(j.profile) : ""
-        root.displayFamily = j.family ? String(j.family) : ""
-        root.displayHz = j.hz !== undefined && j.hz !== null ? Number(j.hz) || 0 : 0
-        root.displayStatus = j.status ? String(j.status) : ""
-        if (!root.displayStatus && j.width && j.height) {
-            const rr = j.refreshRate !== undefined ? Number(j.refreshRate) : 0
-            const rrTxt = rr > 0 ? ("@" + Math.round(rr)) : ""
-            root.displayStatus = String(j.width) + "×" + String(j.height) + rrTxt
-        }
-        root.displayKnown = !!(root.displayFamily && root.displayHz)
-        root.displayBusy = false
-    }
-
-    function selectFamily(familyId) {
-        if (root.displayBusy)
-            return
-        const hz = root.displayHz > 0 ? root.displayHz : 240
-        const name = profileFor(familyId, hz)
-        if (!name)
-            return
-        root.displayFamily = familyId
-        root.displayHz = hz
-        applyProfile(name)
-    }
-
-    function selectHz(hzVal) {
-        if (root.displayBusy)
-            return
-        const family = root.displayFamily.length ? root.displayFamily : "native"
-        const name = profileFor(family, hzVal)
-        if (!name)
-            return
-        root.displayFamily = family
-        root.displayHz = hzVal
-        applyProfile(name)
-    }
-
-    function applyProfile(name) {
-        if (!name || root.displayBusy)
-            return
-        if (name === root.displayProfile && root.displayKnown)
-            return
-        root.displayBusy = true
-        root.displayProfile = name
-        root.displayStatus = "Applying " + name + "…"
-        Quickshell.execDetached([root.resolutionBin, name])
-        applySettleTimer.restart()
-    }
-
-    function openFullMenu() {
-        Quickshell.execDetached([root.resolutionBin])
-        hide()
     }
 
     function chipBg(active, hovered) {
@@ -431,6 +336,98 @@ Item {
         return out
     }
 
+    function wallpaperDir() {
+        void root.menuTick
+        if (bar.wallpaperDir && String(bar.wallpaperDir).length)
+            return String(bar.wallpaperDir)
+        return "/home/crome/Pictures/wallpapers"
+    }
+
+    function wallpaperCurrent() {
+        void root.menuTick
+        return (bar.wallpaperCurrent && String(bar.wallpaperCurrent).length)
+            ? String(bar.wallpaperCurrent)
+            : ""
+    }
+
+    function refreshWallpapers() {
+        if (wallpaperListProcess.running)
+            return
+        root.wallpaperLoading = true
+        root.wallpaperStatus = "Loading…"
+        const script = bar.wallpaperListScript || ""
+        if (!script.length) {
+            root.wallpaperLoading = false
+            root.wallpaperStatus = "list script missing"
+            return
+        }
+        wallpaperListProcess.exec([script, root.wallpaperDir()])
+    }
+
+    function applyWallpaper(path) {
+        if (!path || !String(path).length)
+            return
+        root.wallpaperBusyPath = String(path)
+        root.wallpaperStatus = "Applying…"
+        if (typeof bar.applyWallpaper === "function")
+            bar.applyWallpaper(path)
+        else {
+            const script = bar.wallpaperApplyScript || ""
+            const mon = bar.wallpaperMonitor || "DP-1"
+            if (script.length)
+                Quickshell.execDetached([script, path, mon])
+        }
+        wallpaperApplySettle.restart()
+        root.menuTick++
+    }
+
+    function pickWallpaperDir() {
+        const script = bar.wallpaperPickDirScript || ""
+        if (!script.length || wallpaperPickDirProcess.running)
+            return
+        root.wallpaperStatus = "Pick a folder…"
+        wallpaperPickDirProcess.exec([script, root.wallpaperDir()])
+    }
+
+    function addWallpapers() {
+        const script = bar.wallpaperAddScript || ""
+        if (!script.length || wallpaperAddProcess.running)
+            return
+        root.wallpaperStatus = "Choose images to add…"
+        wallpaperAddProcess.exec([script, root.wallpaperDir()])
+    }
+
+    function openWallpaperDir() {
+        const d = root.wallpaperDir()
+        if (d.length)
+            Quickshell.execDetached(["xdg-open", d])
+    }
+
+    // Stable catalog reference for Sizes Repeater (avoid rebuild-on-every-drag).
+    readonly property var sizeCatalog: bar.widgetCatalog || []
+
+    function scalePercentOf(id) {
+        // Depend on widgetScales so bindings refresh without menuTick thrash
+        void bar.widgetScales
+        if (typeof bar.widgetScale === "function")
+            return Math.round(bar.widgetScale(id) * 100)
+        return 100
+    }
+
+    function setScalePercent(id, percent) {
+        let p = Number(percent)
+        if (!(p > 0))
+            return
+        if (p < 80)
+            p = 80
+        if (p > 180)
+            p = 180
+        if (typeof bar.setWidgetScale === "function")
+            bar.setWidgetScale(id, p / 100)
+        // Do not bump menuTick / full panel rebuild while dragging — bar.widgetScales notifies
+        sizeRepositionTimer.restart()
+    }
+
     Connections {
         target: bar
         function onBarPositionChanged() {
@@ -439,38 +436,6 @@ Item {
         }
         function onClockFormatChanged() {
             root.menuTick++
-        }
-    }
-
-    Io.Process {
-        id: statusProcess
-        running: false
-        stdout: Io.StdioCollector {
-            id: statusStdout
-            onStreamFinished: {
-                const line = (statusStdout.text || "").trim()
-                if (!line.startsWith("{"))
-                    return
-                try {
-                    root.applyDisplayStatus(JSON.parse(line))
-                    if (controlPopup.visible)
-                        Qt.callLater(root.reposition)
-                } catch (e) {}
-            }
-        }
-        onExited: (code) => {
-            if (code !== 0 && !(statusStdout.text || "").trim())
-                root.displayStatus = "hypr-resolution unavailable"
-        }
-    }
-
-    Timer {
-        id: applySettleTimer
-        interval: 900
-        repeat: false
-        onTriggered: {
-            root.displayBusy = false
-            root.refreshDisplayStatus()
         }
     }
 
@@ -486,6 +451,25 @@ Item {
         interval: 48
         repeat: false
         onTriggered: root.reposition()
+    }
+
+    // Light debounce when sizes change (avoid reposition every slider step)
+    Timer {
+        id: sizeRepositionTimer
+        interval: 80
+        repeat: false
+        onTriggered: root.reposition()
+    }
+
+    Timer {
+        id: wallpaperApplySettle
+        interval: 400
+        repeat: false
+        onTriggered: {
+            root.wallpaperBusyPath = ""
+            root.wallpaperStatus = "Applied"
+            root.menuTick++
+        }
     }
 
     Io.Process {
@@ -517,6 +501,82 @@ Item {
         }
     }
 
+    Io.Process {
+        id: wallpaperListProcess
+        running: false
+        stdout: Io.StdioCollector {
+            id: wallpaperListStdout
+            onStreamFinished: {
+                root.wallpaperLoading = false
+                const text = (wallpaperListStdout.text || "").trim()
+                if (!text.startsWith("{")) {
+                    root.wallpaperImages = []
+                    root.wallpaperStatus = "No images found"
+                    return
+                }
+                try {
+                    const j = JSON.parse(text)
+                    root.wallpaperDirDisplay = j.dir || root.wallpaperDir()
+                    root.wallpaperImages = j.images || []
+                    root.wallpaperStatus = (j.count || 0) + " image(s)"
+                } catch (e) {
+                    root.wallpaperImages = []
+                    root.wallpaperStatus = "Parse error"
+                }
+                root.menuTick++
+                if (controlPopup.visible)
+                    root.scheduleReposition()
+            }
+        }
+        onExited: (code) => {
+            root.wallpaperLoading = false
+            if (code !== 0 && !(wallpaperListStdout.text || "").trim()) {
+                root.wallpaperImages = []
+                root.wallpaperStatus = "Failed to list wallpapers"
+            }
+        }
+    }
+
+    Io.Process {
+        id: wallpaperPickDirProcess
+        running: false
+        stdout: Io.StdioCollector {
+            id: wallpaperPickDirStdout
+            onStreamFinished: {
+                const dir = (wallpaperPickDirStdout.text || "").trim()
+                if (!dir.length) {
+                    root.wallpaperStatus = "Directory unchanged"
+                    return
+                }
+                if (typeof bar.setWallpaperDir === "function")
+                    bar.setWallpaperDir(dir)
+                root.wallpaperStatus = "Folder: " + dir
+                root.menuTick++
+                root.refreshWallpapers()
+            }
+        }
+    }
+
+    Io.Process {
+        id: wallpaperAddProcess
+        running: false
+        stdout: Io.StdioCollector {
+            id: wallpaperAddStdout
+            onStreamFinished: {
+                const text = (wallpaperAddStdout.text || "").trim()
+                let n = 0
+                try {
+                    if (text.startsWith("{")) {
+                        const j = JSON.parse(text)
+                        n = j.count || 0
+                    }
+                } catch (e) {}
+                root.wallpaperStatus = n > 0 ? ("Added " + n + " file(s)") : "No files added"
+                root.refreshWallpapers()
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // One popup: toolbar row + optional expandable panel (stays under grabFocus)
     // -------------------------------------------------------------------------
@@ -541,7 +601,7 @@ Item {
 
         Rectangle {
             id: controlChrome
-            implicitWidth: Math.max(mainCol.implicitWidth + root.pad * 2, 420)
+            implicitWidth: Math.max(mainCol.implicitWidth + root.pad * 2, root.activeMenu === "wallpaper" ? 500 : 420)
             implicitHeight: mainCol.implicitHeight + root.pad * 2
             radius: bar.popupRadius !== undefined ? bar.popupRadius : bar.barRadius
             color: bar.glassPopupBg
@@ -584,11 +644,12 @@ Item {
 
                     Repeater {
                         model: [
-                            { id: "position", label: "Position" },
-                            { id: "monitor",  label: "Monitor" },
-                            { id: "widgets",  label: "Widgets" },
-                            { id: "launch",   label: "Launch" },
-                            { id: "clock",    label: "Clock" }
+                            { id: "position",  label: "Position" },
+                            { id: "wallpaper", label: "Wallpaper" },
+                            { id: "widgets",   label: "Widgets" },
+                            { id: "sizes",     label: "Sizes" },
+                            { id: "launch",    label: "Launch" },
+                            { id: "clock",     label: "Clock" }
                         ]
                         delegate: Rectangle {
                             required property var modelData
@@ -615,8 +676,8 @@ Item {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    if (modelData.id === "monitor")
-                                        root.refreshDisplayStatus()
+                                    if (modelData.id === "wallpaper")
+                                        root.refreshWallpapers()
                                     if (modelData.id === "launch")
                                         root.refreshDesktopApps()
                                     root.toggleMenu(modelData.id)
@@ -631,9 +692,12 @@ Item {
                     id: panelBox
                     visible: root.activeMenu.length > 0
                     Layout.fillWidth: true
+                    // Margins (6×2) + a little slack so the last row is not clipped by panelBox.clip
+                    readonly property int panelPad: 16
                     Layout.preferredHeight: visible
-                        ? Math.min(root.panelMaxH, panelFlick.contentHeight + 8)
+                        ? Math.min(root.panelMaxH, Math.max(panelStack.implicitHeight, panelFlick.contentHeight) + panelPad)
                         : 0
+                    Layout.minimumHeight: visible ? 72 : 0
                     radius: root.chipR
                     color: Qt.rgba(0.05, 0.05, 0.07, 0.85)
                     border.width: bar.controlBorderWidth
@@ -643,7 +707,7 @@ Item {
                     Flickable {
                         id: panelFlick
                         anchors.fill: parent
-                        anchors.margins: 6
+                        anchors.margins: 8
                         contentWidth: width
                         contentHeight: panelStack.implicitHeight
                         clip: true
@@ -653,13 +717,13 @@ Item {
                         ColumnLayout {
                             id: panelStack
                             width: panelFlick.width
-                            spacing: 4
+                            spacing: 6
 
                             // ===== POSITION =====
                             ColumnLayout {
                                 visible: root.activeMenu === "position"
                                 Layout.fillWidth: true
-                                spacing: 8
+                                spacing: 10
 
                                 Text {
                                     text: "Bar position"
@@ -677,11 +741,15 @@ Item {
 
                                 RowLayout {
                                     Layout.fillWidth: true
+                                    Layout.preferredHeight: 52
+                                    Layout.minimumHeight: 52
                                     spacing: 8
 
                                     Rectangle {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 44
+                                        Layout.fillHeight: true
+                                        Layout.preferredHeight: 52
+                                        Layout.minimumHeight: 52
                                         radius: root.chipR
                                         color: (bar.barPosition === "top")
                                                ? (bar.controlActiveBg || Qt.rgba(0, 0.77, 0.96, 0.22))
@@ -689,21 +757,28 @@ Item {
                                         border.width: bar.controlBorderWidth
                                         border.color: (bar.barPosition === "top") ? bar.accent : bar.pillBorder
                                         RowLayout {
-                                            anchors.centerIn: parent
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 12
+                                            anchors.topMargin: 10
+                                            anchors.bottomMargin: 10
                                             spacing: 8
                                             Text {
+                                                Layout.alignment: Qt.AlignVCenter
                                                 text: bar.barPositionIconTop
                                                 font.pixelSize: bar.iconSizePill
                                                 font.family: bar.fontFamily
                                                 color: bar.barPosition === "top" ? bar.accent : bar.subtext
                                             }
                                             Text {
+                                                Layout.alignment: Qt.AlignVCenter
                                                 text: "Top"
                                                 font.pixelSize: 13
                                                 font.bold: bar.barPosition === "top"
                                                 font.family: bar.fontFamily
                                                 color: bar.barPosition === "top" ? bar.accent : bar.text
                                             }
+                                            Item { Layout.fillWidth: true }
                                         }
                                         MouseArea {
                                             id: posTopMa
@@ -720,7 +795,9 @@ Item {
 
                                     Rectangle {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 44
+                                        Layout.fillHeight: true
+                                        Layout.preferredHeight: 52
+                                        Layout.minimumHeight: 52
                                         radius: root.chipR
                                         color: (bar.barPosition === "bottom")
                                                ? (bar.controlActiveBg || Qt.rgba(0, 0.77, 0.96, 0.22))
@@ -728,21 +805,28 @@ Item {
                                         border.width: bar.controlBorderWidth
                                         border.color: (bar.barPosition === "bottom") ? bar.accent : bar.pillBorder
                                         RowLayout {
-                                            anchors.centerIn: parent
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 12
+                                            anchors.topMargin: 10
+                                            anchors.bottomMargin: 10
                                             spacing: 8
                                             Text {
+                                                Layout.alignment: Qt.AlignVCenter
                                                 text: bar.barPositionIconBottom
                                                 font.pixelSize: bar.iconSizePill
                                                 font.family: bar.fontFamily
                                                 color: bar.barPosition === "bottom" ? bar.accent : bar.subtext
                                             }
                                             Text {
+                                                Layout.alignment: Qt.AlignVCenter
                                                 text: "Bottom"
                                                 font.pixelSize: 13
                                                 font.bold: bar.barPosition === "bottom"
                                                 font.family: bar.fontFamily
                                                 color: bar.barPosition === "bottom" ? bar.accent : bar.text
                                             }
+                                            Item { Layout.fillWidth: true }
                                         }
                                         MouseArea {
                                             id: posBotMa
@@ -759,150 +843,239 @@ Item {
                                 }
                             }
 
-                            // ===== MONITOR / RESOLUTION =====
+                            // ===== WALLPAPER =====
                             ColumnLayout {
-                                visible: root.activeMenu === "monitor"
+                                visible: root.activeMenu === "wallpaper"
                                 Layout.fillWidth: true
                                 spacing: 8
 
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Wallpaper"
+                                        color: bar.text
+                                        font.pixelSize: bar.popupTitleSize
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 26
+                                        Layout.preferredWidth: refreshWpLbl.implicitWidth + 12
+                                        radius: root.chipR
+                                        color: refreshWpMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: bar.pillBorder
+                                        Text {
+                                            id: refreshWpLbl
+                                            anchors.centerIn: parent
+                                            text: root.wallpaperLoading ? "…" : "Refresh"
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: refreshWpMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.refreshWallpapers()
+                                        }
+                                    }
+                                }
+
                                 Text {
-                                    text: "Monitor"
-                                    color: bar.text
-                                    font.pixelSize: bar.popupTitleSize
-                                    font.bold: true
-                                    font.family: bar.fontFamily
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WrapAnywhere
+                                    text: root.wallpaperDirDisplay || root.wallpaperDir()
+                                    color: bar.overlay
+                                    font.pixelSize: bar.popupHintSize
+                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                 }
                                 Text {
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
-                                    text: {
-                                        if (root.displayBusy && root.displayProfile)
-                                            return "Applying " + root.displayProfile + "…"
-                                        if (root.displayStatus)
-                                            return root.displayStatus
-                                        if (root.displayProfile)
-                                            return root.displayProfile
-                                        return "Loading…"
-                                    }
-                                    color: root.displayBusy ? bar.accent : bar.subtext
-                                    font.pixelSize: 12
-                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
-                                }
-
-                                Text {
-                                    text: "Resolution family"
-                                    color: bar.overlay
-                                    font.pixelSize: bar.popupHintSize
+                                    text: root.wallpaperStatus.length ? root.wallpaperStatus : "Click a thumbnail to apply"
+                                    color: bar.subtext
+                                    font.pixelSize: 11
                                     font.family: bar.fontFamily
                                 }
+
                                 RowLayout {
+                                    Layout.fillWidth: true
                                     spacing: 6
+
+                                    Rectangle {
+                                        Layout.preferredHeight: 30
+                                        Layout.preferredWidth: changeDirLbl.implicitWidth + 14
+                                        radius: root.chipR
+                                        color: changeDirMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: changeDirMa.containsMouse ? bar.accent : bar.pillBorder
+                                        Text {
+                                            id: changeDirLbl
+                                            anchors.centerIn: parent
+                                            text: "Change folder…"
+                                            color: changeDirMa.containsMouse ? bar.accent : bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: changeDirMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.pickWallpaperDir()
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 30
+                                        Layout.preferredWidth: addWpLbl.implicitWidth + 14
+                                        radius: root.chipR
+                                        color: addWpMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: addWpMa.containsMouse ? bar.accent : bar.pillBorder
+                                        Text {
+                                            id: addWpLbl
+                                            anchors.centerIn: parent
+                                            text: "Add wallpapers…"
+                                            color: addWpMa.containsMouse ? bar.accent : bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: addWpMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.addWallpapers()
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 30
+                                        Layout.preferredWidth: openWpLbl.implicitWidth + 14
+                                        radius: root.chipR
+                                        color: openWpMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: bar.pillBorder
+                                        Text {
+                                            id: openWpLbl
+                                            anchors.centerIn: parent
+                                            text: "Open folder"
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: openWpMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.openWallpaperDir()
+                                        }
+                                    }
+                                }
+
+                                // Visual grid of wallpapers
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
                                     Repeater {
-                                        model: root.familyModel
+                                        model: root.wallpaperImages
                                         delegate: Rectangle {
                                             required property var modelData
-                                            readonly property bool active: root.displayFamily === modelData.id
-                                            readonly property bool hovered: famMa.containsMouse
-                                            Layout.preferredHeight: 34
-                                            Layout.preferredWidth: Math.max(72, famLabel.implicitWidth + 20)
+                                            readonly property bool isCurrent: root.wallpaperCurrent() === modelData.path
+                                            readonly property bool isBusy: root.wallpaperBusyPath === modelData.path
+                                            width: 148
+                                            height: 108
                                             radius: root.chipR
-                                            color: root.chipBg(active, hovered)
-                                            border.width: bar.controlBorderWidth
-                                            border.color: root.chipBorder(active, hovered)
-                                            opacity: root.displayBusy ? 0.65 : 1.0
-                                            Text {
-                                                id: famLabel
-                                                anchors.centerIn: parent
-                                                text: modelData.label
-                                                font.pixelSize: 12
-                                                font.family: bar.fontFamily
-                                                font.bold: active
-                                                color: root.chipText(active, hovered)
+                                            color: Qt.rgba(0.08, 0.08, 0.10, 0.9)
+                                            border.width: isCurrent || thumbMa.containsMouse ? 2 : 1
+                                            border.color: isCurrent ? root.onGreen
+                                                          : (thumbMa.containsMouse ? bar.accent : bar.dividerStrong)
+                                            clip: true
+
+                                            Image {
+                                                id: thumb
+                                                anchors.fill: parent
+                                                anchors.margins: 2
+                                                anchors.bottomMargin: 22
+                                                source: modelData.url || ("file://" + modelData.path)
+                                                fillMode: Image.PreserveAspectCrop
+                                                asynchronous: true
+                                                cache: true
+                                                sourceSize.width: 296
+                                                sourceSize.height: 168
+                                                smooth: true
+                                                mipmap: true
                                             }
+
+                                            // Dim while applying
+                                            Rectangle {
+                                                anchors.fill: thumb
+                                                visible: isBusy
+                                                color: Qt.rgba(0, 0, 0, 0.45)
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "…"
+                                                    color: bar.accent
+                                                    font.pixelSize: 18
+                                                }
+                                            }
+
+                                            // Footer: name + dimensions
+                                            Rectangle {
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                anchors.bottom: parent.bottom
+                                                height: 22
+                                                color: Qt.rgba(0, 0, 0, 0.72)
+                                                Text {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 6
+                                                    anchors.rightMargin: 6
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    elide: Text.ElideRight
+                                                    text: {
+                                                        const dims = (modelData.width > 0 && modelData.height > 0)
+                                                            ? (modelData.width + "×" + modelData.height)
+                                                            : "?"
+                                                        return modelData.name + "  ·  " + dims
+                                                    }
+                                                    color: isCurrent ? root.onGreen : bar.subtext
+                                                    font.pixelSize: 10
+                                                    font.family: bar.fontFamily
+                                                }
+                                            }
+
                                             MouseArea {
-                                                id: famMa
+                                                id: thumbMa
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
-                                                enabled: !root.displayBusy
-                                                onClicked: root.selectFamily(modelData.id)
+                                                onClicked: root.applyWallpaper(modelData.path)
                                                 ToolTip.visible: containsMouse
                                                 ToolTip.delay: bar.tooltipDelay
-                                                ToolTip.text: modelData.tip
+                                                ToolTip.text: {
+                                                    const dims = (modelData.width > 0 && modelData.height > 0)
+                                                        ? (modelData.width + " × " + modelData.height)
+                                                        : "dimensions unknown"
+                                                    return modelData.name + "\n" + dims + "\nClick to apply"
+                                                }
                                             }
                                         }
                                     }
                                 }
 
                                 Text {
-                                    text: "Refresh rate (Hz)"
+                                    visible: !root.wallpaperLoading && root.wallpaperImages.length === 0
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "No images in this folder. Use “Add wallpapers…” or “Change folder…”."
                                     color: bar.overlay
-                                    font.pixelSize: bar.popupHintSize
+                                    font.pixelSize: 11
                                     font.family: bar.fontFamily
-                                }
-                                RowLayout {
-                                    spacing: 6
-                                    Repeater {
-                                        model: root.hzModel
-                                        delegate: Rectangle {
-                                            required property var modelData
-                                            readonly property bool active: root.displayHz === modelData.id
-                                            readonly property bool hovered: hzMa.containsMouse
-                                            Layout.preferredHeight: 34
-                                            Layout.preferredWidth: 52
-                                            radius: root.chipR
-                                            color: root.chipBg(active, hovered)
-                                            border.width: bar.controlBorderWidth
-                                            border.color: root.chipBorder(active, hovered)
-                                            opacity: root.displayBusy ? 0.65 : 1.0
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: modelData.label
-                                                font.pixelSize: 12
-                                                font.family: bar.fontFamily
-                                                font.bold: active
-                                                color: root.chipText(active, hovered)
-                                            }
-                                            MouseArea {
-                                                id: hzMa
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                enabled: !root.displayBusy
-                                                onClicked: root.selectHz(modelData.id)
-                                                ToolTip.visible: containsMouse
-                                                ToolTip.delay: bar.tooltipDelay
-                                                ToolTip.text: modelData.label + " Hz"
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    Layout.preferredHeight: 32
-                                    Layout.preferredWidth: moreLabel.implicitWidth + 18
-                                    radius: root.chipR
-                                    color: moreMa.containsMouse ? bar.glassHover : bar.pillBg
-                                    border.width: bar.controlBorderWidth
-                                    border.color: moreMa.containsMouse ? bar.accent : bar.pillBorder
-                                    Text {
-                                        id: moreLabel
-                                        anchors.centerIn: parent
-                                        text: "Full menu (Rofi)…"
-                                        font.pixelSize: 12
-                                        font.family: bar.fontFamily
-                                        color: moreMa.containsMouse ? bar.accent : bar.subtext
-                                    }
-                                    MouseArea {
-                                        id: moreMa
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.openFullMenu()
-                                        ToolTip.visible: containsMouse
-                                        ToolTip.delay: bar.tooltipDelay
-                                        ToolTip.text: "All profiles including recording modes"
-                                    }
                                 }
                             }
 
@@ -1154,6 +1327,193 @@ Item {
                                                         root.menuTick++
                                                         Qt.callLater(root.reposition)
                                                     }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ===== SIZES (per-widget pill scale) =====
+                            ColumnLayout {
+                                visible: root.activeMenu === "sizes"
+                                Layout.fillWidth: true
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Pill sizes"
+                                        color: bar.text
+                                        font.pixelSize: bar.popupTitleSize
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 24
+                                        Layout.preferredWidth: resetSizesLbl.implicitWidth + 12
+                                        radius: root.chipR
+                                        color: resetSizesMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: bar.pillBorder
+                                        Text {
+                                            id: resetSizesLbl
+                                            anchors.centerIn: parent
+                                            text: "Reset all"
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: resetSizesMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (typeof bar.resetWidgetScales === "function")
+                                                    bar.resetWidgetScales()
+                                                root.menuTick++
+                                                Qt.callLater(root.reposition)
+                                            }
+                                        }
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "Horizontal width only (80–180%). Height stays fixed. Slider or type % and press Enter."
+                                    color: bar.overlay
+                                    font.pixelSize: bar.popupHintSize
+                                    font.family: bar.fontFamily
+                                }
+
+                                Repeater {
+                                    // Stable model — do not rebuild rows on every scale tick
+                                    model: root.sizeCatalog
+                                    delegate: Rectangle {
+                                        id: sizeRow
+                                        required property var modelData
+                                        readonly property string wid: modelData.id
+                                        readonly property string wlabel: modelData.label
+                                        // Live percent from bar (binds to widgetScales)
+                                        readonly property int livePct: root.scalePercentOf(wid)
+                                        property int localPct: livePct
+                                        property bool editing: false
+
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 52
+                                        radius: root.chipR
+                                        color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                        border.width: 1
+                                        border.color: bar.dividerStrong
+
+                                        // Sync from bar when not actively editing this row
+                                        onLivePctChanged: {
+                                            if (!sizeRow.editing && !sizeSlider.pressed)
+                                                sizeRow.localPct = livePct
+                                        }
+
+                                        ColumnLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 6
+                                            spacing: 2
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+                                                Text {
+                                                    Layout.preferredWidth: 110
+                                                    elide: Text.ElideRight
+                                                    text: sizeRow.wlabel
+                                                    color: bar.text
+                                                    font.pixelSize: 12
+                                                    font.family: bar.fontFamily
+                                                }
+                                                TextField {
+                                                    id: pctField
+                                                    Layout.preferredWidth: 52
+                                                    Layout.preferredHeight: 24
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    color: bar.text
+                                                    font.pixelSize: 12
+                                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                    text: String(sizeRow.localPct)
+                                                    validator: IntValidator { bottom: 80; top: 180 }
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: bar.pillBg
+                                                        border.width: 1
+                                                        border.color: pctField.activeFocus ? bar.accent : bar.pillBorder
+                                                    }
+                                                    onActiveFocusChanged: sizeRow.editing = activeFocus
+                                                    onTextChanged: {
+                                                        const n = parseInt(text, 10)
+                                                        if (!isNaN(n))
+                                                            sizeRow.localPct = n
+                                                    }
+                                                    onAccepted: root.setScalePercent(sizeRow.wid, sizeRow.localPct)
+                                                    onEditingFinished: root.setScalePercent(sizeRow.wid, sizeRow.localPct)
+                                                }
+                                                Text {
+                                                    text: "%"
+                                                    color: bar.overlay
+                                                    font.pixelSize: 11
+                                                    font.family: bar.fontFamily
+                                                }
+                                                Item { Layout.fillWidth: true }
+                                                Text {
+                                                    text: sizeRow.localPct + "%"
+                                                    color: bar.subtext
+                                                    font.pixelSize: 10
+                                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                }
+                                            }
+
+                                            Slider {
+                                                id: sizeSlider
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 18
+                                                from: 80
+                                                to: 180
+                                                stepSize: 5
+                                                value: sizeRow.localPct
+                                                onMoved: {
+                                                    sizeRow.localPct = Math.round(value)
+                                                    root.setScalePercent(sizeRow.wid, sizeRow.localPct)
+                                                }
+                                                onPressedChanged: {
+                                                    if (!pressed)
+                                                        root.setScalePercent(sizeRow.wid, sizeRow.localPct)
+                                                }
+
+                                                background: Rectangle {
+                                                    x: sizeSlider.leftPadding
+                                                    y: sizeSlider.topPadding + sizeSlider.availableHeight / 2 - height / 2
+                                                    implicitWidth: 200
+                                                    implicitHeight: 6
+                                                    width: sizeSlider.availableWidth
+                                                    height: 6
+                                                    radius: 3
+                                                    color: Qt.rgba(1, 1, 1, 0.12)
+
+                                                    // Filled “block” track
+                                                    Rectangle {
+                                                        width: sizeSlider.visualPosition * parent.width
+                                                        height: parent.height
+                                                        radius: 3
+                                                        color: bar.accent
+                                                    }
+                                                }
+                                                handle: Rectangle {
+                                                    x: sizeSlider.leftPadding + sizeSlider.visualPosition * (sizeSlider.availableWidth - width)
+                                                    y: sizeSlider.topPadding + sizeSlider.availableHeight / 2 - height / 2
+                                                    implicitWidth: 14
+                                                    implicitHeight: 14
+                                                    radius: 3
+                                                    color: sizeSlider.pressed ? bar.accent : bar.text
+                                                    border.width: 1
+                                                    border.color: bar.accent
                                                 }
                                             }
                                         }

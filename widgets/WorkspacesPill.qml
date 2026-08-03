@@ -39,11 +39,17 @@ Rectangle {
     required property var bar
 
     // === Layout (works in any bar zone — left, center, or right) ===
+    // Horizontal size only — chip widths/gaps scale; outer width matches once (no transform double-scale)
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("workspaces") : 1.0)
+    readonly property int _btnW: Math.max(18, Math.round(bar.wsButtonWidth * _ws))
+    readonly property int _btnH: bar.wsButtonHeight
+    readonly property int _gap: Math.max(2, Math.round((bar.wsSpacing || 4) * _ws))
     Layout.preferredWidth: wsRow.implicitWidth + 16
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
-    implicitWidth: wsRow.implicitWidth + 16
-    implicitHeight: bar.pillHeight
+    implicitWidth: Layout.preferredWidth
+    implicitHeight: Layout.preferredHeight
+    clip: true
 
     // === Appearance via config (bar aliases) ===
     color: bar.glassPillBg
@@ -379,7 +385,7 @@ Rectangle {
     Row {
         id: wsRow
         anchors.centerIn: parent
-        spacing: bar.wsSpacing || 4
+        spacing: root._gap
 
         Repeater {
             model: root.shownWorkspaces
@@ -400,8 +406,8 @@ Rectangle {
                 }
                 property bool isHovered: wsMouse.containsMouse
 
-                width: bar.wsButtonWidth
-                height: bar.wsButtonHeight
+                width: root._btnW
+                height: root._btnH
                 radius: bar.workspaceRadius
                 color: isActive ? bar.wsActiveBg :
                        (isHovered ? bar.iconHoverBg : "transparent")

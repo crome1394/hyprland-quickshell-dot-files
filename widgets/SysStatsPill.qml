@@ -48,16 +48,26 @@ Rectangle {
     required property Item barBg
     property bool mediaActive: false
 
-    Layout.preferredWidth: bar.statPillWidth
+    // Horizontal scale only. Scale section widths, gauges, and fonts together so
+    // labels/values never stack on top of each other when shrunk.
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("stats") : 1.0)
+    readonly property int _font: Math.max(9, Math.round(13 * _ws))
+    readonly property int _gaugeW: Math.max(18, Math.round(bar.statGaugeWidth * _ws))
+    readonly property int _gaugeH: Math.max(4, Math.round(bar.statGaugeHeight * _ws))
+    readonly property int _secW: Math.max(72, Math.round(bar.statPillSectionWidth * _ws))
+    readonly property int _rowGap: Math.max(3, Math.round(7 * _ws))
+    readonly property int _valGap: Math.max(2, Math.round(4 * _ws))
+    Layout.preferredWidth: Math.round(bar.statPillWidth * _ws)
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
     visible: !mediaActive && sysStatsReady
-    implicitWidth: bar.statPillWidth
-    implicitHeight: bar.pillHeight
+    implicitWidth: Layout.preferredWidth
+    implicitHeight: Layout.preferredHeight
     radius: bar.pillRadius
     color: bar.glassPillBg
     border.width: bar.controlBorderWidth
     border.color: bar.glassBorder
+    clip: true
 
     readonly property bool metricsPopupOpen: cpuMetricsPopup.visible || memMetricsPopup.visible || gpuMetricsPopup.visible
     property bool cpuLiveUpdates: true
@@ -307,17 +317,18 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: bar.statPillPaddingH
-        anchors.rightMargin: bar.statPillPaddingH
-        spacing: bar.statPillSpacing
+        anchors.leftMargin: Math.max(4, Math.round(bar.statPillPaddingH * root._ws))
+        anchors.rightMargin: Math.max(4, Math.round(bar.statPillPaddingH * root._ws))
+        spacing: Math.max(2, Math.round(bar.statPillSpacing * root._ws))
 
         // ----- CPU -----
         Rectangle {
             id: cpuSection
-            width: bar.statPillSectionWidth
+            width: root._secW
             height: 26
             radius: bar.workspaceRadius
             color: cpuClick.containsMouse ? bar.iconHoverBg : "transparent"
+            clip: true
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
@@ -342,11 +353,11 @@ Rectangle {
 
             Row {
                 anchors.centerIn: parent
-                spacing: 7
+                spacing: root._rowGap
 
                 Text {
                     text: "CPU"
-                    font.pixelSize: 13
+                    font.pixelSize: root._font
                     font.bold: true
                     font.family: bar.fontFamily
                     color: cpuClick.containsMouse ? bar.accent : bar.subtext
@@ -354,8 +365,8 @@ Rectangle {
                 }
 
                 Item {
-                    width: bar.statGaugeWidth
-                    height: bar.statGaugeHeight
+                    width: root._gaugeW
+                    height: root._gaugeH
                     anchors.verticalCenter: parent.verticalCenter
 
                     Rectangle {
@@ -368,7 +379,7 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.cpuUtil / 100)))
-                        height: bar.statGaugeHeight
+                        height: root._gaugeH
                         radius: bar.statGaugeRadius
                         color: bar.statUtilColor(root.cpuUtil)
 
@@ -379,25 +390,25 @@ Rectangle {
                 }
 
                 Row {
-                    spacing: 4
+                    spacing: root._valGap
                     anchors.verticalCenter: parent.verticalCenter
 
                     Text {
                         text: Math.round(root.cpuUtil) + "%"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.bold: true
                         font.family: bar.fontFamily
                         color: bar.statUtilColor(root.cpuUtil)
                     }
                     Text {
                         text: "|"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.family: bar.fontFamily
                         color: bar.statValueSeparator
                     }
                     Text {
                         text: root.cpuTemp + "°"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.bold: true
                         font.family: bar.fontFamily
                         color: bar.statTempColor(root.cpuTemp)
@@ -416,10 +427,11 @@ Rectangle {
         // ----- Memory -----
         Rectangle {
             id: memSection
-            width: bar.statPillSectionWidth
+            width: root._secW
             height: 26
             radius: bar.workspaceRadius
             color: memClick.containsMouse ? bar.iconHoverBg : "transparent"
+            clip: true
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
@@ -444,11 +456,11 @@ Rectangle {
 
             Row {
                 anchors.centerIn: parent
-                spacing: 7
+                spacing: root._rowGap
 
                 Text {
                     text: "Memory"
-                    font.pixelSize: 13
+                    font.pixelSize: root._font
                     font.bold: true
                     font.family: bar.fontFamily
                     color: memClick.containsMouse ? bar.accent : bar.subtext
@@ -456,8 +468,8 @@ Rectangle {
                 }
 
                 Item {
-                    width: bar.statGaugeWidth
-                    height: bar.statGaugeHeight
+                    width: root._gaugeW
+                    height: root._gaugeH
                     anchors.verticalCenter: parent.verticalCenter
 
                     Rectangle {
@@ -470,7 +482,7 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.memUtil / 100)))
-                        height: bar.statGaugeHeight
+                        height: root._gaugeH
                         radius: bar.statGaugeRadius
                         color: bar.statUtilColor(root.memUtil)
 
@@ -481,25 +493,25 @@ Rectangle {
                 }
 
                 Row {
-                    spacing: 4
+                    spacing: root._valGap
                     anchors.verticalCenter: parent.verticalCenter
 
                     Text {
                         text: Math.round(root.memUtil) + "%"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.bold: true
                         font.family: bar.fontFamily
                         color: bar.statUtilColor(root.memUtil)
                     }
                     Text {
                         text: "|"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.family: bar.fontFamily
                         color: bar.statValueSeparator
                     }
                     Text {
                         text: root.memUsedGib.toFixed(0) + "G"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.bold: true
                         font.family: bar.fontFamily
                         color: bar.subtext
@@ -518,10 +530,11 @@ Rectangle {
         // ----- GPU -----
         Rectangle {
             id: gpuSection
-            width: bar.statPillSectionWidth
+            width: root._secW
             height: 26
             radius: bar.workspaceRadius
             color: gpuClick.containsMouse ? bar.iconHoverBg : "transparent"
+            clip: true
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
@@ -546,11 +559,11 @@ Rectangle {
 
             Row {
                 anchors.centerIn: parent
-                spacing: 7
+                spacing: root._rowGap
 
                 Text {
                     text: "GPU"
-                    font.pixelSize: 13
+                    font.pixelSize: root._font
                     font.bold: true
                     font.family: bar.fontFamily
                     color: gpuClick.containsMouse ? bar.accent : bar.subtext
@@ -558,8 +571,8 @@ Rectangle {
                 }
 
                 Item {
-                    width: bar.statGaugeWidth
-                    height: bar.statGaugeHeight
+                    width: root._gaugeW
+                    height: root._gaugeH
                     anchors.verticalCenter: parent.verticalCenter
 
                     Rectangle {
@@ -572,7 +585,7 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.max(2, Math.min(parent.width, parent.width * (root.gpuUtil / 100)))
-                        height: bar.statGaugeHeight
+                        height: root._gaugeH
                         radius: bar.statGaugeRadius
                         color: bar.statUtilColor(root.gpuUtil)
 
@@ -583,19 +596,19 @@ Rectangle {
                 }
 
                 Row {
-                    spacing: 4
+                    spacing: root._valGap
                     anchors.verticalCenter: parent.verticalCenter
 
                     Text {
                         text: Math.round(root.gpuUtil) + "%"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.bold: true
                         font.family: bar.fontFamily
                         color: bar.statUtilColor(root.gpuUtil)
                     }
                     Text {
                         text: "|"
-                        font.pixelSize: 13
+                        font.pixelSize: root._font
                         font.family: bar.fontFamily
                         color: bar.statValueSeparator
                     }

@@ -18,7 +18,8 @@ Item {
 
     required property var bar
 
-    Layout.preferredWidth: 42
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("killTarget") : 1.0)
+    Layout.preferredWidth: Math.round(42 * _ws)
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 

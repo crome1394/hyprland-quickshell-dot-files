@@ -46,8 +46,9 @@ Rectangle {
     }
 
     // === Layout (for RowLayout participation in the bar) ===
-    Layout.preferredWidth: clockLabel.implicitWidth + 28
-    Layout.preferredHeight: 36
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("clock") : 1.0)
+    Layout.preferredWidth: Math.round((clockLabel.implicitWidth + 28) * _ws)
+    Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 
     // === Appearance via Theme ===
@@ -60,7 +61,7 @@ Rectangle {
     Rectangle {
         id: clockChip
         anchors.centerIn: parent
-        width: clockLabel.implicitWidth + 16
+        width: Math.round((clockLabel.implicitWidth + 16) * root._ws)
         height: parent.height - 8
         radius: bar.workspaceRadius
         color: clockArea.containsMouse ? bar.iconHoverBg : "transparent"
@@ -72,7 +73,7 @@ Rectangle {
             anchors.centerIn: parent
             text: Qt.formatDateTime(new Date(), root.clockFormat)
             color: bar.clock
-            font.pixelSize: bar.fontClock
+            font.pixelSize: Math.max(9, Math.round(bar.fontClock * root._ws))
             font.family: bar.fontMono
             font.bold: true
         }

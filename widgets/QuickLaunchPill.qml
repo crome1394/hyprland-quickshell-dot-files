@@ -27,10 +27,16 @@ Rectangle {
     // Local copy so Repeater rebinds when shell replaces the array
     property var appsModel: bar.quickLaunchApps || []
 
-    Layout.preferredWidth: Math.max(bar.quickLaunchIcon + bar.quickLaunchPaddingH * 2,
-                                    appsRow.implicitWidth + bar.quickLaunchPaddingH * 2)
-    Layout.preferredHeight: 36
+    // Horizontal scale only. Cell sizes already include _ws — do NOT multiply the
+    // total width by _ws again (that was shrinking the chrome under the icons).
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("quickLaunch") : 1.0)
+    readonly property int _icon: Math.max(12, Math.round(bar.quickLaunchIcon * _ws))
+    readonly property int _pad: Math.max(4, Math.round(bar.quickLaunchPaddingH * _ws))
+    readonly property int _gap: Math.max(2, Math.round(bar.quickLaunchSpacing * _ws))
+    Layout.preferredWidth: Math.max(_icon + _pad * 2, appsRow.implicitWidth + _pad * 2)
+    Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
+    clip: true
 
     radius: bar.pillRadius
     color: bar.pillBg
@@ -74,7 +80,7 @@ Rectangle {
     Row {
         id: appsRow
         anchors.centerIn: parent
-        spacing: bar.quickLaunchSpacing
+        spacing: root._gap
 
         Repeater {
             model: root.appsModel
@@ -84,18 +90,20 @@ Rectangle {
                 required property var modelData
                 required property int index
 
-                width: bar.quickLaunchIcon + 8
-                height: bar.quickLaunchIcon + 8
+                // Keep cells square so icons never squash into each other
+                width: root._icon + 8
+                height: root._icon + 8
                 radius: bar.workspaceRadius
                 color: launchClick.containsMouse ? bar.iconHoverBg : "transparent"
+                clip: true
 
                 Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
                 Image {
                     visible: !root.entryUsesGlyph(modelData)
                     anchors.centerIn: parent
-                    width: bar.quickLaunchIcon
-                    height: bar.quickLaunchIcon
+                    width: root._icon
+                    height: root._icon
                     source: modelData.icon || ""
                     fillMode: Image.PreserveAspectFit
                     smooth: true
@@ -106,7 +114,7 @@ Rectangle {
                     visible: root.entryUsesGlyph(modelData)
                     anchors.centerIn: parent
                     text: modelData.glyph || ""
-                    font.pixelSize: bar.quickLaunchIcon
+                    font.pixelSize: root._icon
                     font.family: bar.fontFamily
                     color: launchClick.containsMouse ? bar.accent : bar.subtext
                 }

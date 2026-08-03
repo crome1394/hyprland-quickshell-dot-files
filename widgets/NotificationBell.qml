@@ -45,7 +45,8 @@ Rectangle {
         return count > 0 ? "󱅫" : "󰂜"
     }
 
-    Layout.preferredWidth: 42
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("notifications") : 1.0)
+    Layout.preferredWidth: Math.round(42 * _ws)
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 
@@ -161,7 +162,7 @@ Rectangle {
         id: bellIcon
         anchors.centerIn: parent
         text: root.bellGlyph
-        font.pixelSize: bar.iconSizePillLarge
+        font.pixelSize: Math.max(10, Math.round(bar.iconSizePillLarge * root._ws))
         font.family: bar.fontFamily
         color: dnd
                ? bar.notificationDndAccent

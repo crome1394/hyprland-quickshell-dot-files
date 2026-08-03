@@ -480,9 +480,17 @@ QtObject {
     readonly property string barPositionIconBottom: "󰁅"  // shown when bar is on top (click → move to bottom)
     readonly property string iconHyprInsp:          "󰒓"  // Hyprland Config Inspector bar pill
 
-    // Display controls in BarControlBar (family × Hz → hypr-resolution profiles)
-    // Daily 32:9 only in the strip; "More…" opens the full Rofi menu for recording modes.
+    // Display controls (hypr-resolution CLI still available; bar UI uses Wallpaper panel)
     readonly property string hyprResolutionBin: "hypr-resolution"  // on PATH, or absolute path
+
+    // Wallpaper (BarControlBar → Wallpaper panel; hyprpaper apply)
+    readonly property string wallpaperDir: "/home/crome/Pictures/wallpapers"
+    readonly property string wallpaperMonitor: "DP-1"
+    readonly property string wallpaperFitMode: "cover"
+    readonly property string wallpaperListScript:  "/home/crome/.config/quickshell/scripts/wallpaper-list-json.sh"
+    readonly property string wallpaperApplyScript: "/home/crome/.config/quickshell/scripts/wallpaper-apply.sh"
+    readonly property string wallpaperAddScript:   "/home/crome/.config/quickshell/scripts/wallpaper-add.sh"
+    readonly property string wallpaperPickDirScript: "/home/crome/.config/quickshell/scripts/wallpaper-pick-dir.sh"
 
     // Clock format (Qt.formatDateTime) — editable from BarControlBar; persisted in bar-layout.json
     readonly property string clockFormat: "dddd, MM·dd·yyyy | HH:mm:ss"
@@ -507,7 +515,6 @@ QtObject {
         { id: "stats",         zone: "right" },
         { id: "tray",          zone: "right" },
         { id: "connectivity",  zone: "right" },
-        { id: "audio",         zone: "right" },
         { id: "clock",         zone: "right" },
         { id: "notifications", zone: "right" },
         { id: "killTarget",    zone: "right" },

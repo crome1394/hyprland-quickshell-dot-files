@@ -42,7 +42,8 @@ Rectangle {
     required property Item barBg
 
     // === Layout (for RowLayout participation in the bar) ===
-    Layout.preferredWidth: 42
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("power") : 1.0)
+    Layout.preferredWidth: Math.round(42 * _ws)
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
 
@@ -56,7 +57,7 @@ Rectangle {
         id: powerIcon
         anchors.centerIn: parent
         text: bar.iconPower
-        font.pixelSize: bar.iconSizePillLarge
+        font.pixelSize: Math.max(10, Math.round(bar.iconSizePillLarge * _ws))
         font.family: bar.fontFamily
         color: powerMouse.containsMouse ? bar.accent : bar.subtext
     }

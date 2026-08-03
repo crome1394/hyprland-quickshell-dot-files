@@ -147,6 +147,13 @@ ShellRoot {
     // Runtime Quick Launch pins (Config default, editable from BarControlBar, persisted)
     property var quickLaunchApps: []
 
+    // Wallpaper directory (Config default; editable from BarControlBar, persisted)
+    property string wallpaperDir: "/home/crome/Pictures/wallpapers"
+    property string wallpaperCurrent: ""
+
+    // Per-widget pill scale (1.0 = default). Keys match widgetCatalog / layout ids.
+    property var widgetScales: ({})
+
     // Density: auto-hide deprioritized pills on narrow screens (see Config.uiDensity*).
     // User/IPC show* flags stay as preferences; density gates actual visibility.
     property bool densityHideQuickLaunch: false
@@ -173,8 +180,7 @@ ShellRoot {
         { id: "workspaces",    label: "Workspaces",    vis: "showWorkspacesPill" },
         { id: "stats",         label: "Sys Stats",     vis: "showStatsWidget" },
         { id: "tray",          label: "System Tray",   vis: "showTrayPill" },
-        { id: "connectivity",  label: "Network+BT",    vis: "connectivity" },
-        { id: "audio",         label: "Audio",         vis: "showAudioPill" },
+        { id: "connectivity",  label: "Net · BT · Audio", vis: "connectivity" },
         { id: "clock",         label: "Clock",         vis: "showClockPill" },
         { id: "notifications", label: "Notifications", vis: "showNotificationPill" },
         { id: "killTarget",    label: "Kill Target",   vis: "showKillTargetPill" },
@@ -277,6 +283,7 @@ ShellRoot {
             root.clockFormat = cfg.clockFormat || root.clockFormat
             root.widgetLayout = bar.cloneDefaultLayout()
             root.quickLaunchApps = bar.cloneQuickLaunchApps()
+            root.wallpaperDir = cfg.wallpaperDir || root.wallpaperDir
 
             // Bar edge: Config default, then optional persisted override from state file.
             bar.barPosition = (cfg.barPosition === "bottom") ? "bottom" : "top"
@@ -419,6 +426,17 @@ ShellRoot {
                             root.quickLaunchApps = bar.normalizeQuickLaunchApps(qa)
                     } catch (e) {}
                 }
+                if (barLayoutAdapter.wallpaperDir && barLayoutAdapter.wallpaperDir.length)
+                    root.wallpaperDir = barLayoutAdapter.wallpaperDir
+                if (barLayoutAdapter.wallpaperCurrent && barLayoutAdapter.wallpaperCurrent.length)
+                    root.wallpaperCurrent = barLayoutAdapter.wallpaperCurrent
+                if (barLayoutAdapter.widgetScalesJson && barLayoutAdapter.widgetScalesJson.length > 2) {
+                    try {
+                        const sc = JSON.parse(barLayoutAdapter.widgetScalesJson)
+                        if (sc && typeof sc === "object")
+                            root.widgetScales = sc
+                    } catch (e) {}
+                }
                 bar.applyUiScale()
                 Qt.callLater(function() { bar.applyWidgetLayout() })
             }
@@ -432,6 +450,9 @@ ShellRoot {
                 property string clockFormat: ""
                 property string widgetLayoutJson: ""
                 property string quickLaunchAppsJson: ""
+                property string wallpaperDir: ""
+                property string wallpaperCurrent: ""
+                property string widgetScalesJson: ""
                 property bool showLauncherPill: true
                 property bool showQuickLaunchPill: true
                 property bool showMediaWidget: false
@@ -464,6 +485,13 @@ ShellRoot {
                 barLayoutAdapter.quickLaunchAppsJson = JSON.stringify(root.quickLaunchApps || [])
             } catch (e) {
                 barLayoutAdapter.quickLaunchAppsJson = "[]"
+            }
+            barLayoutAdapter.wallpaperDir = root.wallpaperDir || ""
+            barLayoutAdapter.wallpaperCurrent = root.wallpaperCurrent || ""
+            try {
+                barLayoutAdapter.widgetScalesJson = JSON.stringify(root.widgetScales || {})
+            } catch (e) {
+                barLayoutAdapter.widgetScalesJson = "{}"
             }
             barLayoutAdapter.showLauncherPill = root.showLauncherPill
             barLayoutAdapter.showQuickLaunchPill = root.showQuickLaunchPill
@@ -523,11 +551,17 @@ ShellRoot {
             if (arr && arr.length) {
                 for (let i = 0; i < arr.length; i++) {
                     const e = arr[i]
-                    if (!e || !e.id || !known[e.id] || seen[e.id])
+                    if (!e || !e.id)
                         continue
-                    seen[e.id] = true
+                    // Migrate legacy standalone "audio" layout entry into connectivity unit
+                    let id = String(e.id)
+                    if (id === "audio")
+                        id = "connectivity"
+                    if (!known[id] || seen[id])
+                        continue
+                    seen[id] = true
                     out.push({
-                        id: String(e.id),
+                        id: id,
                         zone: (e.zone === "center" || e.zone === "right") ? String(e.zone) : "left"
                     })
                 }
@@ -551,7 +585,7 @@ ShellRoot {
             case "stats": return sysStatsPill
             case "tray": return trayPill
             case "connectivity": return connectivityPill
-            case "audio": return audioPill
+            case "audio": return null  // audio lives inside connectivityPill
             case "clock": return clockPill
             case "notifications": return notificationBell
             case "killTarget": return killTargetPill
@@ -606,7 +640,7 @@ ShellRoot {
             case "workspaces": return root.showWorkspacesPill
             case "stats": return root.showStatsWidget
             case "tray": return root.showTrayPill
-            case "connectivity": return root.showNetworkPill || root.showBluetoothPill
+            case "connectivity": return root.showNetworkPill || root.showBluetoothPill || root.showAudioPill
             case "network": return root.showNetworkPill
             case "bluetooth": return root.showBluetoothPill
             case "audio": return root.showAudioPill
@@ -632,6 +666,7 @@ ShellRoot {
             case "connectivity":
                 root.showNetworkPill = on
                 root.showBluetoothPill = on
+                root.showAudioPill = on
                 break
             case "network": root.showNetworkPill = on; break
             case "bluetooth": root.showBluetoothPill = on; break
@@ -787,6 +822,105 @@ ShellRoot {
 
         function resetQuickLaunchApps() {
             root.quickLaunchApps = bar.cloneQuickLaunchApps()
+            persistBarLayout()
+        }
+
+        function setWallpaperDir(dir) {
+            const d = String(dir || "").trim()
+            if (!d.length)
+                return
+            root.wallpaperDir = d
+            persistBarLayout()
+        }
+
+        function setWallpaperCurrent(path) {
+            root.wallpaperCurrent = String(path || "")
+            persistBarLayout()
+        }
+
+        function applyWallpaper(path) {
+            const p = String(path || "").trim()
+            if (!p.length)
+                return
+            const script = cfg.wallpaperApplyScript || ""
+            const mon = cfg.wallpaperMonitor || "DP-1"
+            if (!script.length)
+                return
+            Quickshell.execDetached([script, p, mon])
+            root.wallpaperCurrent = p
+            persistBarLayout()
+        }
+
+        function widgetScale(id) {
+            const key = String(id || "")
+            const m = root.widgetScales || {}
+            let s = 1.0
+            try {
+                if (m[key] !== undefined && m[key] !== null)
+                    s = Number(m[key])
+            } catch (e) {}
+            if (!(s > 0))
+                s = 1.0
+            // Floor at 80% — below that labels/icons start colliding even when
+            // fonts/gauges scale (especially Sys Stats and Quick Launch).
+            if (s < 0.8)
+                s = 0.8
+            if (s > 1.8)
+                s = 1.8
+            return s
+        }
+
+        // Height stays at the global pill height — scale is horizontal only.
+        function widgetPillH(id) {
+            return pillHeight
+        }
+
+        // Scale a base width (or any horizontal metric) by the widget's size factor.
+        function widgetW(id, base) {
+            const b = Number(base)
+            if (!(b > 0))
+                return 0
+            return Math.max(1, Math.round(b * widgetScale(id)))
+        }
+
+        // Debounce disk writes while dragging size sliders (avoid thrashing bar-layout.json).
+        Timer {
+            id: scalePersistTimer
+            interval: 280
+            repeat: false
+            onTriggered: bar.persistBarLayout()
+        }
+
+        function setWidgetScale(id, scale) {
+            const key = String(id || "")
+            if (!key.length)
+                return
+            let s = Number(scale)
+            if (!(s > 0))
+                return
+            if (s < 0.8)
+                s = 0.8
+            if (s > 1.8)
+                s = 1.8
+            // Round to 2 decimals for stable UI / fewer no-op updates
+            s = Math.round(s * 100) / 100
+            const cur = root.widgetScales || {}
+            const prev = (cur[key] !== undefined && cur[key] !== null) ? Number(cur[key]) : 1.0
+            if (Math.abs(prev - s) < 0.001)
+                return
+            const next = {}
+            const keys = Object.keys(cur)
+            for (let i = 0; i < keys.length; i++)
+                next[keys[i]] = cur[keys[i]]
+            next[key] = s
+            root.widgetScales = next
+            // Live UI updates via property binding; persist shortly after drag settles
+            scalePersistTimer.restart()
+        }
+
+        function resetWidgetScales() {
+            scalePersistTimer.stop()
+            root.widgetScales = ({})
             persistBarLayout()
         }
 
@@ -975,8 +1109,16 @@ ShellRoot {
         readonly property alias quickLaunchPaddingH: cfg.quickLaunchPaddingH
         // Runtime list (editable from BarControlBar); falls back to Config via clone on start
         property alias quickLaunchApps: root.quickLaunchApps
+        property alias wallpaperDir: root.wallpaperDir
+        property alias wallpaperCurrent: root.wallpaperCurrent
+        property alias widgetScales: root.widgetScales
         // Desktop app picker script for the Launch panel
         readonly property string desktopAppsJsonScript: "/home/crome/.config/quickshell/scripts/desktop-apps-json.sh"
+        readonly property alias wallpaperListScript: cfg.wallpaperListScript
+        readonly property alias wallpaperApplyScript: cfg.wallpaperApplyScript
+        readonly property alias wallpaperAddScript: cfg.wallpaperAddScript
+        readonly property alias wallpaperPickDirScript: cfg.wallpaperPickDirScript
+        readonly property alias wallpaperMonitor: cfg.wallpaperMonitor
 
         // --- Popup sizes
         readonly property alias popupAudioWidth: cfg.popupAudioWidth
@@ -1280,7 +1422,7 @@ ShellRoot {
                 id: launcherPill
                 parent: widgetPool
                 visible: root.showLauncherPill
-                Layout.preferredWidth: bar.sp(42)
+                Layout.preferredWidth: bar.widgetW("launcher", bar.sp(42))
                 Layout.preferredHeight: bar.pillHeight
                 Layout.alignment: Qt.AlignVCenter
                 radius: bar.pillRadius
@@ -1291,7 +1433,7 @@ ShellRoot {
                 Text {
                     anchors.centerIn: parent
                     text: bar.iconLauncher
-                    font.pixelSize: bar.iconSizePillLarge
+                    font.pixelSize: bar.widgetW("launcher", bar.iconSizePillLarge)
                     font.family: bar.fontFamily
                     color: launcherMouse.containsMouse ? bar.accent : bar.subtext
                 }
@@ -1361,11 +1503,11 @@ ShellRoot {
                 barBg: barBg
             }
 
-            // ─ Connectivity (Network + Bluetooth as one layout unit) ─
+            // ─ Connectivity + Audio (Network · Bluetooth · Sound as one pill) ─
             Rectangle {
                 id: connectivityPill
                 parent: widgetPool
-                visible: root.effConnectivity
+                visible: root.effConnectivity || root.showAudioPill
                 Layout.preferredHeight: bar.pillHeight
                 Layout.preferredWidth: connectivityRow.implicitWidth + 10
                 Layout.alignment: Qt.AlignVCenter
@@ -1377,11 +1519,12 @@ ShellRoot {
                 Row {
                     id: connectivityRow
                     anchors.centerIn: parent
-                    spacing: 4
+                    spacing: Math.max(2, bar.widgetW("connectivity", 4))
 
                     NetworkPill {
                         id: networkPill
                         embedded: true
+                        pillScale: bar.widgetScale("connectivity")
                         visible: root.effNetwork
                         bar: bar
                         barBg: barBg
@@ -1389,7 +1532,7 @@ ShellRoot {
 
                     Rectangle {
                         visible: root.effNetwork && root.effBluetooth
-                        width: bar.dividerThickness
+                        width: Math.max(1, bar.widgetW("connectivity", bar.dividerThickness))
                         height: 17
                         anchors.verticalCenter: parent.verticalCenter
                         color: bar.divider
@@ -1398,20 +1541,29 @@ ShellRoot {
                     BluetoothPill {
                         id: bluetoothPill
                         embedded: true
+                        pillScale: bar.widgetScale("connectivity")
                         visible: root.effBluetooth
                         bar: bar
                         barBg: barBg
                     }
-                }
-            }
 
-            // ─ Audio ─
-            AudioPill {
-                id: audioPill
-                parent: widgetPool
-                visible: root.showAudioPill
-                bar: bar
-                barBg: barBg
+                    Rectangle {
+                        visible: (root.effNetwork || root.effBluetooth) && root.showAudioPill
+                        width: Math.max(1, bar.widgetW("connectivity", bar.dividerThickness))
+                        height: 17
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: bar.divider
+                    }
+
+                    AudioPill {
+                        id: audioPill
+                        embedded: true
+                        pillScale: bar.widgetScale("connectivity")
+                        visible: root.showAudioPill
+                        bar: bar
+                        barBg: barBg
+                    }
+                }
             }
 
             // ─ Clock + Calendar ─
@@ -1445,7 +1597,7 @@ ShellRoot {
                 id: hyprInspPill
                 parent: widgetPool
                 visible: root.showHyprInspPill
-                Layout.preferredWidth: bar.sp(42)
+                Layout.preferredWidth: bar.widgetW("hyprInsp", bar.sp(42))
                 Layout.preferredHeight: bar.pillHeight
                 Layout.alignment: Qt.AlignVCenter
                 radius: bar.pillRadius
@@ -1456,7 +1608,7 @@ ShellRoot {
                 Text {
                     anchors.centerIn: parent
                     text: bar.iconHyprInsp
-                    font.pixelSize: bar.iconSizePillLarge
+                    font.pixelSize: bar.widgetW("hyprInsp", bar.iconSizePillLarge)
                     font.family: bar.fontFamily
                     color: hyprInspMouse.containsMouse ? bar.accent : bar.subtext
                 }

@@ -45,6 +45,8 @@ import "../components"
 // Dependencies:
 //   - required property var bar
 //   - required property Item barBg (for popup positioning)
+//   - property bool embedded — when true, omit outer chrome (grouped Net/BT/Audio pill)
+//   - property real pillScale — multiplies horizontal content width (BarControlBar Sizes)
 //   - Quickshell.Services.Pipewire (volume, channels, PwNodePeakMonitor)
 //   - scripts/audio-control.sh (card profile list/set; L/R pactl fallback)
 //
@@ -61,16 +63,36 @@ Rectangle {
     required property var bar
     required property Item barBg
 
+    // When true, section inside shared connectivity/audio pill (no own border/bg).
+    property bool embedded: false
+    // Horizontal scale from BarControlBar Sizes panel (1.0 = default). Height stays fixed.
+    property real pillScale: 1.0
+
+    readonly property real _s: (pillScale > 0 ? pillScale : 1)
+    readonly property int _contentW: Math.max(80, Math.round(bar.audioViewContentWidth * _s))
+    readonly property int _barW: Math.max(40, Math.round(110 * _s))
+    readonly property int _h: bar.pillHeight
+
     // === Layout ===
-    Layout.preferredWidth: bar.audioViewContentWidth + bar.pillHPadding
-    Layout.preferredHeight: bar.pillHeight
+    Layout.preferredWidth: embedded
+        ? (_contentW + 12)
+        : (_contentW + bar.pillHPadding)
+    Layout.preferredHeight: embedded ? Math.max(18, _h - 8) : _h
     Layout.alignment: Qt.AlignVCenter
+    width: Layout.preferredWidth
+    height: Layout.preferredHeight
+    implicitWidth: Layout.preferredWidth
+    implicitHeight: Layout.preferredHeight
 
     // === Appearance via Theme ===
-    radius: bar.pillRadius
-    color: bar.pillBg
-    border.width: bar.controlBorderWidth
-    border.color: bar.pillBorder
+    radius: embedded ? bar.workspaceRadius : bar.pillRadius
+    color: {
+        if (embedded)
+            return audioHover.containsMouse ? bar.iconHoverBg : "transparent"
+        return bar.pillBg
+    }
+    border.width: embedded ? 0 : bar.controlBorderWidth
+    border.color: embedded ? "transparent" : bar.pillBorder
 
     // ===== AUDIO STATE =====
     // Track only our debounced speaker/mic refs — NEVER bind PwObjectTracker to
@@ -1464,13 +1486,18 @@ Rectangle {
 
     // Content chip: per-item hover (same token as QuickLaunch / SysStats)
     // MouseArea stays on the chip so padding outside does not light the whole pill.
+    // When embedded, the outer rect is already the chip (no double chrome).
     Rectangle {
         id: audioContent
         anchors.centerIn: parent
-        width: bar.audioViewContentWidth
-        height: parent.height - 8
+        width: root._contentW
+        height: embedded ? parent.height : Math.max(18, parent.height - 8)
         radius: bar.workspaceRadius
-        color: audioHover.containsMouse ? bar.iconHoverBg : "transparent"
+        color: {
+            if (embedded)
+                return "transparent"
+            return audioHover.containsMouse ? bar.iconHoverBg : "transparent"
+        }
         implicitWidth: width
         implicitHeight: height
 
@@ -1522,7 +1549,7 @@ Rectangle {
             }
 
             Item {
-                width: 110; height: 18
+                width: root._barW; height: 18
                 anchors.verticalCenter: parent.verticalCenter
 
                 VolumeBar {
@@ -1609,7 +1636,7 @@ Rectangle {
             }
 
             Item {
-                width: 110; height: 18
+                width: root._barW; height: 18
                 anchors.verticalCenter: parent.verticalCenter
 
                 VolumeBar {
@@ -1702,7 +1729,7 @@ Rectangle {
                         }
                     }
                     Item {
-                        width: bar.audioDualBarWidth || 72
+                        width: Math.max(32, Math.round((bar.audioDualBarWidth || 72) * root._s))
                         height: 16
                         anchors.verticalCenter: parent.verticalCenter
                         MiniVolumeBar {
@@ -1798,7 +1825,7 @@ Rectangle {
                         }
                     }
                     Item {
-                        width: bar.audioDualBarWidth || 72
+                        width: Math.max(32, Math.round((bar.audioDualBarWidth || 72) * root._s))
                         height: 16
                         anchors.verticalCenter: parent.verticalCenter
                         MiniVolumeBar {

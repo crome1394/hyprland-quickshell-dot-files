@@ -58,6 +58,12 @@ Rectangle {
     // When true, this widget is a section inside a shared connectivity pill
     // (no own background/border; hover uses iconHoverBg like SysStats sections).
     property bool embedded: false
+    // Horizontal scale only (BarControlBar Sizes). Height stays bar.pillHeight.
+    property real pillScale: 1.0
+    readonly property real _s: (pillScale > 0 ? pillScale : 1)
+    readonly property real _h: bar.pillHeight
+    readonly property int _padW: embedded ? 12 : 14
+    readonly property int _naturalW: btContent.implicitWidth + _padW
 
     readonly property string audioControlScript: "/home/crome/.config/quickshell/scripts/audio-control.sh"
     readonly property string bluemanControlScript: "/home/crome/.config/quickshell/scripts/blueman-applet-control.sh"
@@ -77,8 +83,8 @@ Rectangle {
     property string appletStatusMsg: ""
 
     // Standalone: full pill size. Embedded: content chip sized for shared shell.
-    implicitWidth: btContent.implicitWidth + (embedded ? 12 : 14)
-    implicitHeight: embedded ? (bar.pillHeight - 8) : bar.pillHeight
+    implicitWidth: Math.round(_naturalW * _s)
+    implicitHeight: embedded ? Math.max(18, _h - 8) : _h
     width: implicitWidth
     height: implicitHeight
     Layout.preferredWidth: implicitWidth
@@ -714,17 +720,17 @@ Rectangle {
 
         Row {
             id: pillRow
-            spacing: 6
+            spacing: Math.max(3, Math.round(6 * root._s))
             anchors.centerIn: parent
 
             Item {
-                width: bar.iconSizeTray
-                height: bar.iconSizeTray
+                width: Math.max(12, Math.round(bar.iconSizeTray * root._s))
+                height: Math.max(12, Math.round(bar.iconSizeTray * root._s))
                 anchors.verticalCenter: parent.verticalCenter
                 Text {
                     anchors.centerIn: parent
                     text: bt.pillGlyph
-                    font.pixelSize: bar.iconSizeTray
+                    font.pixelSize: Math.max(12, Math.round(bar.iconSizeTray * root._s))
                     font.family: bar.fontFamily
                     color: bt.pillGlyphColor
                 }

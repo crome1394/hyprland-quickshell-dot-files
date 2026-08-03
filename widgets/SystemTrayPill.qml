@@ -41,12 +41,17 @@ Rectangle {
     required property Item barBg
 
     visible: SystemTray.items.values.length > 0
-    Layout.preferredWidth: visible ? (trayContent.implicitWidth + 14) : 0
+    // Scale cell sizes once; outer width follows implicit content (no transform double-scale)
+    readonly property real _ws: (bar.widgetScale ? bar.widgetScale("tray") : 1.0)
+    readonly property int _icon: Math.max(12, Math.round(bar.iconSizeTray * _ws))
+    readonly property int _gap: Math.max(2, Math.round(4 * _ws))
+    Layout.preferredWidth: visible ? (trayContent.implicitWidth + Math.round(14 * _ws)) : 0
     Layout.preferredHeight: bar.pillHeight
     radius: bar.pillRadius
     color: bar.pillBg
     border.width: bar.controlBorderWidth
     border.color: bar.pillBorder
+    clip: true
 
     Item {
         id: trayContent
@@ -56,7 +61,7 @@ Rectangle {
 
         Row {
             id: trayIconsRow
-            spacing: 4
+            spacing: root._gap
             anchors.centerIn: parent
 
             Repeater {
@@ -65,8 +70,8 @@ Rectangle {
                 delegate: Rectangle {
                     id: trayIconItem
                     required property var modelData
-                    width: bar.iconSizeTray + 8
-                    height: bar.iconSizeTray + 8
+                    width: root._icon + 8
+                    height: root._icon + 8
                     radius: bar.workspaceRadius
                     color: trayIconMa.containsMouse ? bar.iconHoverBg : "transparent"
 
@@ -74,8 +79,8 @@ Rectangle {
 
                     IconImage {
                         anchors.centerIn: parent
-                        width: bar.iconSizeTray
-                        height: bar.iconSizeTray
+                        width: root._icon
+                        height: root._icon
                         source: modelData ? modelData.icon : ""
                     }
 
