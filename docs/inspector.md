@@ -74,7 +74,7 @@ If you are used to one monolithic `hyprland.conf`, think of `hyprland.lua` as a 
 
 | Tab | Description |
 |-----|-------------|
-| **Key Bindings** | Parsed `hl.bind` entries from `keybindings.lua` (key + `--#` description as action) |
+| **Key Bindings** | Parsed `hl.bind` entries from `keybindings.lua` (key + `--#` description as action). The control strip **Keybinds** panel can edit chord/category/description; this tab stays read-only browse. |
 | **Environment** | Parsed `hl.env` entries from `environment-variables.lua` (variable, value, `--#` comment) |
 | **Runtime Options** | Live Hyprland options via `hyprctl getoption`, grouped by category with wiki links |
 | **Config Files** | Browse all split `config/*.lua` modules plus Hypridle/Hyprlock/Hyprpaper configs; syntax highlighting, search, copy, and edit |

@@ -13,6 +13,7 @@ Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar o
 | **Launch** | Quick Launch pins (installed apps or custom) |
 | **Autostart** | XDG `~/.config/autostart` (see Autostart subsection) |
 | **Services** | systemd user/system units — filter, select, **Start / Stop / Restart** (reuses Inspector `ServicesView`) |
+| **Keybinds** | Browse `keybindings.lua` by category; **edit key chord, category, description** (not the action) |
 | **Clock** | Clock format presets |
 
 ## Options panel
@@ -53,3 +54,17 @@ Quick recovery for systemd units without opening the full Config Inspector. Embe
 - User units: `systemctl --user`. System units may prompt for polkit (same as [inspector.md](inspector.md))
 
 Full metrics/logs/config browsing remains in the Hyprland Config Inspector (`qs ipc call hyprConfigInsp toggle`).
+
+## Keybinds panel
+
+Browse and lightly edit Hyprland binds without opening the full Inspector. Source of truth: `~/.config/hypr/config/keybindings.lua`.
+
+- Same **categories** and **descriptions** as the Inspector (`--#Category# description` convention — see [inspector.md](inspector.md))
+- Rows show key pills + description; **Edit** opens a form for:
+  - **Key** chord (e.g. `SUPER + T`)
+  - **Category**
+  - **Description**
+- The Lua **action / dispatcher** (`hl.dsp.*`, plugins, options tables) is **not** editable here — use Config Files / your editor for that
+- Loop / dynamic keys (e.g. workspace `for` loop with `.. key`) are listed as **read-only**
+- Scripts: `scripts/keybinds-list-json.sh`, `scripts/keybinds-set.sh`
+- **Save** writes the file in place (timestamped `.bak.*` backup first). **Reload Hypr** runs `hyprctl reload` when you want the change live

@@ -7,8 +7,9 @@
 //
 // Single PopupWindow (grabFocus). Expandable panel on top; toolbar buttons
 // along the bottom: Position · Wallpaper · Widgets · Options · Launch ·
-// Autostart · Services · Clock
-// Widgets = layout; Options = behavior prefs; Services = systemd start/stop/restart.
+// Autostart · Services · Keybinds · Clock
+// Widgets = layout; Options = behavior prefs; Services = systemd;
+// Keybinds = edit chord/category/description in keybindings.lua.
 // Window height follows content; tall menus scroll only when needed.
 //
 // =============================================================================
@@ -33,7 +34,7 @@ Item {
     readonly property bool open: controlPopup.visible
 
     // "" | "position" | "wallpaper" | "widgets" | "options" | "launch" |
-    // "autostart" | "services" | "clock"
+    // "autostart" | "services" | "keybinds" | "clock"
     // ("sizes" accepted as alias of "widgets" for any leftover callers)
     property string activeMenu: ""
     property int menuTick: 0
@@ -74,6 +75,9 @@ Item {
 
     // Services panel (reuse components/ServicesView.qml)
     property string servicesFilter: ""
+
+    // Keybinds panel (components/KeybindsView.qml)
+    property string keybindsFilter: ""
 
     readonly property int pad: (bar.popupSpacingTight !== undefined) ? bar.popupSpacingTight : 6
     readonly property int chipH: Math.max(26, Math.round((bar.pillHeight || 36) * 0.78))
@@ -1188,8 +1192,10 @@ Item {
                                     (root.activeMenu === "wallpaper"
                                      || root.activeMenu === "options"
                                      || root.activeMenu === "widgets"
-                                     || root.activeMenu === "services")
-                                        ? (root.activeMenu === "services" ? 620 : 520)
+                                     || root.activeMenu === "services"
+                                     || root.activeMenu === "keybinds")
+                                        ? ((root.activeMenu === "services"
+                                            || root.activeMenu === "keybinds") ? 620 : 520)
                                         : 420)
             implicitHeight: mainCol.implicitHeight + root.pad * 2
             radius: bar.popupRadius !== undefined ? bar.popupRadius : bar.barRadius
@@ -4381,6 +4387,70 @@ Item {
                                 }
                             }
 
+                            // ===== KEYBINDS (edit chord / category / description) =====
+                            ColumnLayout {
+                                id: keybindsPanel
+                                visible: root.activeMenu === "keybinds"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.max(320, root.panelMaxH - 12)
+                                spacing: 6
+
+                                Text {
+                                    text: "Keybindings"
+                                    color: bar.text
+                                    font.pixelSize: bar.popupTitleSize
+                                    font.bold: true
+                                    font.family: bar.fontFamily
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "From keybindings.lua (same categories as Inspector). Edit key, category, or description — not the action. Loop/dynamic binds are read-only. Save writes the file; use Reload Hypr to apply."
+                                    color: bar.overlay
+                                    font.pixelSize: bar.popupHintSize
+                                    font.family: bar.fontFamily
+                                }
+                                TextField {
+                                    id: keybindsFilterField
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 30
+                                    placeholderText: "Filter keybindings…"
+                                    color: bar.text
+                                    placeholderTextColor: bar.overlay
+                                    font.pixelSize: 12
+                                    font.family: bar.fontFamily
+                                    text: root.keybindsFilter
+                                    background: Rectangle {
+                                        radius: root.chipR
+                                        color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
+                                        border.width: 1
+                                        border.color: keybindsFilterField.activeFocus ? bar.accent : bar.pillBorder
+                                    }
+                                    onTextChanged: root.keybindsFilter = text
+                                }
+                                KeybindsView {
+                                    id: controlKeybinds
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    Layout.minimumHeight: 200
+                                    active: keybindsPanel.visible && controlPopup.visible
+                                    filterText: root.keybindsFilter
+                                    textColor: bar.text
+                                    subtextColor: bar.subtext
+                                    accentColor: bar.accent
+                                    surfaceColor: Qt.rgba(0.08, 0.08, 0.10, 0.95)
+                                    overlayColor: bar.overlay
+                                    okColor: root.onGreen
+                                    warnColor: "#e8c56a"
+                                    errorColor: root.offRed
+                                    fieldBg: root.optFieldBg
+                                    fieldBgFocus: root.optFieldBgFocus
+                                    pillBorder: bar.pillBorder
+                                    fontFamily: bar.fontFamily
+                                    fontMono: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                }
+                            }
+
                             // ===== CLOCK =====
                             ColumnLayout {
                                 visible: root.activeMenu === "clock"
@@ -4483,6 +4553,7 @@ Item {
                             { id: "launch",    label: "Launch" },
                             { id: "autostart", label: "Autostart" },
                             { id: "services",  label: "Services" },
+                            { id: "keybinds",  label: "Keybinds" },
                             { id: "clock",     label: "Clock" }
                         ]
                         delegate: Rectangle {
