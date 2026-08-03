@@ -1783,7 +1783,7 @@ Item {
                                             // Row 1 — three columns: [✓ name] | [L C R] | [↑ ↓]
                                             RowLayout {
                                                 Layout.fillWidth: true
-                                                spacing: 8
+                                                spacing: 10
 
                                                 // Column 1: toggle + full name
                                                 RowLayout {
