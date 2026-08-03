@@ -6,8 +6,9 @@
 // strip. Horizontally centered; stacks just inward from the main bar.
 //
 // Single PopupWindow (grabFocus). Expandable panel on top; toolbar buttons
-// along the bottom: Position · Wallpaper · Widgets · Options · Launch · Autostart · Clock
-// Widgets = layout; Options = behavior prefs (workspaces, echo cancel, applets, UI scale).
+// along the bottom: Position · Wallpaper · Widgets · Options · Launch ·
+// Autostart · Services · Clock
+// Widgets = layout; Options = behavior prefs; Services = systemd start/stop/restart.
 // Window height follows content; tall menus scroll only when needed.
 //
 // =============================================================================
@@ -17,6 +18,7 @@ import Quickshell.Io as Io
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import "../components"
 
 Item {
     id: root
@@ -30,7 +32,8 @@ Item {
     readonly property int _reopenGuardMs: 220
     readonly property bool open: controlPopup.visible
 
-    // "" | "position" | "wallpaper" | "widgets" | "options" | "launch" | "autostart" | "clock"
+    // "" | "position" | "wallpaper" | "widgets" | "options" | "launch" |
+    // "autostart" | "services" | "clock"
     // ("sizes" accepted as alias of "widgets" for any leftover callers)
     property string activeMenu: ""
     property int menuTick: 0
@@ -68,6 +71,9 @@ Item {
     property bool autostartLoading: false
     property string autostartStatus: ""
     property string autostartSearch: ""
+
+    // Services panel (reuse components/ServicesView.qml)
+    property string servicesFilter: ""
 
     readonly property int pad: (bar.popupSpacingTight !== undefined) ? bar.popupSpacingTight : 6
     readonly property int chipH: Math.max(26, Math.round((bar.pillHeight || 36) * 0.78))
@@ -1181,7 +1187,10 @@ Item {
             implicitWidth: Math.max(mainCol.implicitWidth + root.pad * 2,
                                     (root.activeMenu === "wallpaper"
                                      || root.activeMenu === "options"
-                                     || root.activeMenu === "widgets") ? 520 : 420)
+                                     || root.activeMenu === "widgets"
+                                     || root.activeMenu === "services")
+                                        ? (root.activeMenu === "services" ? 620 : 520)
+                                        : 420)
             implicitHeight: mainCol.implicitHeight + root.pad * 2
             radius: bar.popupRadius !== undefined ? bar.popupRadius : bar.barRadius
             color: bar.glassPopupBg
@@ -4290,6 +4299,88 @@ Item {
                                 }
                             }
 
+                            // ===== SERVICES (systemd — same engine as Inspector) =====
+                            ColumnLayout {
+                                id: servicesPanel
+                                visible: root.activeMenu === "services"
+                                Layout.fillWidth: true
+                                // Fixed tall panel; ServicesView scrolls internally (no outer double-scroll)
+                                Layout.preferredHeight: Math.max(320, root.panelMaxH - 12)
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Services"
+                                        color: bar.text
+                                        font.pixelSize: bar.popupTitleSize
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    Text {
+                                        visible: controlServices.lastError.length > 0
+                                        text: controlServices.lastError
+                                        color: root.offRed
+                                        font.pixelSize: 10
+                                        font.family: bar.fontFamily
+                                        elide: Text.ElideRight
+                                        Layout.maximumWidth: 220
+                                    }
+                                    Text {
+                                        visible: controlServices.lastAction.length > 0
+                                                 && controlServices.lastError.length === 0
+                                        text: controlServices.lastAction
+                                        color: root.onGreen
+                                        font.pixelSize: 10
+                                        font.family: bar.fontFamily
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "User and system units (same as Inspector Services). Select a row, then Start / Stop / Restart. System scope may prompt for polkit."
+                                    color: bar.overlay
+                                    font.pixelSize: bar.popupHintSize
+                                    font.family: bar.fontFamily
+                                }
+                                TextField {
+                                    id: servicesFilterField
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 30
+                                    placeholderText: "Filter services…"
+                                    color: bar.text
+                                    placeholderTextColor: bar.overlay
+                                    font.pixelSize: 12
+                                    font.family: bar.fontFamily
+                                    text: root.servicesFilter
+                                    background: Rectangle {
+                                        radius: root.chipR
+                                        color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
+                                        border.width: 1
+                                        border.color: servicesFilterField.activeFocus ? bar.accent : bar.pillBorder
+                                    }
+                                    onTextChanged: root.servicesFilter = text
+                                }
+                                ServicesView {
+                                    id: controlServices
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    Layout.minimumHeight: 200
+                                    active: servicesPanel.visible && controlPopup.visible
+                                    globalFilter: root.servicesFilter
+                                    textColor: bar.text
+                                    subtextColor: bar.subtext
+                                    accentColor: bar.accent
+                                    surfaceColor: Qt.rgba(0.08, 0.08, 0.10, 0.95)
+                                    overlayColor: bar.overlay
+                                    okColor: root.onGreen
+                                    warnColor: "#e8c56a"
+                                    errorColor: root.offRed
+                                }
+                            }
+
                             // ===== CLOCK =====
                             ColumnLayout {
                                 visible: root.activeMenu === "clock"
@@ -4391,6 +4482,7 @@ Item {
                             { id: "options",   label: "Options" },
                             { id: "launch",    label: "Launch" },
                             { id: "autostart", label: "Autostart" },
+                            { id: "services",  label: "Services" },
                             { id: "clock",     label: "Clock" }
                         ]
                         delegate: Rectangle {
@@ -4428,6 +4520,7 @@ Item {
                                     }
                                     if (modelData.id === "options")
                                         root.refreshOptions()
+                                    // ServicesView loads via active binding when panel opens
                                     root.toggleMenu(modelData.id)
                                 }
                             }

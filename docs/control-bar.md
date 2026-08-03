@@ -12,6 +12,7 @@ Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar o
 | **Options** | Behavior prefs (not layout) — table below |
 | **Launch** | Quick Launch pins (installed apps or custom) |
 | **Autostart** | XDG `~/.config/autostart` (see Autostart subsection) |
+| **Services** | systemd user/system units — filter, select, **Start / Stop / Restart** (reuses Inspector `ServicesView`) |
 | **Clock** | Clock format presets |
 
 ## Options panel
@@ -39,3 +40,16 @@ hl.exec_cmd("/home/crome/.config/quickshell/scripts/xdg-autostart-run.sh")
 ```
 
 Put Telegram/Discord workspace placement in **window rules** (e.g. `special:magic silent`), not in Autostart `exec` workspace options.
+
+## Services panel
+
+Quick recovery for systemd units without opening the full Config Inspector. Embeds `components/ServicesView.qml` (same UI as the Inspector **Services** tab):
+
+- Filter chips: **All / Running / Failed**, plus a text search field
+- Table: service name, status, state, loaded-since, description
+- Actions on the selected row: **Start**, **Stop**, **Restart**, **Refresh**
+- Scripts: `scripts/services-poller.sh`, `scripts/services-control.sh`
+- Polls only while the panel is open (`active` binding)
+- User units: `systemctl --user`. System units may prompt for polkit (same as [inspector.md](inspector.md))
+
+Full metrics/logs/config browsing remains in the Hyprland Config Inspector (`qs ipc call hyprConfigInsp toggle`).
