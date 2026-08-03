@@ -1,0 +1,105 @@
+<!-- Extracted from README for reference. See ../README.md for overview. -->
+
+# Configuration (`Config.qml`)
+
+`Config.qml` is the single source of truth for bar visuals, widget visibility defaults, and workspace behavior. `shell.qml` re-exports theme properties on the root `bar` object (e.g. `bar.accent`, `bar.wsMinimumShown`). The inspector loads a local `Config` instance for overlay-specific tokens.
+
+Edit `Config.qml` to change:
+
+- Colors, fonts, spacing, radii, and icon glyphs
+- Bar position and size (`barPosition`, `barHeight`, `barEdgeMargin`)
+- Bar pill visibility defaults (`showLauncherPill`, `showAudioPill`, etc.) and launcher command (`launcherCommand`)
+- **Quick Launch** apps (`quickLaunchApps`)
+- **Notification bell** daemon commands (`notification*`)
+- **Power menu** session commands (`power*Command`, `powerMenuActions`)
+- **Kill Target** pill (`killTargetIcon`, `showKillTargetPill`, etc.)
+- Workspace pill count, active-only mode, magic pill default, and startup focus (search **WORKSPACES**; IPC: `setWsMinimumShown`, `setWsShowOnlyActive`, `setWsStartupWorkspace`, `setWsStartupCloseMagic`)
+- System Stats pill and metrics popups (search **SYS STATS PILL** and `popupStats*`)
+- Inspector sizing and semantic colors (search `insp*` properties)
+
+Every property in `Config.qml` has an inline or section comment explaining what it does and which widget uses it. Search for the section headers in the file (e.g. **POWER MENU**, **NOTIFICATION BELL**, **WIDGET VISIBILITY**).
+
+The file is named `Config.qml` (capital **C**) because QML requires that naming for reliable type registration across subdirectories.
+
+# System Stats pill (`Config.qml`)
+
+Search for **SYS STATS PILL** for the compact bar widget (CPU | Memory | GPU), and **popupStats** for the large right-click dropdowns.
+
+**Bar pill size** — if the glass border is too narrow or numbers stick out past the edges:
+
+| Property | What it does | Default |
+|----------|--------------|---------|
+| `statPillWidth` | Total width of the pill border in pixels. **Change this first.** | `640` |
+| `statPillSectionWidth` | Width of each column (CPU, Memory, GPU) | `190` |
+| `statPillSpacing` | Gap between columns | `10` |
+| `statPillPaddingH` | Left/right padding inside the border | `12` |
+
+**Bar pill colors** — utilization bar tiers (`statUtilTier1`–`4`, `statUtilThreshold1`–`3`) and CPU/GPU temperature label colors (`statTempCool` / `Warm` / `Hot`, `statTempWarmAt` / `HotAt`).
+
+**Metrics popups** (right-click a section) — each section has its own size and screen position:
+
+| Prefix | Section |
+|--------|---------|
+| `popupStatsCpu*` | CPU (left) |
+| `popupStatsMem*` | Memory (middle) |
+| `popupStatsGpu*` | GPU (right) |
+
+- `*Width` / `*Height` — popup panel size in pixels
+- `*AnchorX` — `0` = align to left of section, `0.5` = center, `1` = right
+- `*AnchorWholePill` — `true` = anchor to the full pill instead of that section
+- `*OffsetX` / `*OffsetY` — nudge popup left/right or up/down in pixels
+- `*BarGap` — distance between the bar and the popup
+
+**Live updates** — `popupStatsLiveUpdates` sets whether charts refresh while a popup is open. `popupStatsPersistPause: true` saves Pause/Resume choices to `state/popup-stats.json`.
+
+## Notification bell (`Config.qml` + `NotificationBell.qml`)
+
+Search for **NOTIFICATION BELL** in `Config.qml`. Defaults are SwayNC (`swaync-client`). To use another daemon, replace the command lists. `NotificationBell.qml` reads these lists, builds proper argv arrays, and polls internally (same pattern as `SysStatsPill.qml`).
+
+| Property | SwayNC default | Purpose |
+|----------|----------------|---------|
+| `notificationSubscribe` | `["swaync-client", "-s", "-sw"]` | Optional live stream for badge / DND updates |
+| `notificationTogglePanel` | `["swaync-client", "-t", "-sw"]` | Left-click on bell |
+| `notificationToggleDnd` | `["swaync-client", "-d", "-sw"]` | Right-click menu |
+| `notificationClearAll` | `["swaync-client", "-C", "-sw"]` | Right-click menu |
+| `notificationSync` | `["…/scripts/notification-sync.sh"]` | Timer poller; prints `{"count":N,"dnd":true\|false}` |
+| `notificationSyncIntervalMs` | `2500` | How often the sync script runs |
+| `notificationDndAccent` | `#e85d5d` | Pill border, bell, and badge tint when DND is on |
+
+Use `[]` to disable subscribe, sync, or any action. Keep `notificationSync` enabled for reliable badge/DND state; subscribe is optional live updates on top. Config command lists are QML lists — the bell copies them to JS arrays before starting `Io.Process` (do not bind lists directly).
+
+**SwayNC tip:** run only one instance (e.g. `swaync.service` via systemd, not also `hl.exec_cmd("swaync")` in Hyprland autostart). If `notify-send` shows nothing, check DND: `swaync-client -D -sw` — use `swaync-client -df -sw` to turn off.
+
+## Power menu (`Config.qml`)
+
+Search for **POWER MENU**. Each session action has its own command list (or shell string). Use `[]` to hide an action from both the grid and right-click menu.
+
+| Property | Default | Purpose |
+|----------|---------|---------|
+| `powerLockCommand` | `["hyprlock"]` | Lock screen |
+| `powerLogoutCommand` | `["sh", "-c", "…"]` | Log out of Hyprland (stops apps, then `hyprshutdown` or `hl.dsp.exit`) |
+| `powerRebootCommand` | `["sh", "-c", "…"]` | Reboot |
+| `powerShutdownCommand` | `["sh", "-c", "…"]` | Shutdown |
+| `powerBiosCommand` | `["systemctl", "reboot", "--firmware-setup"]` | Firmware setup on next boot |
+| `powerMenuActions` | Lock / Logout / … rows | Icons (`iconLock`, etc.), labels, and `action` ids — reorder or rename here |
+
+Logout/reboot/shutdown defaults stop `psd.service` and several user apps before the system action. Edit those pipelines to match your setup.
+
+## Quick Launch (`Config.qml`)
+
+Search for **QUICK LAUNCH**. Edit the `quickLaunchApps` list — one object per icon. Reorder, add, or remove entries; Quickshell reloads automatically.
+
+| Field | Purpose |
+|-------|---------|
+| `icon` | Path to PNG/SVG image |
+| `glyph` | Optional nerd-font character (use instead of `icon` if `icon` is empty) |
+| `command` | Launch command as a **list** `["gtk-launch", "firefox"]` (preferred) or shell string `"gtk-launch firefox"`. Use the list form for `gtk-launch` and full paths. |
+| `tooltip` | Hover label |
+
+Also tune `quickLaunchIcon` (size), `quickLaunchSpacing`, and `quickLaunchPaddingH`.
+
+## Kill Target pill (`Config.qml`)
+
+Search for **KILL TARGET PILL**. Set `showKillTargetPill: true` to show the bar icon (default is hidden). Tune `killTargetIcon`, `killTargetTooltip`, and `killTargetOverlayDim` (screen dimming while picking). Kills use SIGTERM via `process-control.sh` — only processes owned by your user; root-owned apps are rejected with an error message.
+
+---
