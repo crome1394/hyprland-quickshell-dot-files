@@ -1179,7 +1179,9 @@ Item {
         Rectangle {
             id: controlChrome
             implicitWidth: Math.max(mainCol.implicitWidth + root.pad * 2,
-                                    (root.activeMenu === "wallpaper" || root.activeMenu === "options") ? 500 : 420)
+                                    (root.activeMenu === "wallpaper"
+                                     || root.activeMenu === "options"
+                                     || root.activeMenu === "widgets") ? 520 : 420)
             implicitHeight: mainCol.implicitHeight + root.pad * 2
             radius: bar.popupRadius !== undefined ? bar.popupRadius : bar.barRadius
             color: bar.glassPopupBg
@@ -1738,7 +1740,7 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: "A–Z list · ✓ on / ✕ off · L/C/R zone · ↑↓ bar order · width % (80–180)"
+                                    text: "A–Z · ✓/✕ · name · L/C/R · ↑↓ · width % (80–180)"
                                     color: bar.overlay
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
@@ -1778,178 +1780,205 @@ Item {
                                             anchors.bottomMargin: 5
                                             spacing: 4
 
-                                            // Row 1: visibility · name · zone · order
+                                            // Row 1 — three columns: [✓ name] | [L C R] | [↑ ↓]
                                             RowLayout {
                                                 Layout.fillWidth: true
-                                                spacing: 4
+                                                spacing: 8
 
-                                                Rectangle {
-                                                    Layout.preferredWidth: 28
-                                                    Layout.preferredHeight: 24
-                                                    radius: 4
-                                                    color: visMa.containsMouse
-                                                           ? (widgetRow.widgetOn
-                                                              ? Qt.rgba(0.29, 0.87, 0.50, 0.18)
-                                                              : Qt.rgba(0.97, 0.44, 0.44, 0.18))
-                                                           : "transparent"
-                                                    border.width: 1
-                                                    border.color: widgetRow.widgetOn ? root.onGreen : root.offRed
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: widgetRow.widgetOn ? "✓" : "✕"
-                                                        color: widgetRow.widgetOn ? root.onGreen : root.offRed
-                                                        font.pixelSize: 14
-                                                        font.bold: true
-                                                        font.family: bar.fontFamily
-                                                    }
-                                                    MouseArea {
-                                                        id: visMa
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: root.toggleWidget(widgetRow.widgetId)
-                                                        ToolTip.visible: containsMouse
-                                                        ToolTip.delay: bar.tooltipDelay
-                                                        ToolTip.text: widgetRow.widgetOn ? "Hide from bar" : "Show on bar"
-                                                    }
-                                                }
+                                                // Column 1: toggle + full name
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    Layout.minimumWidth: 120
+                                                    spacing: 6
 
-                                                Text {
-                                                    Layout.preferredWidth: 92
-                                                    elide: Text.ElideRight
-                                                    text: widgetRow.widgetLabel
-                                                    color: bar.text
-                                                    font.pixelSize: 12
-                                                    font.family: bar.fontFamily
-                                                }
-
-                                                Rectangle {
-                                                    Layout.preferredWidth: 22
-                                                    Layout.preferredHeight: 22
-                                                    radius: 4
-                                                    color: widgetRow.widgetZone === "left" ? bar.controlActiveBg : bar.pillBg
-                                                    border.width: 1
-                                                    border.color: widgetRow.widgetZone === "left" ? bar.accent : bar.pillBorder
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "L"
-                                                        font.pixelSize: 10
-                                                        font.family: bar.fontFamily
-                                                        color: widgetRow.widgetZone === "left" ? bar.accent : bar.subtext
-                                                    }
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            if (typeof bar.setWidgetZone === "function")
-                                                                bar.setWidgetZone(widgetRow.widgetId, "left")
-                                                            root.menuTick++
-                                                            Qt.callLater(root.reposition)
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 28
+                                                        Layout.preferredHeight: 24
+                                                        Layout.alignment: Qt.AlignVCenter
+                                                        radius: 4
+                                                        color: visMa.containsMouse
+                                                               ? (widgetRow.widgetOn
+                                                                  ? Qt.rgba(0.29, 0.87, 0.50, 0.18)
+                                                                  : Qt.rgba(0.97, 0.44, 0.44, 0.18))
+                                                               : "transparent"
+                                                        border.width: 1
+                                                        border.color: widgetRow.widgetOn ? root.onGreen : root.offRed
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: widgetRow.widgetOn ? "✓" : "✕"
+                                                            color: widgetRow.widgetOn ? root.onGreen : root.offRed
+                                                            font.pixelSize: 14
+                                                            font.bold: true
+                                                            font.family: bar.fontFamily
+                                                        }
+                                                        MouseArea {
+                                                            id: visMa
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: root.toggleWidget(widgetRow.widgetId)
+                                                            ToolTip.visible: containsMouse
+                                                            ToolTip.delay: bar.tooltipDelay
+                                                            ToolTip.text: widgetRow.widgetOn ? "Hide from bar" : "Show on bar"
                                                         }
                                                     }
-                                                }
-                                                Rectangle {
-                                                    Layout.preferredWidth: 22
-                                                    Layout.preferredHeight: 22
-                                                    radius: 4
-                                                    color: widgetRow.widgetZone === "center" ? bar.controlActiveBg : bar.pillBg
-                                                    border.width: 1
-                                                    border.color: widgetRow.widgetZone === "center" ? bar.accent : bar.pillBorder
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "C"
-                                                        font.pixelSize: 10
-                                                        font.family: bar.fontFamily
-                                                        color: widgetRow.widgetZone === "center" ? bar.accent : bar.subtext
-                                                    }
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            if (typeof bar.setWidgetZone === "function")
-                                                                bar.setWidgetZone(widgetRow.widgetId, "center")
-                                                            root.menuTick++
-                                                            Qt.callLater(root.reposition)
-                                                        }
-                                                    }
-                                                }
-                                                Rectangle {
-                                                    Layout.preferredWidth: 22
-                                                    Layout.preferredHeight: 22
-                                                    radius: 4
-                                                    color: widgetRow.widgetZone === "right" ? bar.controlActiveBg : bar.pillBg
-                                                    border.width: 1
-                                                    border.color: widgetRow.widgetZone === "right" ? bar.accent : bar.pillBorder
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "R"
-                                                        font.pixelSize: 10
-                                                        font.family: bar.fontFamily
-                                                        color: widgetRow.widgetZone === "right" ? bar.accent : bar.subtext
-                                                    }
-                                                    MouseArea {
-                                                        anchors.fill: parent
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            if (typeof bar.setWidgetZone === "function")
-                                                                bar.setWidgetZone(widgetRow.widgetId, "right")
-                                                            root.menuTick++
-                                                            Qt.callLater(root.reposition)
-                                                        }
-                                                    }
-                                                }
 
-                                                Item { Layout.fillWidth: true }
-
-                                                Rectangle {
-                                                    Layout.preferredWidth: 24
-                                                    Layout.preferredHeight: 24
-                                                    radius: 4
-                                                    color: upMa.containsMouse ? bar.glassHover : bar.pillBg
-                                                    border.width: 1
-                                                    border.color: bar.pillBorder
                                                     Text {
-                                                        anchors.centerIn: parent
-                                                        text: "↑"
-                                                        color: bar.subtext
+                                                        Layout.fillWidth: true
+                                                        Layout.minimumWidth: 72
+                                                        // Prefer full labels; elide only if panel is extremely narrow
+                                                        elide: Text.ElideRight
+                                                        text: widgetRow.widgetLabel
+                                                        color: bar.text
                                                         font.pixelSize: 12
+                                                        font.family: bar.fontFamily
+                                                        verticalAlignment: Text.AlignVCenter
                                                     }
-                                                    MouseArea {
-                                                        id: upMa
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            if (typeof bar.moveWidget === "function")
-                                                                bar.moveWidget(widgetRow.widgetId, -1)
-                                                            root.menuTick++
-                                                            Qt.callLater(root.reposition)
+                                                }
+
+                                                // Column 2: zone L C R (flush left of arrows)
+                                                RowLayout {
+                                                    Layout.preferredWidth: 74
+                                                    Layout.maximumWidth: 74
+                                                    Layout.minimumWidth: 74
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    spacing: 4
+
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 22
+                                                        Layout.preferredHeight: 22
+                                                        radius: 4
+                                                        color: widgetRow.widgetZone === "left" ? bar.controlActiveBg : bar.pillBg
+                                                        border.width: 1
+                                                        border.color: widgetRow.widgetZone === "left" ? bar.accent : bar.pillBorder
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "L"
+                                                            font.pixelSize: 10
+                                                            font.family: bar.fontFamily
+                                                            color: widgetRow.widgetZone === "left" ? bar.accent : bar.subtext
+                                                        }
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (typeof bar.setWidgetZone === "function")
+                                                                    bar.setWidgetZone(widgetRow.widgetId, "left")
+                                                                root.menuTick++
+                                                                Qt.callLater(root.reposition)
+                                                            }
+                                                        }
+                                                    }
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 22
+                                                        Layout.preferredHeight: 22
+                                                        radius: 4
+                                                        color: widgetRow.widgetZone === "center" ? bar.controlActiveBg : bar.pillBg
+                                                        border.width: 1
+                                                        border.color: widgetRow.widgetZone === "center" ? bar.accent : bar.pillBorder
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "C"
+                                                            font.pixelSize: 10
+                                                            font.family: bar.fontFamily
+                                                            color: widgetRow.widgetZone === "center" ? bar.accent : bar.subtext
+                                                        }
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (typeof bar.setWidgetZone === "function")
+                                                                    bar.setWidgetZone(widgetRow.widgetId, "center")
+                                                                root.menuTick++
+                                                                Qt.callLater(root.reposition)
+                                                            }
+                                                        }
+                                                    }
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 22
+                                                        Layout.preferredHeight: 22
+                                                        radius: 4
+                                                        color: widgetRow.widgetZone === "right" ? bar.controlActiveBg : bar.pillBg
+                                                        border.width: 1
+                                                        border.color: widgetRow.widgetZone === "right" ? bar.accent : bar.pillBorder
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "R"
+                                                            font.pixelSize: 10
+                                                            font.family: bar.fontFamily
+                                                            color: widgetRow.widgetZone === "right" ? bar.accent : bar.subtext
+                                                        }
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (typeof bar.setWidgetZone === "function")
+                                                                    bar.setWidgetZone(widgetRow.widgetId, "right")
+                                                                root.menuTick++
+                                                                Qt.callLater(root.reposition)
+                                                            }
                                                         }
                                                     }
                                                 }
-                                                Rectangle {
-                                                    Layout.preferredWidth: 24
-                                                    Layout.preferredHeight: 24
-                                                    radius: 4
-                                                    color: dnMa.containsMouse ? bar.glassHover : bar.pillBg
-                                                    border.width: 1
-                                                    border.color: bar.pillBorder
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "↓"
-                                                        color: bar.subtext
-                                                        font.pixelSize: 12
+
+                                                // Column 3: reorder ↑ ↓
+                                                RowLayout {
+                                                    Layout.preferredWidth: 52
+                                                    Layout.maximumWidth: 52
+                                                    Layout.minimumWidth: 52
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    spacing: 4
+
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 24
+                                                        Layout.preferredHeight: 24
+                                                        radius: 4
+                                                        color: upMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                        border.width: 1
+                                                        border.color: bar.pillBorder
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "↑"
+                                                            color: bar.subtext
+                                                            font.pixelSize: 12
+                                                        }
+                                                        MouseArea {
+                                                            id: upMa
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (typeof bar.moveWidget === "function")
+                                                                    bar.moveWidget(widgetRow.widgetId, -1)
+                                                                root.menuTick++
+                                                                Qt.callLater(root.reposition)
+                                                            }
+                                                        }
                                                     }
-                                                    MouseArea {
-                                                        id: dnMa
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            if (typeof bar.moveWidget === "function")
-                                                                bar.moveWidget(widgetRow.widgetId, 1)
-                                                            root.menuTick++
-                                                            Qt.callLater(root.reposition)
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 24
+                                                        Layout.preferredHeight: 24
+                                                        radius: 4
+                                                        color: dnMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                        border.width: 1
+                                                        border.color: bar.pillBorder
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "↓"
+                                                            color: bar.subtext
+                                                            font.pixelSize: 12
+                                                        }
+                                                        MouseArea {
+                                                            id: dnMa
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (typeof bar.moveWidget === "function")
+                                                                    bar.moveWidget(widgetRow.widgetId, 1)
+                                                                root.menuTick++
+                                                                Qt.callLater(root.reposition)
+                                                            }
                                                         }
                                                     }
                                                 }
