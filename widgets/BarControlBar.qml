@@ -41,6 +41,9 @@ Item {
     readonly property int optToggleW: 28
     readonly property int optToggleH: 26
     readonly property int optFieldW: 40
+    // Slightly lifted fill so TextFields read as editable (not flat chrome)
+    readonly property color optFieldBg: Qt.rgba(0.18, 0.19, 0.23, 0.92)
+    readonly property color optFieldBgFocus: Qt.rgba(0.22, 0.24, 0.30, 0.95)
 
     readonly property color onGreen: "#4ade80"
     readonly property color offRed:  "#f87171"
@@ -492,6 +495,16 @@ Item {
                 })
             }
         }
+        // Alphabetical by label for easier scanning (↑↓ still changes bar layout order)
+        out.sort(function (a, b) {
+            const la = String(a.label || a.id).toLowerCase()
+            const lb = String(b.label || b.id).toLowerCase()
+            if (la < lb)
+                return -1
+            if (la > lb)
+                return 1
+            return 0
+        })
         return out
     }
 
@@ -1669,7 +1682,7 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: "✓ on / ✕ off · L/C/R zone · ↑↓ order · width % (80–180, height fixed)"
+                                    text: "A–Z list · ✓ on / ✕ off · L/C/R zone · ↑↓ bar order · width % (80–180)"
                                     color: bar.overlay
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
@@ -1948,7 +1961,7 @@ Item {
                                                     validator: IntValidator { bottom: 80; top: 180 }
                                                     background: Rectangle {
                                                         radius: 4
-                                                        color: bar.pillBg
+                                                        color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                                         border.width: 1
                                                         border.color: pctField.activeFocus ? bar.accent : bar.pillBorder
                                                     }
@@ -2187,7 +2200,7 @@ Item {
                                         font.family: bar.fontFamily
                                         background: Rectangle {
                                             radius: root.chipR
-                                            color: bar.pillBg
+                                            color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                             border.width: 1
                                             border.color: appSearchField.activeFocus ? bar.accent : bar.pillBorder
                                         }
@@ -2304,7 +2317,7 @@ Item {
                                     onTextChanged: root.customName = text
                                     background: Rectangle {
                                         radius: root.chipR
-                                        color: bar.pillBg
+                                        color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                         border.width: 1
                                         border.color: bar.pillBorder
                                     }
@@ -2320,7 +2333,7 @@ Item {
                                     onTextChanged: root.customCommand = text
                                     background: Rectangle {
                                         radius: root.chipR
-                                        color: bar.pillBg
+                                        color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                         border.width: 1
                                         border.color: bar.pillBorder
                                     }
@@ -2336,7 +2349,7 @@ Item {
                                     onTextChanged: root.customIcon = text
                                     background: Rectangle {
                                         radius: root.chipR
-                                        color: bar.pillBg
+                                        color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                         border.width: 1
                                         border.color: bar.pillBorder
                                     }
@@ -2656,7 +2669,7 @@ Item {
                                         font.family: bar.fontFamily
                                         background: Rectangle {
                                             radius: root.chipR
-                                            color: bar.pillBg
+                                            color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                             border.width: 1
                                             border.color: parent.activeFocus ? bar.accent : bar.pillBorder
                                         }
@@ -3216,7 +3229,7 @@ Item {
                                                 validator: IntValidator { bottom: 0; top: 10 }
                                                 background: Rectangle {
                                                     radius: 4
-                                                    color: bar.pillBg
+                                                    color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                                     border.width: 1
                                                     border.color: wsMinField.activeFocus ? bar.accent : bar.pillBorder
                                                 }
@@ -3277,7 +3290,7 @@ Item {
                                                 validator: IntValidator { bottom: 0; top: 10 }
                                                 background: Rectangle {
                                                     radius: 4
-                                                    color: bar.pillBg
+                                                    color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                                     border.width: 1
                                                     border.color: wsStartField.activeFocus ? bar.accent : bar.pillBorder
                                                 }
@@ -3912,37 +3925,43 @@ Item {
                                         spacing: 10
                                         ColumnLayout {
                                             Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
                                             spacing: 0
                                             Text {
                                                 text: "Filters expanded on open"
                                                 color: bar.text
                                                 font.pixelSize: 12
                                                 font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
                                             }
                                             Text {
                                                 text: "Search / max days / per feed section"
                                                 color: bar.overlay
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
                                             }
                                         }
                                         Item {
                                             Layout.preferredWidth: root.optControlColW
                                             Layout.maximumWidth: root.optControlColW
                                             Layout.minimumWidth: root.optControlColW
-                                            Layout.fillHeight: true
+                                            Layout.alignment: Qt.AlignVCenter
+                                            Layout.preferredHeight: root.optToggleH
                                             Rectangle {
                                                 anchors.centerIn: parent
                                                 width: root.optToggleW
                                                 height: root.optToggleH
                                                 radius: 4
                                                 border.width: 1
-                                                border.color: bar.freshRssFiltersExpanded ? root.onGreen : root.offRed
+                                                border.color: (!!bar.freshRssFiltersExpanded) ? root.onGreen : root.offRed
                                                 color: "transparent"
                                                 Text {
                                                     anchors.centerIn: parent
-                                                    text: bar.freshRssFiltersExpanded ? "✓" : "✕"
-                                                    color: bar.freshRssFiltersExpanded ? root.onGreen : root.offRed
+                                                    text: (!!bar.freshRssFiltersExpanded) ? "✓" : "✕"
+                                                    color: (!!bar.freshRssFiltersExpanded) ? root.onGreen : root.offRed
                                                     font.pixelSize: 14
                                                     font.bold: true
                                                 }
@@ -3955,10 +3974,10 @@ Item {
                                         }
                                     }
                                 }
-                                // Scheme
+                                // Scheme (+ spacer so control column lines up with toggles above)
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    spacing: 8
+                                    spacing: 10
                                     Text {
                                         text: "Scheme"
                                         color: bar.subtext
@@ -3999,11 +4018,16 @@ Item {
                                         }
                                     }
                                     Item { Layout.fillWidth: true }
+                                    Item {
+                                        Layout.preferredWidth: root.optControlColW
+                                        Layout.maximumWidth: root.optControlColW
+                                        Layout.minimumWidth: root.optControlColW
+                                    }
                                 }
                                 // Host
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    spacing: 8
+                                    spacing: 10
                                     Text {
                                         text: "Host"
                                         color: bar.subtext
@@ -4022,16 +4046,21 @@ Item {
                                         onTextChanged: root.frHost = text
                                         background: Rectangle {
                                             radius: root.chipR
-                                            color: bar.pillBg
+                                            color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                             border.width: 1
                                             border.color: parent.activeFocus ? bar.accent : bar.pillBorder
                                         }
+                                    }
+                                    Item {
+                                        Layout.preferredWidth: root.optControlColW
+                                        Layout.maximumWidth: root.optControlColW
+                                        Layout.minimumWidth: root.optControlColW
                                     }
                                 }
                                 // User
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    spacing: 8
+                                    spacing: 10
                                     Text {
                                         text: "User"
                                         color: bar.subtext
@@ -4050,16 +4079,21 @@ Item {
                                         onTextChanged: root.frUser = text
                                         background: Rectangle {
                                             radius: root.chipR
-                                            color: bar.pillBg
+                                            color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                             border.width: 1
                                             border.color: parent.activeFocus ? bar.accent : bar.pillBorder
                                         }
+                                    }
+                                    Item {
+                                        Layout.preferredWidth: root.optControlColW
+                                        Layout.maximumWidth: root.optControlColW
+                                        Layout.minimumWidth: root.optControlColW
                                     }
                                 }
                                 // API password (write-only)
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    spacing: 8
+                                    spacing: 10
                                     Text {
                                         text: "API pw"
                                         color: bar.subtext
@@ -4081,10 +4115,15 @@ Item {
                                         onTextChanged: root.frPassword = text
                                         background: Rectangle {
                                             radius: root.chipR
-                                            color: bar.pillBg
+                                            color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
                                             border.width: 1
                                             border.color: parent.activeFocus ? bar.accent : bar.pillBorder
                                         }
+                                    }
+                                    Item {
+                                        Layout.preferredWidth: root.optControlColW
+                                        Layout.maximumWidth: root.optControlColW
+                                        Layout.minimumWidth: root.optControlColW
                                     }
                                 }
                                 RowLayout {
