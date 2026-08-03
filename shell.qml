@@ -11,9 +11,7 @@
 // IPC:
 //   - qs ipc call hyprConfigInsp toggle
 //   - qs ipc call freshRss toggle / refresh / show / hide
-//   - qs ipc call radar toggle / refresh / show / hide
 //   - qs ipc call shell setShowFreshRssPill true / toggleShowFreshRssPill
-//   - qs ipc call shell setShowRadarPill true / toggleShowRadarPill
 //   - qs ipc call shell setShowMediaWidget true
 //   - qs ipc call shell setShowStatsWidget false
 //   - qs ipc call shell toggleShowMediaWidget
@@ -62,7 +60,12 @@
 //   (Run `qs ipc show` for the full list of shell commands.)
 //
 // Bar position (Config.qml):
-//   - barPosition: "top" or "bottom"
+//   - barPosition: "top" or "bottom" (Config default; runtime toggle + IPC)
+//   - Right-click empty bar chrome → BarControlBar (top/bottom toggle lives there)
+//   - qs ipc call shell setBarPosition top|bottom / toggleBarPosition
+//   - qs ipc call shell toggleBarControlBar / showBarControlBar / hideBarControlBar
+//   - UI scale: auto from screen width (Config.uiDesignWidth); override with
+//     qs ipc call shell setUiScale 0.8 | setUiScaleManual 0.85 | setUiScaleAuto
 //   - barEdgeMargin: gap from the screen edge
 //
 // =============================================================================
@@ -85,15 +88,19 @@
 // That is all — you do not need to change anything inside the block.
 // Every widget works in any zone exactly as written.
 //
-// Current layout:
-//   LEFT:   App Launcher, Quick Launch, Media Player
+// Default layout (overridable at runtime via BarControlBar → Layout, persisted
+// in state/bar-layout.json):
+//   LEFT:   App Launcher, Quick Launch, FreshRSS, Media Player
 //   CENTER: Workspaces
 //   RIGHT:  System Stats, System Tray, Connectivity (Network+Bluetooth),
 //           Audio, Clock, Notifications, Power
 //
+// Right-click empty bar chrome → BarControlBar (position, display, widgets,
+// clock format, layout order/zones).
+//
 // Why CENTER is special: left and right zones are different widths, so a widget
 // placed "between" them would look off-center. CENTER ZONE is pinned to the
-// true middle of the bar automatically — you still just cut and paste blocks.
+// true middle of the bar automatically.
 // =============================================================================
 
 import Quickshell
@@ -128,8 +135,52 @@ ShellRoot {
     property bool showPowerPill: true
     property bool showKillTargetPill: false
     property bool showFreshRssPill: true
-    property bool showRadarPill: true
+    property bool showHyprInspPill: false
     property bool showMagicWorkspacePill: true   // Magic pill inside WorkspacesPill (wsShowSpecialPill)
+
+    // Clock format string (Qt.formatDateTime); Config default, persisted override.
+    property string clockFormat: "dddd, MM·dd·yyyy | HH:mm:ss"
+
+    // Runtime layout: [{ id, zone }, ...] — zone is left|center|right
+    property var widgetLayout: []
+
+    // Runtime Quick Launch pins (Config default, editable from BarControlBar, persisted)
+    property var quickLaunchApps: []
+
+    // Density: auto-hide deprioritized pills on narrow screens (see Config.uiDensity*).
+    // User/IPC show* flags stay as preferences; density gates actual visibility.
+    property bool densityHideQuickLaunch: false
+    property bool densityHideStats: false
+    property bool densityHideSecondary: false   // FreshRSS, media, kill-target
+    property bool densityHideConnectivity: false  // Network + Bluetooth
+
+    // Effective visibility helpers (preference AND density)
+    readonly property bool effQuickLaunch: showQuickLaunchPill && !densityHideQuickLaunch
+    readonly property bool effStats: showStatsWidget && !densityHideStats
+    readonly property bool effFreshRss: showFreshRssPill && !densityHideSecondary
+    readonly property bool effMedia: showMediaWidget && !densityHideSecondary
+    readonly property bool effKillTarget: showKillTargetPill && !densityHideSecondary
+    readonly property bool effNetwork: showNetworkPill && !densityHideConnectivity
+    readonly property bool effBluetooth: showBluetoothPill && !densityHideConnectivity
+    readonly property bool effConnectivity: effNetwork || effBluetooth
+
+    // Catalog for BarControlBar menus (id → label + visibility property name)
+    readonly property var widgetCatalog: [
+        { id: "launcher",      label: "Launcher",      vis: "showLauncherPill" },
+        { id: "quickLaunch",   label: "Quick Launch",  vis: "showQuickLaunchPill" },
+        { id: "freshRss",      label: "FreshRSS",      vis: "showFreshRssPill" },
+        { id: "media",         label: "Media",         vis: "showMediaWidget" },
+        { id: "workspaces",    label: "Workspaces",    vis: "showWorkspacesPill" },
+        { id: "stats",         label: "Sys Stats",     vis: "showStatsWidget" },
+        { id: "tray",          label: "System Tray",   vis: "showTrayPill" },
+        { id: "connectivity",  label: "Network+BT",    vis: "connectivity" },
+        { id: "audio",         label: "Audio",         vis: "showAudioPill" },
+        { id: "clock",         label: "Clock",         vis: "showClockPill" },
+        { id: "notifications", label: "Notifications", vis: "showNotificationPill" },
+        { id: "killTarget",    label: "Kill Target",   vis: "showKillTargetPill" },
+        { id: "hyprInsp",      label: "Hypr Inspector", vis: "showHyprInspPill" },
+        { id: "power",         label: "Power",         vis: "showPowerPill" }
+    ]
 
     // Workspace behavior (config defaults in Config.qml; IPC overrides until qs restart)
     property int  wsMinimumShown: 3
@@ -217,17 +268,526 @@ ShellRoot {
             root.showPowerPill = cfg.showPowerPill
             root.showKillTargetPill = cfg.showKillTargetPill
             root.showFreshRssPill = cfg.showFreshRssPill
-            root.showRadarPill = cfg.showRadarPill
+            root.showHyprInspPill = cfg.showHyprInspPill
             root.showMagicWorkspacePill = cfg.wsShowSpecialPill
             root.wsMinimumShown = cfg.wsMinimumShown
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
             root.wsStartupWorkspace = cfg.wsStartupWorkspace
             root.wsStartupCloseMagic = cfg.wsStartupCloseMagic
+            root.clockFormat = cfg.clockFormat || root.clockFormat
+            root.widgetLayout = bar.cloneDefaultLayout()
+            root.quickLaunchApps = bar.cloneQuickLaunchApps()
+
+            // Bar edge: Config default, then optional persisted override from state file.
+            bar.barPosition = (cfg.barPosition === "bottom") ? "bottom" : "top"
+            barLayoutFile.reload()
+            bar.applyUiScale()
+            Qt.callLater(function() { bar.applyWidgetLayout() })
 
             // Start optional startup focus only after config is applied (avoids
             // racing the property default before cfg loads). No-op when 0.
             if (root.wsStartupWorkspace > 0)
                 startupWorkspaceTimer.start()
+        }
+
+        // Recompute scale when the panel is mapped / screen geometry is known.
+        onWidthChanged: bar.applyUiScale()
+        onScreenChanged: bar.applyUiScale()
+
+        // ---- UI scale (auto from screen width; optional manual override) ----
+        function _screenSize() {
+            var w = 0
+            var h = 0
+            try {
+                if (bar.screen) {
+                    w = bar.screen.width || 0
+                    h = bar.screen.height || 0
+                }
+            } catch (e) {}
+            if (!(w > 0))
+                w = bar.width || 0
+            if (!(w > 0) && Quickshell.screens && Quickshell.screens.length)
+                w = Quickshell.screens[0].width || 0
+            if (!(h > 0) && Quickshell.screens && Quickshell.screens.length)
+                h = Quickshell.screens[0].height || 0
+            if (!(w > 0))
+                w = cfg.uiDesignWidth
+            if (!(h > 0))
+                h = 1080
+            return { w: w, h: h }
+        }
+
+        function applyUiScale() {
+            var sz = bar._screenSize()
+            cfg.screenWidth = sz.w
+            cfg.screenHeight = sz.h
+            var next = cfg.computeUiScale(sz.w)
+            if (Math.abs(cfg.uiScale - next) > 0.001)
+                cfg.uiScale = next
+            bar.applyDensity()
+        }
+
+        // Hide deprioritized pills so workspaces + core right-side widgets stay visible.
+        function applyDensity() {
+            var d = cfg.computeDensity(cfg.screenWidth)
+            root.densityHideQuickLaunch = !!d.hideQuickLaunch
+            root.densityHideStats = !!d.hideStats
+            root.densityHideSecondary = !!d.hideSecondary
+            root.densityHideConnectivity = !!d.hideConnectivity
+            cfg.densityHideQuickLaunch = root.densityHideQuickLaunch
+            cfg.densityHideStats = root.densityHideStats
+            cfg.densityHideSecondary = root.densityHideSecondary
+            cfg.densityHideConnectivity = root.densityHideConnectivity
+        }
+
+        // Force scale (persisted). Pass 0 for auto-from-width.
+        function setUiScale(scale) {
+            var s = Number(scale)
+            if (!(s >= 0))
+                return
+            if (s > 0) {
+                if (s < cfg.uiScaleMin) s = cfg.uiScaleMin
+                if (s > cfg.uiScaleMax) s = cfg.uiScaleMax
+            }
+            cfg.uiScaleManual = s
+            barLayoutAdapter.uiScaleManual = s
+            barLayoutFile.writeAdapter()
+            bar.applyUiScale()
+        }
+
+        function setUiScaleManual(scale) {
+            bar.setUiScale(scale)
+        }
+
+        function setUiScaleAuto() {
+            bar.setUiScale(0)
+        }
+
+        // Persist bar layout prefs (edge, scale, widgets, clock, order/zones).
+        // Guard: our own writeAdapter() must not re-enter onLoaded (that reparented
+        // widgets and dismissed the control bar via focus loss).
+        property bool _barLayoutWriteGuard: false
+
+        Io.FileView {
+            id: barLayoutFile
+            path: "/home/crome/.config/quickshell/state/bar-layout.json"
+            watchChanges: true
+            onFileChanged: {
+                if (bar._barLayoutWriteGuard)
+                    return
+                reload()
+            }
+            onLoaded: {
+                if (bar._barLayoutWriteGuard)
+                    return
+                const p = barLayoutAdapter.barPosition
+                if (p === "top" || p === "bottom")
+                    bar.barPosition = p
+                // Manual scale from state overrides Config default when present.
+                if (barLayoutAdapter.uiScaleManual >= 0)
+                    cfg.uiScaleManual = barLayoutAdapter.uiScaleManual
+                if (barLayoutAdapter.clockFormat && barLayoutAdapter.clockFormat.length)
+                    root.clockFormat = barLayoutAdapter.clockFormat
+                // Visibility (only apply keys that exist in the adapter defaults)
+                root.showLauncherPill = barLayoutAdapter.showLauncherPill
+                root.showQuickLaunchPill = barLayoutAdapter.showQuickLaunchPill
+                root.showMediaWidget = barLayoutAdapter.showMediaWidget
+                root.showWorkspacesPill = barLayoutAdapter.showWorkspacesPill
+                root.showStatsWidget = barLayoutAdapter.showStatsWidget
+                root.showTrayPill = barLayoutAdapter.showTrayPill
+                root.showNetworkPill = barLayoutAdapter.showNetworkPill
+                root.showBluetoothPill = barLayoutAdapter.showBluetoothPill
+                root.showAudioPill = barLayoutAdapter.showAudioPill
+                root.showClockPill = barLayoutAdapter.showClockPill
+                root.showNotificationPill = barLayoutAdapter.showNotificationPill
+                root.showPowerPill = barLayoutAdapter.showPowerPill
+                root.showKillTargetPill = barLayoutAdapter.showKillTargetPill
+                root.showFreshRssPill = barLayoutAdapter.showFreshRssPill
+                root.showHyprInspPill = barLayoutAdapter.showHyprInspPill
+                // Layout JSON
+                if (barLayoutAdapter.widgetLayoutJson && barLayoutAdapter.widgetLayoutJson.length > 2) {
+                    try {
+                        const parsed = JSON.parse(barLayoutAdapter.widgetLayoutJson)
+                        if (parsed && parsed.length)
+                            root.widgetLayout = bar.normalizeLayout(parsed)
+                    } catch (e) {}
+                }
+                if (barLayoutAdapter.quickLaunchAppsJson && barLayoutAdapter.quickLaunchAppsJson.length > 2) {
+                    try {
+                        const qa = JSON.parse(barLayoutAdapter.quickLaunchAppsJson)
+                        if (qa && qa.length !== undefined)
+                            root.quickLaunchApps = bar.normalizeQuickLaunchApps(qa)
+                    } catch (e) {}
+                }
+                bar.applyUiScale()
+                Qt.callLater(function() { bar.applyWidgetLayout() })
+            }
+            onLoadFailed: {
+                // No saved preference yet — keep Config / current value.
+            }
+            Io.JsonAdapter {
+                id: barLayoutAdapter
+                property string barPosition: "top"
+                property real uiScaleManual: 0
+                property string clockFormat: ""
+                property string widgetLayoutJson: ""
+                property string quickLaunchAppsJson: ""
+                property bool showLauncherPill: true
+                property bool showQuickLaunchPill: true
+                property bool showMediaWidget: false
+                property bool showWorkspacesPill: true
+                property bool showStatsWidget: true
+                property bool showTrayPill: true
+                property bool showNetworkPill: true
+                property bool showBluetoothPill: true
+                property bool showAudioPill: true
+                property bool showClockPill: true
+                property bool showNotificationPill: true
+                property bool showPowerPill: true
+                property bool showKillTargetPill: false
+                property bool showFreshRssPill: true
+                property bool showHyprInspPill: false
+            }
+        }
+
+        function persistBarLayout() {
+            bar._barLayoutWriteGuard = true
+            barLayoutAdapter.barPosition = bar.barPosition
+            barLayoutAdapter.uiScaleManual = cfg.uiScaleManual
+            barLayoutAdapter.clockFormat = root.clockFormat
+            try {
+                barLayoutAdapter.widgetLayoutJson = JSON.stringify(root.widgetLayout || [])
+            } catch (e) {
+                barLayoutAdapter.widgetLayoutJson = "[]"
+            }
+            try {
+                barLayoutAdapter.quickLaunchAppsJson = JSON.stringify(root.quickLaunchApps || [])
+            } catch (e) {
+                barLayoutAdapter.quickLaunchAppsJson = "[]"
+            }
+            barLayoutAdapter.showLauncherPill = root.showLauncherPill
+            barLayoutAdapter.showQuickLaunchPill = root.showQuickLaunchPill
+            barLayoutAdapter.showMediaWidget = root.showMediaWidget
+            barLayoutAdapter.showWorkspacesPill = root.showWorkspacesPill
+            barLayoutAdapter.showStatsWidget = root.showStatsWidget
+            barLayoutAdapter.showTrayPill = root.showTrayPill
+            barLayoutAdapter.showNetworkPill = root.showNetworkPill
+            barLayoutAdapter.showBluetoothPill = root.showBluetoothPill
+            barLayoutAdapter.showAudioPill = root.showAudioPill
+            barLayoutAdapter.showClockPill = root.showClockPill
+            barLayoutAdapter.showNotificationPill = root.showNotificationPill
+            barLayoutAdapter.showPowerPill = root.showPowerPill
+            barLayoutAdapter.showKillTargetPill = root.showKillTargetPill
+            barLayoutAdapter.showFreshRssPill = root.showFreshRssPill
+            barLayoutAdapter.showHyprInspPill = root.showHyprInspPill
+            barLayoutFile.writeAdapter()
+            // Clear guard after filesystem watcher has had a chance to fire.
+            Qt.callLater(function() {
+                Qt.callLater(function() {
+                    bar._barLayoutWriteGuard = false
+                })
+            })
+        }
+
+        function setBarPosition(pos) {
+            const next = (pos === "bottom") ? "bottom" : "top"
+            if (bar.barPosition === next)
+                return
+            bar.barPosition = next
+            persistBarLayout()
+        }
+
+        function toggleBarPosition() {
+            setBarPosition(bar.barPosition === "top" ? "bottom" : "top")
+        }
+
+        function cloneDefaultLayout() {
+            const src = cfg.defaultWidgetLayout || []
+            const out = []
+            for (let i = 0; i < src.length; i++) {
+                const e = src[i]
+                if (!e || !e.id)
+                    continue
+                out.push({ id: String(e.id), zone: (e.zone === "center" || e.zone === "right") ? e.zone : "left" })
+            }
+            return out
+        }
+
+        function normalizeLayout(arr) {
+            const known = {}
+            const cat = root.widgetCatalog
+            for (let i = 0; i < cat.length; i++)
+                known[cat[i].id] = true
+            const out = []
+            const seen = {}
+            if (arr && arr.length) {
+                for (let i = 0; i < arr.length; i++) {
+                    const e = arr[i]
+                    if (!e || !e.id || !known[e.id] || seen[e.id])
+                        continue
+                    seen[e.id] = true
+                    out.push({
+                        id: String(e.id),
+                        zone: (e.zone === "center" || e.zone === "right") ? String(e.zone) : "left"
+                    })
+                }
+            }
+            // Append any missing catalog ids at end of their default zones
+            const defaults = bar.cloneDefaultLayout()
+            for (let i = 0; i < defaults.length; i++) {
+                if (!seen[defaults[i].id])
+                    out.push(defaults[i])
+            }
+            return out
+        }
+
+        function widgetItemById(id) {
+            switch (String(id)) {
+            case "launcher": return launcherPill
+            case "quickLaunch": return quickLaunchPill
+            case "freshRss": return freshRssPill
+            case "media": return mediaPill
+            case "workspaces": return workspacesPill
+            case "stats": return sysStatsPill
+            case "tray": return trayPill
+            case "connectivity": return connectivityPill
+            case "audio": return audioPill
+            case "clock": return clockPill
+            case "notifications": return notificationBell
+            case "killTarget": return killTargetPill
+            case "hyprInsp": return hyprInspPill
+            case "power": return powerMenu
+            default: return null
+            }
+        }
+
+        function applyWidgetLayout() {
+            if (!leftZone || !centerZone || !rightZone || !widgetPool)
+                return
+            const layout = (root.widgetLayout && root.widgetLayout.length)
+                ? root.widgetLayout
+                : bar.cloneDefaultLayout()
+            const items = []
+            for (let i = 0; i < layout.length; i++) {
+                const w = bar.widgetItemById(layout[i].id)
+                if (w)
+                    items.push(w)
+            }
+            // Park everything in the pool first (stable reparent order)
+            for (let i = 0; i < items.length; i++)
+                items[i].parent = widgetPool
+            for (let i = 0; i < layout.length; i++) {
+                const entry = layout[i]
+                const w = bar.widgetItemById(entry.id)
+                if (!w)
+                    continue
+                const zone = entry.zone === "center" ? centerZone
+                    : (entry.zone === "right" ? rightZone : leftZone)
+                w.parent = zone
+            }
+        }
+
+        function setClockFormat(fmt) {
+            const next = String(fmt || "").trim()
+            if (!next.length)
+                return
+            if (root.clockFormat === next)
+                return
+            root.clockFormat = next
+            persistBarLayout()
+        }
+
+        function getWidgetVisible(id) {
+            switch (String(id)) {
+            case "launcher": return root.showLauncherPill
+            case "quickLaunch": return root.showQuickLaunchPill
+            case "freshRss": return root.showFreshRssPill
+            case "media": return root.showMediaWidget
+            case "workspaces": return root.showWorkspacesPill
+            case "stats": return root.showStatsWidget
+            case "tray": return root.showTrayPill
+            case "connectivity": return root.showNetworkPill || root.showBluetoothPill
+            case "network": return root.showNetworkPill
+            case "bluetooth": return root.showBluetoothPill
+            case "audio": return root.showAudioPill
+            case "clock": return root.showClockPill
+            case "notifications": return root.showNotificationPill
+            case "killTarget": return root.showKillTargetPill
+            case "hyprInsp": return root.showHyprInspPill
+            case "power": return root.showPowerPill
+            default: return false
+            }
+        }
+
+        function setWidgetVisible(id, enabled) {
+            const on = !!enabled
+            switch (String(id)) {
+            case "launcher": root.showLauncherPill = on; break
+            case "quickLaunch": root.showQuickLaunchPill = on; break
+            case "freshRss": root.showFreshRssPill = on; break
+            case "media": root.showMediaWidget = on; break
+            case "workspaces": root.showWorkspacesPill = on; break
+            case "stats": root.showStatsWidget = on; break
+            case "tray": root.showTrayPill = on; break
+            case "connectivity":
+                root.showNetworkPill = on
+                root.showBluetoothPill = on
+                break
+            case "network": root.showNetworkPill = on; break
+            case "bluetooth": root.showBluetoothPill = on; break
+            case "audio": root.showAudioPill = on; break
+            case "clock": root.showClockPill = on; break
+            case "notifications": root.showNotificationPill = on; break
+            case "killTarget": root.showKillTargetPill = on; break
+            case "hyprInsp": root.showHyprInspPill = on; break
+            case "power": root.showPowerPill = on; break
+            default: return
+            }
+            persistBarLayout()
+        }
+
+        function toggleWidgetVisible(id) {
+            setWidgetVisible(id, !getWidgetVisible(id))
+        }
+
+        function setWidgetZone(id, zone) {
+            const z = (zone === "center" || zone === "right") ? zone : "left"
+            const layout = bar.normalizeLayout(root.widgetLayout)
+            let found = false
+            for (let i = 0; i < layout.length; i++) {
+                if (layout[i].id === id) {
+                    layout[i].zone = z
+                    found = true
+                    break
+                }
+            }
+            if (!found)
+                layout.push({ id: String(id), zone: z })
+            root.widgetLayout = layout
+            bar.applyWidgetLayout()
+            persistBarLayout()
+        }
+
+        function moveWidget(id, delta) {
+            const layout = bar.normalizeLayout(root.widgetLayout)
+            let idx = -1
+            for (let i = 0; i < layout.length; i++) {
+                if (layout[i].id === id) {
+                    idx = i
+                    break
+                }
+            }
+            if (idx < 0)
+                return
+            const zone = layout[idx].zone
+            // Move among siblings in the same zone
+            const zoneIdxs = []
+            for (let i = 0; i < layout.length; i++) {
+                if (layout[i].zone === zone)
+                    zoneIdxs.push(i)
+            }
+            let posInZone = zoneIdxs.indexOf(idx)
+            const newPos = posInZone + (delta < 0 ? -1 : 1)
+            if (newPos < 0 || newPos >= zoneIdxs.length)
+                return
+            const swapWith = zoneIdxs[newPos]
+            const tmp = layout[idx]
+            layout[idx] = layout[swapWith]
+            layout[swapWith] = tmp
+            root.widgetLayout = layout
+            bar.applyWidgetLayout()
+            persistBarLayout()
+        }
+
+        function resetWidgetLayout() {
+            root.widgetLayout = bar.cloneDefaultLayout()
+            bar.applyWidgetLayout()
+            persistBarLayout()
+        }
+
+        function cloneQuickLaunchApps() {
+            const src = cfg.quickLaunchApps || []
+            return bar.normalizeQuickLaunchApps(src)
+        }
+
+        function normalizeQuickLaunchApps(arr) {
+            const out = []
+            if (!arr || arr.length === undefined)
+                return out
+            for (let i = 0; i < arr.length; i++) {
+                const e = arr[i]
+                if (!e)
+                    continue
+                let command = e.command
+                if (typeof command !== "string" && command && command.length !== undefined) {
+                    const args = []
+                    for (let j = 0; j < command.length; j++)
+                        args.push(String(command[j]))
+                    command = args
+                } else if (command === undefined || command === null) {
+                    command = ""
+                } else {
+                    command = String(command)
+                }
+                // Skip empty entries
+                const hasCmd = (typeof command === "string")
+                    ? command.length > 0
+                    : (command.length > 0)
+                if (!hasCmd && !(e.tooltip || e.icon || e.glyph))
+                    continue
+                out.push({
+                    icon: e.icon ? String(e.icon) : "",
+                    glyph: e.glyph ? String(e.glyph) : "",
+                    command: command,
+                    tooltip: e.tooltip ? String(e.tooltip) : ""
+                })
+            }
+            return out
+        }
+
+        function setQuickLaunchApps(arr) {
+            root.quickLaunchApps = bar.normalizeQuickLaunchApps(arr)
+            persistBarLayout()
+        }
+
+        function addQuickLaunchApp(entry) {
+            const list = bar.normalizeQuickLaunchApps(root.quickLaunchApps)
+            const one = bar.normalizeQuickLaunchApps([entry])
+            if (!one.length)
+                return false
+            list.push(one[0])
+            root.quickLaunchApps = list
+            persistBarLayout()
+            return true
+        }
+
+        function removeQuickLaunchApp(index) {
+            const list = bar.normalizeQuickLaunchApps(root.quickLaunchApps)
+            const i = Number(index)
+            if (!(i >= 0) || i >= list.length)
+                return
+            list.splice(i, 1)
+            root.quickLaunchApps = list
+            persistBarLayout()
+        }
+
+        function moveQuickLaunchApp(index, delta) {
+            const list = bar.normalizeQuickLaunchApps(root.quickLaunchApps)
+            const i = Number(index)
+            const d = Number(delta) || 0
+            const j = i + d
+            if (!(i >= 0) || i >= list.length || j < 0 || j >= list.length)
+                return
+            const tmp = list[i]
+            list[i] = list[j]
+            list[j] = tmp
+            root.quickLaunchApps = list
+            persistBarLayout()
+        }
+
+        function resetQuickLaunchApps() {
+            root.quickLaunchApps = bar.cloneQuickLaunchApps()
+            persistBarLayout()
         }
 
         readonly property alias notificationSubscribe: cfg.notificationSubscribe
@@ -373,12 +933,26 @@ ShellRoot {
         readonly property alias iconTextGap: cfg.iconTextGap
         readonly property alias dualAudioSidePadding: cfg.dualAudioSidePadding
 
-        // --- Sizing & bar position
-        readonly property alias barPosition: cfg.barPosition
+        // --- Sizing & bar position (barPosition is runtime-mutable; Config is the default)
+        property string barPosition: "top"
+        // Clock format is owned on root (persisted); bar exposes it for ClockPill / control bar.
+        property alias clockFormat: root.clockFormat
+        readonly property alias clockFormatPresets: cfg.clockFormatPresets
         readonly property alias barEdgeMargin: cfg.barEdgeMargin
         readonly property alias popupBarGap: cfg.popupBarGap
         readonly property alias barHeight: cfg.barHeight
         readonly property alias barTopMargin: cfg.barTopMargin
+        readonly property alias barPositionIconTop: cfg.barPositionIconTop
+        readonly property alias barPositionIconBottom: cfg.barPositionIconBottom
+        readonly property alias hyprResolutionBin: cfg.hyprResolutionBin
+        readonly property alias uiScale: cfg.uiScale
+        readonly property alias uiScaleManual: cfg.uiScaleManual
+        readonly property alias uiDesignWidth: cfg.uiDesignWidth
+        function sp(n) { return cfg.sp(n) }
+
+        // Widget catalog + layout helpers for BarControlBar
+        readonly property alias widgetCatalog: root.widgetCatalog
+        readonly property alias widgetLayout: root.widgetLayout
 
         // Popup Y anchor — opens below the bar (top) or above it (bottom)
         function popupAnchorY(popupHeight, gap) {
@@ -399,7 +973,10 @@ ShellRoot {
         readonly property alias quickLaunchIcon: cfg.quickLaunchIcon
         readonly property alias quickLaunchSpacing: cfg.quickLaunchSpacing
         readonly property alias quickLaunchPaddingH: cfg.quickLaunchPaddingH
-        readonly property alias quickLaunchApps: cfg.quickLaunchApps
+        // Runtime list (editable from BarControlBar); falls back to Config via clone on start
+        property alias quickLaunchApps: root.quickLaunchApps
+        // Desktop app picker script for the Launch panel
+        readonly property string desktopAppsJsonScript: "/home/crome/.config/quickshell/scripts/desktop-apps-json.sh"
 
         // --- Popup sizes
         readonly property alias popupAudioWidth: cfg.popupAudioWidth
@@ -489,6 +1066,7 @@ ShellRoot {
         readonly property alias iconShutdown: cfg.iconShutdown
         readonly property alias iconBios: cfg.iconBios
         readonly property alias iconLauncher: cfg.iconLauncher
+        readonly property alias iconHyprInsp: cfg.iconHyprInsp
         readonly property alias launcherCommand: cfg.launcherCommand
         readonly property alias launcherTooltip: cfg.launcherTooltip
         readonly property alias audioSpeakerIcon: cfg.audioSpeakerIcon
@@ -616,7 +1194,7 @@ ShellRoot {
             anchors.bottomMargin: bar.barContentVMargin
             radius: bar.barRadius
             color: bar.glassBg
-            border.width: bar.controlBorderWidth
+            border.width: Math.max(1, bar.controlBorderWidth)
             border.color: bar.glassBorder
 
             Rectangle {
@@ -628,114 +1206,49 @@ ShellRoot {
                 radius: parent.radius
             }
 
-            // Bottom edge strip removed — soft shadow washed true-black chrome
+            // Right-click empty bar chrome → open/close the control mini-bar
+            // (top/bottom toggle; room for display controls later).
+            // Lives under the widget row (z: 0) so pill MouseAreas still own left-clicks.
+            MouseArea {
+                id: barBgContext
+                anchors.fill: parent
+                z: 0
+                acceptedButtons: Qt.RightButton
+                hoverEnabled: false
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton)
+                        barControlBar.toggle()
+                }
+            }
+
+            // Host for the temporary control strip (PopupWindow; zero-size Item).
+            BarControlBar {
+                id: barControlBar
+                bar: bar
+            }
+
+            // Holding pen for reparentable widgets (layout editor moves them between zones).
+            // Keep visible so parked children are not force-hidden; park off-screen.
+            Item {
+                id: widgetPool
+                width: 0
+                height: 0
+                x: -10000
+                y: -10000
+            }
 
             RowLayout {
+                z: 1
                 anchors.fill: parent
                 anchors.leftMargin: bar.barContentHMargin
                 anchors.rightMargin: bar.barContentHMargin
                 spacing: 0
 
-                // --- LEFT ZONE ---
+                // --- LEFT ZONE (receives reparented widgets) ---
                 RowLayout {
                     id: leftZone
                     spacing: bar.widgetSpacing
-
-                    // ─ App Launcher (command + tooltip from Config.qml: launcherCommand, launcherTooltip) ─
-                    Rectangle {
-                        id: launcherPill
-                        visible: root.showLauncherPill
-                        Layout.preferredWidth: 42
-                        Layout.preferredHeight: bar.pillHeight
-                        radius: bar.pillRadius
-                        color: launcherMouse.containsMouse ? bar.glassHover : bar.pillBg
-                        border.width: bar.controlBorderWidth
-                        border.color: launcherMouse.containsMouse ? bar.accent : bar.pillBorder
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: bar.iconLauncher
-                            font.pixelSize: bar.iconSizePillLarge
-                            font.family: bar.fontFamily
-                            color: launcherMouse.containsMouse ? bar.accent : bar.subtext
-                        }
-
-                        MouseArea {
-                            id: launcherMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Quickshell.execDetached(["sh", "-c", bar.launcherCommand])
-                        }
-
-                        ToolTip.text: bar.launcherTooltip
-                        ToolTip.visible: launcherMouse.containsMouse
-                        ToolTip.delay: bar.tooltipDelay
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: root.showLauncherPill && root.showQuickLaunchPill
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ Quick Launch ─
-                    QuickLaunchPill {
-                        visible: root.showQuickLaunchPill
-                        bar: bar
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: root.showQuickLaunchPill && (root.showFreshRssPill || root.showRadarPill)
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ FreshRSS ─
-                    FreshRssPill {
-                        id: freshRssPill
-                        visible: root.showFreshRssPill
-                        bar: bar
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: root.showFreshRssPill && root.showRadarPill
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ NWS Radar ─
-                    RadarPill {
-                        id: radarPill
-                        visible: root.showRadarPill
-                        bar: bar
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: (root.showFreshRssPill || root.showRadarPill) && root.showMediaWidget
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ Media Player ─
-                    MediaPill {
-                        id: mediaPill
-                        visible: root.showMediaWidget
-                        bar: bar
-                        barBg: barBg
-                    }
+                    Layout.alignment: Qt.AlignVCenter
                 }
 
                 Item { Layout.fillWidth: true }
@@ -744,184 +1257,232 @@ ShellRoot {
                 RowLayout {
                     id: rightZone
                     spacing: bar.widgetSpacing
+                    Layout.alignment: Qt.AlignVCenter
+                }
+            }
 
-                    // ─ System Stats ─
-                    SysStatsPill {
-                        id: sysStatsPill
-                        visible: root.showStatsWidget
+            // --- CENTER ZONE (true screen center; receives reparented widgets) ---
+            RowLayout {
+                id: centerZone
+                z: 1
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: bar.widgetSpacing
+            }
+
+            // =================================================================
+            // Widget instances (reparented into left/center/right via applyWidgetLayout)
+            // Initial parent is widgetPool; Component.onCompleted places them.
+            // =================================================================
+
+            // ─ App Launcher ─
+            Rectangle {
+                id: launcherPill
+                parent: widgetPool
+                visible: root.showLauncherPill
+                Layout.preferredWidth: bar.sp(42)
+                Layout.preferredHeight: bar.pillHeight
+                Layout.alignment: Qt.AlignVCenter
+                radius: bar.pillRadius
+                color: launcherMouse.containsMouse ? bar.glassHover : bar.pillBg
+                border.width: bar.controlBorderWidth
+                border.color: launcherMouse.containsMouse ? bar.accent : bar.pillBorder
+
+                Text {
+                    anchors.centerIn: parent
+                    text: bar.iconLauncher
+                    font.pixelSize: bar.iconSizePillLarge
+                    font.family: bar.fontFamily
+                    color: launcherMouse.containsMouse ? bar.accent : bar.subtext
+                }
+
+                MouseArea {
+                    id: launcherMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Quickshell.execDetached(["sh", "-c", bar.launcherCommand])
+                }
+
+                ToolTip.text: bar.launcherTooltip
+                ToolTip.visible: launcherMouse.containsMouse
+                ToolTip.delay: bar.tooltipDelay
+            }
+
+            // ─ Quick Launch ─
+            QuickLaunchPill {
+                id: quickLaunchPill
+                parent: widgetPool
+                visible: root.effQuickLaunch
+                bar: bar
+            }
+
+            // ─ FreshRSS ─
+            FreshRssPill {
+                id: freshRssPill
+                parent: widgetPool
+                visible: root.effFreshRss
+                bar: bar
+            }
+
+            // ─ Media Player ─
+            MediaPill {
+                id: mediaPill
+                parent: widgetPool
+                visible: root.effMedia
+                bar: bar
+                barBg: barBg
+            }
+
+            // ─ Workspaces ─
+            WorkspacesPill {
+                id: workspacesPill
+                parent: widgetPool
+                visible: root.showWorkspacesPill
+                bar: bar
+            }
+
+            // ─ System Stats ─
+            SysStatsPill {
+                id: sysStatsPill
+                parent: widgetPool
+                visible: root.effStats
+                bar: bar
+                barBg: barBg
+                mediaActive: mediaPill.hasMedia
+            }
+
+            // ─ System Tray ─
+            SystemTrayPill {
+                id: trayPill
+                parent: widgetPool
+                visible: root.showTrayPill
+                bar: bar
+                barBg: barBg
+            }
+
+            // ─ Connectivity (Network + Bluetooth as one layout unit) ─
+            Rectangle {
+                id: connectivityPill
+                parent: widgetPool
+                visible: root.effConnectivity
+                Layout.preferredHeight: bar.pillHeight
+                Layout.preferredWidth: connectivityRow.implicitWidth + 10
+                Layout.alignment: Qt.AlignVCenter
+                radius: bar.pillRadius
+                color: bar.pillBg
+                border.width: bar.controlBorderWidth
+                border.color: bar.pillBorder
+
+                Row {
+                    id: connectivityRow
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    NetworkPill {
+                        id: networkPill
+                        embedded: true
+                        visible: root.effNetwork
                         bar: bar
                         barBg: barBg
-                        mediaActive: mediaPill.hasMedia
                     }
 
-                    // ── divider ──
                     Rectangle {
-                        visible: root.showStatsWidget && (root.showTrayPill || root.showNetworkPill || root.showBluetoothPill || root.showAudioPill)
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
+                        visible: root.effNetwork && root.effBluetooth
+                        width: bar.dividerThickness
+                        height: 17
+                        anchors.verticalCenter: parent.verticalCenter
                         color: bar.divider
                     }
 
-                    // ─ System Tray ─
-                    SystemTrayPill {
-                        visible: root.showTrayPill
-                        bar: bar
-                        barBg: barBg
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: root.showTrayPill && (root.showNetworkPill || root.showBluetoothPill || root.showAudioPill)
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ Connectivity (Network + Bluetooth in one shared pill) ─
-                    // Widgets stay separate files; embedded: true strips their own
-                    // chrome so this shell is the single visual capsule.
-                    Rectangle {
-                        id: connectivityPill
-                        visible: root.showNetworkPill || root.showBluetoothPill
-                        Layout.preferredHeight: bar.pillHeight
-                        Layout.preferredWidth: connectivityRow.implicitWidth + 10
-                        Layout.alignment: Qt.AlignVCenter
-                        radius: bar.pillRadius
-                        color: bar.pillBg
-                        border.width: bar.controlBorderWidth
-                        border.color: bar.pillBorder
-
-                        Row {
-                            id: connectivityRow
-                            anchors.centerIn: parent
-                            spacing: 4
-
-                            NetworkPill {
-                                id: networkPill
-                                embedded: true
-                                visible: root.showNetworkPill
-                                bar: bar
-                                barBg: barBg
-                            }
-
-                            // Thin inner separator (same style as SysStats sections)
-                            Rectangle {
-                                visible: root.showNetworkPill && root.showBluetoothPill
-                                width: bar.dividerThickness
-                                height: 17
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: bar.divider
-                            }
-
-                            BluetoothPill {
-                                id: bluetoothPill
-                                embedded: true
-                                visible: root.showBluetoothPill
-                                bar: bar
-                                barBg: barBg
-                            }
-                        }
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: (root.showNetworkPill || root.showBluetoothPill) && root.showAudioPill
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ Audio ─
-                    AudioPill {
-                        id: audioPill
-                        visible: root.showAudioPill
-                        bar: bar
-                        barBg: barBg
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: root.showAudioPill && root.showClockPill
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ Clock + Calendar ─
-                    ClockPill {
-                        id: clockPill
-                        visible: root.showClockPill
-                        bar: bar
-                        barBg: barBg
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: root.showClockPill && root.showNotificationPill
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ Notifications ─
-                    NotificationBell {
-                        id: notificationBell
-                        visible: root.showNotificationPill
-                        bar: bar
-                        barBg: barBg
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: root.showNotificationPill && (root.showKillTargetPill || root.showPowerPill)
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ Kill Target ─
-                    KillTargetPill {
-                        id: killTargetPill
-                        visible: root.showKillTargetPill
-                        bar: bar
-                    }
-
-                    // ── divider ──
-                    Rectangle {
-                        visible: root.showKillTargetPill && root.showPowerPill
-                        Layout.preferredWidth: bar.dividerThickness
-                        Layout.preferredHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        color: bar.divider
-                    }
-
-                    // ─ Power Menu ─
-                    PowerMenu {
-                        visible: root.showPowerPill
+                    BluetoothPill {
+                        id: bluetoothPill
+                        embedded: true
+                        visible: root.effBluetooth
                         bar: bar
                         barBg: barBg
                     }
                 }
             }
 
-            // --- CENTER ZONE ---
-            RowLayout {
-                id: centerZone
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: bar.widgetSpacing
+            // ─ Audio ─
+            AudioPill {
+                id: audioPill
+                parent: widgetPool
+                visible: root.showAudioPill
+                bar: bar
+                barBg: barBg
+            }
 
-                // ─ Workspaces ─
-                WorkspacesPill {
-                    visible: root.showWorkspacesPill
-                    bar: bar
+            // ─ Clock + Calendar ─
+            ClockPill {
+                id: clockPill
+                parent: widgetPool
+                visible: root.showClockPill
+                bar: bar
+                barBg: barBg
+            }
+
+            // ─ Notifications ─
+            NotificationBell {
+                id: notificationBell
+                parent: widgetPool
+                visible: root.showNotificationPill
+                bar: bar
+                barBg: barBg
+            }
+
+            // ─ Kill Target ─
+            KillTargetPill {
+                id: killTargetPill
+                parent: widgetPool
+                visible: root.effKillTarget
+                bar: bar
+            }
+
+            // ─ Hyprland Config Inspector ─
+            Rectangle {
+                id: hyprInspPill
+                parent: widgetPool
+                visible: root.showHyprInspPill
+                Layout.preferredWidth: bar.sp(42)
+                Layout.preferredHeight: bar.pillHeight
+                Layout.alignment: Qt.AlignVCenter
+                radius: bar.pillRadius
+                color: hyprInspMouse.containsMouse ? bar.glassHover : bar.pillBg
+                border.width: bar.controlBorderWidth
+                border.color: hyprInspMouse.containsMouse ? bar.accent : bar.pillBorder
+
+                Text {
+                    anchors.centerIn: parent
+                    text: bar.iconHyprInsp
+                    font.pixelSize: bar.iconSizePillLarge
+                    font.family: bar.fontFamily
+                    color: hyprInspMouse.containsMouse ? bar.accent : bar.subtext
                 }
+
+                MouseArea {
+                    id: hyprInspMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (hyprConfigInsp && hyprConfigInsp.toggle)
+                            hyprConfigInsp.toggle()
+                    }
+                    ToolTip.visible: containsMouse
+                    ToolTip.delay: bar.tooltipDelay
+                    ToolTip.text: "Hyprland Config Inspector"
+                }
+            }
+
+            // ─ Power Menu ─
+            PowerMenu {
+                id: powerMenu
+                parent: widgetPool
+                visible: root.showPowerPill
+                bar: bar
+                barBg: barBg
             }
         }
 
@@ -952,26 +1513,6 @@ ShellRoot {
             function hide() {
                 if (freshRssPill && freshRssPill.hide)
                     freshRssPill.hide()
-            }
-        }
-
-        Io.IpcHandler {
-            target: "radar"
-            function toggle() {
-                if (radarPill && radarPill.toggle)
-                    radarPill.toggle()
-            }
-            function refresh() {
-                if (radarPill && radarPill.refresh)
-                    radarPill.refresh()
-            }
-            function show() {
-                if (radarPill && radarPill.show)
-                    radarPill.show()
-            }
-            function hide() {
-                if (radarPill && radarPill.hide)
-                    radarPill.hide()
             }
         }
 
@@ -1237,94 +1778,130 @@ ShellRoot {
     Io.IpcHandler {
         target: "shell"
         function setShowLauncherPill(enabled: bool): void {
-            root.showLauncherPill = enabled
+            bar.setWidgetVisible("launcher", enabled)
         }
         function toggleShowLauncherPill(): void {
-            root.showLauncherPill = !root.showLauncherPill
+            bar.toggleWidgetVisible("launcher")
         }
         function setShowQuickLaunchPill(enabled: bool): void {
-            root.showQuickLaunchPill = enabled
+            bar.setWidgetVisible("quickLaunch", enabled)
         }
         function toggleShowQuickLaunchPill(): void {
-            root.showQuickLaunchPill = !root.showQuickLaunchPill
+            bar.toggleWidgetVisible("quickLaunch")
         }
         function setShowMediaWidget(enabled: bool): void {
-            root.showMediaWidget = enabled
+            bar.setWidgetVisible("media", enabled)
         }
         function toggleShowMediaWidget(): void {
-            root.showMediaWidget = !root.showMediaWidget
+            bar.toggleWidgetVisible("media")
         }
         function setShowWorkspacesPill(enabled: bool): void {
-            root.showWorkspacesPill = enabled
+            bar.setWidgetVisible("workspaces", enabled)
         }
         function toggleShowWorkspacesPill(): void {
-            root.showWorkspacesPill = !root.showWorkspacesPill
+            bar.toggleWidgetVisible("workspaces")
         }
         function setShowStatsWidget(enabled: bool): void {
-            root.showStatsWidget = enabled
+            bar.setWidgetVisible("stats", enabled)
         }
         function toggleShowStatsWidget(): void {
-            root.showStatsWidget = !root.showStatsWidget
+            bar.toggleWidgetVisible("stats")
         }
         function setShowTrayPill(enabled: bool): void {
-            root.showTrayPill = enabled
+            bar.setWidgetVisible("tray", enabled)
         }
         function toggleShowTrayPill(): void {
-            root.showTrayPill = !root.showTrayPill
+            bar.toggleWidgetVisible("tray")
         }
         function setShowNetworkPill(enabled: bool): void {
-            root.showNetworkPill = enabled
+            bar.setWidgetVisible("network", enabled)
         }
         function toggleShowNetworkPill(): void {
-            root.showNetworkPill = !root.showNetworkPill
+            bar.toggleWidgetVisible("network")
         }
         function setShowBluetoothPill(enabled: bool): void {
-            root.showBluetoothPill = enabled
+            bar.setWidgetVisible("bluetooth", enabled)
         }
         function toggleShowBluetoothPill(): void {
-            root.showBluetoothPill = !root.showBluetoothPill
+            bar.toggleWidgetVisible("bluetooth")
         }
         function setShowAudioPill(enabled: bool): void {
-            root.showAudioPill = enabled
+            bar.setWidgetVisible("audio", enabled)
         }
         function toggleShowAudioPill(): void {
-            root.showAudioPill = !root.showAudioPill
+            bar.toggleWidgetVisible("audio")
         }
         function setShowClockPill(enabled: bool): void {
-            root.showClockPill = enabled
+            bar.setWidgetVisible("clock", enabled)
         }
         function toggleShowClockPill(): void {
-            root.showClockPill = !root.showClockPill
+            bar.toggleWidgetVisible("clock")
         }
         function setShowNotificationPill(enabled: bool): void {
-            root.showNotificationPill = enabled
+            bar.setWidgetVisible("notifications", enabled)
         }
         function toggleShowNotificationPill(): void {
-            root.showNotificationPill = !root.showNotificationPill
+            bar.toggleWidgetVisible("notifications")
         }
         function setShowPowerPill(enabled: bool): void {
-            root.showPowerPill = enabled
+            bar.setWidgetVisible("power", enabled)
         }
         function toggleShowPowerPill(): void {
-            root.showPowerPill = !root.showPowerPill
+            bar.toggleWidgetVisible("power")
+        }
+        function setClockFormat(format: string): void {
+            bar.setClockFormat(format)
+        }
+        function setWidgetZone(widgetId: string, zone: string): void {
+            bar.setWidgetZone(widgetId, zone)
+        }
+        function moveWidget(widgetId: string, delta: string): void {
+            bar.moveWidget(widgetId, Number(delta) || 0)
+        }
+        function resetWidgetLayout(): void {
+            bar.resetWidgetLayout()
+        }
+        function setBarPosition(position: string): void {
+            bar.setBarPosition(position)
+        }
+        function toggleBarPosition(): void {
+            bar.toggleBarPosition()
+        }
+        function toggleBarControlBar(): void {
+            barControlBar.toggle()
+        }
+        function showBarControlBar(): void {
+            barControlBar.show()
+        }
+        function hideBarControlBar(): void {
+            barControlBar.hide()
+        }
+        function setUiScale(scale: string): void {
+            bar.setUiScale(scale)
+        }
+        function setUiScaleManual(scale: string): void {
+            bar.setUiScaleManual(scale)
+        }
+        function setUiScaleAuto(): void {
+            bar.setUiScaleAuto()
         }
         function setShowKillTargetPill(enabled: bool): void {
-            root.showKillTargetPill = enabled
+            bar.setWidgetVisible("killTarget", enabled)
         }
         function setShowFreshRssPill(enabled: bool): void {
-            root.showFreshRssPill = enabled
+            bar.setWidgetVisible("freshRss", enabled)
         }
         function toggleShowFreshRssPill(): void {
-            root.showFreshRssPill = !root.showFreshRssPill
-        }
-        function setShowRadarPill(enabled: bool): void {
-            root.showRadarPill = enabled
-        }
-        function toggleShowRadarPill(): void {
-            root.showRadarPill = !root.showRadarPill
+            bar.toggleWidgetVisible("freshRss")
         }
         function toggleShowKillTargetPill(): void {
-            root.showKillTargetPill = !root.showKillTargetPill
+            bar.toggleWidgetVisible("killTarget")
+        }
+        function setShowHyprInspPill(enabled: bool): void {
+            bar.setWidgetVisible("hyprInsp", enabled)
+        }
+        function toggleShowHyprInspPill(): void {
+            bar.toggleWidgetVisible("hyprInsp")
         }
         function setShowMagicWorkspacePill(enabled: bool): void {
             root.showMagicWorkspacePill = enabled

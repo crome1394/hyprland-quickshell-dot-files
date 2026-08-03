@@ -38,6 +38,13 @@ Rectangle {
     required property var bar
     required property Item barBg   // needed for accurate popup positioning
 
+    // Format string for Qt.formatDateTime — from bar.clockFormat (Config + control bar).
+    readonly property string clockFormat: {
+        if (bar && bar.clockFormat && String(bar.clockFormat).length)
+            return String(bar.clockFormat)
+        return "dddd, MM·dd·yyyy | HH:mm:ss"
+    }
+
     // === Layout (for RowLayout participation in the bar) ===
     Layout.preferredWidth: clockLabel.implicitWidth + 28
     Layout.preferredHeight: 36
@@ -63,7 +70,7 @@ Rectangle {
         Text {
             id: clockLabel
             anchors.centerIn: parent
-            text: Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss")  //HH:mm:ss
+            text: Qt.formatDateTime(new Date(), root.clockFormat)
             color: bar.clock
             font.pixelSize: bar.fontClock
             font.family: bar.fontMono
@@ -85,13 +92,20 @@ Rectangle {
         }
     }
 
-    // Live updating clock
+    // Live updating clock (re-reads bar.clockFormat every tick so presets apply live)
     Timer {
         interval: 1000              //1000 = 1 Second
         running: true
         repeat: true
         onTriggered: {
-            clockLabel.text = Qt.formatDateTime(new Date(), "dddd, MM·dd·yyyy | HH:mm:ss") //HH:mm:ss
+            clockLabel.text = Qt.formatDateTime(new Date(), root.clockFormat)
+        }
+    }
+
+    Connections {
+        target: bar
+        function onClockFormatChanged() {
+            clockLabel.text = Qt.formatDateTime(new Date(), root.clockFormat)
         }
     }
 

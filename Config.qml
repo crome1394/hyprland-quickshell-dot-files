@@ -96,8 +96,9 @@ QtObject {
 
     // Main bar — true black so it matches kitty, not a lifted charcoal
     readonly property color glassBg:          "#000000"
-    // Near-invisible border (true black edge). White alpha borders soft-AA against wallpaper.
-    readonly property color glassBorder:      "#000000"
+    // Subtle dark-grey outline so the bar reads against a dark wallpaper
+    // (near-black, not a bright edge — just enough separation).
+    readonly property color glassBorder:      "#1e2024"
     readonly property color glassHighlight:   "transparent"  // No white edge wash on the bar
 
     // Pills — one step above pure black (still deeper than old #141618)
@@ -134,64 +135,162 @@ QtObject {
     readonly property color popupButtonHoverBg: "#121416"
 
     // =========================================================================
-    // RADII (corner rounding) — consistency is king
+    // UI SCALE (auto from screen width + optional manual override)
     // =========================================================================
-    readonly property int barRadius:       14   // Main bar background rectangle
-    readonly property int pillRadius:      10   // All pill containers (most common)
-    readonly property int popupRadius:     14   // Default for most popups (audio, calendar, tray, media)
-    readonly property int popupRadiusLarge:16   // Power menu, Help overlay
-    readonly property int buttonRadius:       6   // Small buttons inside popups (mute, nav, close)
-    readonly property int smallButtonRadius:  4   // Very tight buttons (some audio controls)
-    readonly property int sliderRadius:       0   // 0 = auto (height/2). Set >0 to force specific rounding on volume bars
-    readonly property int workspaceRadius:    8   // Individual workspace buttons
+    // Base sizes below were designed around a wide desktop (~2560+ logical px).
+    // shell.qml sets uiScale / screenWidth / screenHeight at runtime:
+    //   • uiScaleManual == 0  → auto: clamp(screenWidth / uiDesignWidth, min, max)
+    //   • uiScaleManual  > 0  → force that scale (e.g. 0.8), still clamped
+    //
+    // sp(n)     — scale a bar/pill pixel size
+    // popupW/H  — scale a popup size and clamp to the current screen
+    //
+    // IPC: qs ipc call shell setUiScale 0.8 | setUiScaleManual 0 | setUiScaleAuto
+    // =========================================================================
 
-    // Border widths (centralized so we can vary them later if desired)
+    // Runtime (written by shell.qml). Keep defaults sane before first apply.
+    property real uiScale: 1.0
+    property int screenWidth: 2560
+    property int screenHeight: 1440
+
+    // Full-size bar at this logical width and above; narrower screens scale down.
+    readonly property int  uiDesignWidth: 2560
+    readonly property real uiScaleMin:    0.65
+    readonly property real uiScaleMax:    1.0
+    // 0 = automatic from screen width; set e.g. 0.85 to force a scale on this machine.
+    // Writable so shell IPC / state file can override without editing this file.
+    property real uiScaleManual: 0
+
+    function sp(base) {
+        var b = Number(base)
+        if (!(b > 0))
+            return 0
+        return Math.max(1, Math.round(b * uiScale))
+    }
+
+    function popupW(base) {
+        var want = sp(base)
+        var maxW = Math.max(160, screenWidth - 24)
+        return Math.min(want, maxW)
+    }
+
+    function popupH(base) {
+        var want = sp(base)
+        var maxH = Math.max(120, screenHeight - sp(58) - 32)
+        return Math.min(want, maxH)
+    }
+
+    function computeUiScale(widthPx) {
+        var w = Number(widthPx)
+        if (!(w > 0))
+            w = uiDesignWidth
+        var manual = Number(uiScaleManual)
+        var s
+        if (manual > 0)
+            s = manual
+        else
+            s = w / uiDesignWidth
+        if (s < uiScaleMin) s = uiScaleMin
+        if (s > uiScaleMax) s = uiScaleMax
+        return s
+    }
+
+    // =========================================================================
+    // UI DENSITY / PRIORITY (what to hide on narrow screens)
+    // =========================================================================
+    // Priority (always kept if Config show* is true):
+    //   workspaces · system tray · audio · clock/calendar · notifications · power
+    //
+    // Deprioritized (auto-hidden below width thresholds, widest first):
+    //   1) Quick Launch
+    //   2) Sys stats (CPU / Memory / GPU)
+    //   3) Secondary: FreshRSS, media, kill-target
+    //   4) Connectivity: Network + Bluetooth capsule
+    //
+    // Thresholds are logical screen width (px). Tune if a machine feels too aggressive.
+
+    readonly property int uiDensityHideQuickLaunchBelow:   2300
+    readonly property int uiDensityHideStatsBelow:         2000
+    readonly property int uiDensityHideSecondaryBelow:     1680
+    readonly property int uiDensityHideConnectivityBelow:  1480
+
+    // Runtime flags written by shell.qml applyDensity()
+    property bool densityHideQuickLaunch:   false
+    property bool densityHideStats:         false
+    property bool densityHideSecondary:     false
+    property bool densityHideConnectivity:  false
+
+    function computeDensity(widthPx) {
+        var w = Number(widthPx)
+        if (!(w > 0))
+            w = screenWidth > 0 ? screenWidth : uiDesignWidth
+        return {
+            hideQuickLaunch:   w < uiDensityHideQuickLaunchBelow,
+            hideStats:         w < uiDensityHideStatsBelow,
+            hideSecondary:     w < uiDensityHideSecondaryBelow,
+            hideConnectivity:  w < uiDensityHideConnectivityBelow
+        }
+    }
+
+    // =========================================================================
+    // RADII (corner rounding) — consistency is king  (scaled)
+    // =========================================================================
+    readonly property int barRadius:       sp(14)   // Main bar background rectangle
+    readonly property int pillRadius:      sp(10)   // All pill containers (most common)
+    readonly property int popupRadius:     sp(14)   // Default for most popups (audio, calendar, tray, media)
+    readonly property int popupRadiusLarge:sp(16)   // Power menu, Help overlay
+    readonly property int buttonRadius:       sp(6)   // Small buttons inside popups (mute, nav, close)
+    readonly property int smallButtonRadius:  sp(4)   // Very tight buttons (some audio controls)
+    readonly property int sliderRadius:       0   // 0 = auto (height/2). Set >0 to force specific rounding on volume bars
+    readonly property int workspaceRadius:    sp(8)   // Individual workspace buttons
+
+    // Border widths (not scaled — keep 1px crisp outlines)
     readonly property int controlBorderWidth: 1   // Default border for pills, buttons, popup cards
 
     // =========================================================================
-    // SPACING & PADDING
+    // SPACING & PADDING (scaled)
     // =========================================================================
-    readonly property int sideMargin:           10   // Left/right margin of the whole bar (outside the glass rect)
-    readonly property int barContentHMargin:    20   // Inner left/right padding inside the main bar row
-    readonly property int barContentVMargin:     4   // Top/bottom breathing room for the glass rect inside the window
-    readonly property int pillHPadding:         18   // Typical horizontal inner padding for pill content (AudioPill etc use this indirectly)
-    readonly property int popupPadding:         16   // Generic content margin inside most popups (prefer popupSpacing for new code)
-    readonly property int popupPaddingSmall:    10   // Tighter popups (device lists, tray menus) (prefer popupSpacingTight)
-    readonly property int widgetSpacing:        14   // Spacing between major widgets in the bar row
-    readonly property int iconTextGap:           6   // Gap between icon and volume bar or label inside audio pill
-    readonly property int dualAudioSidePadding:  3   // Extra tight padding used only in AudioPill dual view
+    readonly property int sideMargin:           sp(10)   // Left/right margin of the whole bar (outside the glass rect)
+    readonly property int barContentHMargin:    sp(20)   // Inner left/right padding inside the main bar row
+    readonly property int barContentVMargin:     sp(4)   // Top/bottom breathing room for the glass rect inside the window
+    readonly property int pillHPadding:         sp(18)   // Typical horizontal inner padding for pill content (AudioPill etc use this indirectly)
+    readonly property int popupPadding:         sp(16)   // Generic content margin inside most popups (prefer popupSpacing for new code)
+    readonly property int popupPaddingSmall:    sp(10)   // Tighter popups (device lists, tray menus) (prefer popupSpacingTight)
+    readonly property int widgetSpacing:        sp(14)   // Spacing between major widgets in the bar row
+    readonly property int iconTextGap:           sp(6)   // Gap between icon and volume bar or label inside audio pill
+    readonly property int dualAudioSidePadding:  sp(3)   // Extra tight padding used only in AudioPill dual view
 
     // =========================================================================
-    // SIZING — BAR, PILLS, POPUPS, ICONS
+    // SIZING — BAR, PILLS, POPUPS, ICONS (scaled; popups also screen-clamped)
     // =========================================================================
     // Bar position & size (consumed by shell.qml PanelWindow anchors)
-    readonly property string barPosition:  "bottom"    // "top" | "bottom" — which screen edge the bar sits on
+    readonly property string barPosition:  "top"       // "top" | "bottom" — which screen edge the bar sits on
     readonly property int barEdgeMargin:      0     // Gap between the bar and the screen edge (top or bottom)
-    readonly property int popupBarGap:        4     // Space between bar and pill popups (flips with barPosition)
-    readonly property int barHeight:           58   // Bar thickness (height for top/bottom bars)
+    readonly property int popupBarGap:        sp(4)     // Space between bar and pill popups (flips with barPosition)
+    readonly property int barHeight:           sp(58)   // Bar thickness (height for top/bottom bars)
     readonly property int barTopMargin:  barEdgeMargin   // Legacy alias — prefer barEdgeMargin
 
     // Pills (uniform height gives the clean segmented look)
-    readonly property int pillHeight:          36   // Standard height for every pill in the bar
+    readonly property int pillHeight:          sp(36)   // Standard height for every pill in the bar
 
     // Audio widget (very sensitive — changing these requires testing dual view alignment)
     // Audio pill content width. Dual view (default) needs room for:
     //   speaker icon + bar + vol% [+ bat%] | mic icon + bar + vol% [+ bat%]
-    readonly property int audioViewContentWidth: 330   // Inner width for dual-first layout (+ BT battery)
-    readonly property int audioViewSidePadding:    6   // Dual view left/right micro-padding
-    readonly property int audioDualBarWidth:      68   // Mini volume bar width in dual view
-    readonly property int audioDualPercentWidth:  34   // "100%" label slot in dual view
+    readonly property int audioViewContentWidth: sp(330)   // Inner width for dual-first layout (+ BT battery)
+    readonly property int audioViewSidePadding:    sp(6)   // Dual view left/right micro-padding
+    readonly property int audioDualBarWidth:      sp(68)   // Mini volume bar width in dual view
+    readonly property int audioDualPercentWidth:  sp(34)   // "100%" label slot in dual view
 
     // Icon sizes (nerd font glyphs and tray icons)
-    readonly property int iconSizeTray:        18   // System tray — reference size for bar icons
+    readonly property int iconSizeTray:        sp(18)   // System tray — reference size for bar icons
     readonly property int iconSizePill:        iconSizeTray   // Audio, bell, media glyphs in pills
     readonly property int iconSizePillLarge:   iconSizeTray   // Launcher, power menu icon
-    readonly property int iconSizePopup:       17   // Icons inside popups (audio controls row)
-    readonly property int iconSizePower:       32   // Big icons in the power menu grid
-    readonly property int iconSizeMediaArt:    42   // Placeholder music note when no album art
-    readonly property int quickLaunchIcon:     20   // Quick launch row icon size
-    readonly property int quickLaunchSpacing:  10   // Gap between quick-launch icons
-    readonly property int quickLaunchPaddingH: 10   // Left/right padding inside the pill
+    readonly property int iconSizePopup:       sp(17)   // Icons inside popups (audio controls row)
+    readonly property int iconSizePower:       sp(32)   // Big icons in the power menu grid
+    readonly property int iconSizeMediaArt:    sp(42)   // Placeholder music note when no album art
+    readonly property int quickLaunchIcon:     sp(20)   // Quick launch row icon size
+    readonly property int quickLaunchSpacing:  sp(10)   // Gap between quick-launch icons
+    readonly property int quickLaunchPaddingH: sp(10)   // Left/right padding inside the pill
 
     // =========================================================================
     // QUICK LAUNCH (widgets/QuickLaunchPill.qml — pinned app icon row)
@@ -263,36 +362,36 @@ QtObject {
         },        
     ]
 
-    // Popup window sizes in pixels (width × height). Increase if content feels cramped.
+    // Popup window sizes (scaled + clamped to screen). Increase base if content feels cramped.
     // AudioPill: streams summary, device + profile, volume, L/R, VU, echo cancel, tools.
-    readonly property int popupAudioWidth:     520   // AudioPill device/volume popup
-    readonly property int popupAudioHeight:    620
-    readonly property int popupMediaWidth:     520   // MediaPill player controls popup
-    readonly property int popupMediaHeight:    470
-    readonly property int popupPowerWidth:     560   // PowerMenu full grid (left-click)
-    readonly property int popupPowerHeight:    192
-    readonly property int popupContextMenuWidth:  220   // Compact right-click menus (bell, power)
-    readonly property int popupContextMenuRowHeight: 34  // Height of one row in those menus
-    readonly property int popupCalendarWidth:  310   // ClockPill calendar popup
-    readonly property int popupCalendarHeight: 280
+    readonly property int popupAudioWidth:     popupW(520)   // AudioPill device/volume popup
+    readonly property int popupAudioHeight:    popupH(620)
+    readonly property int popupMediaWidth:     popupW(520)   // MediaPill player controls popup
+    readonly property int popupMediaHeight:    popupH(470)
+    readonly property int popupPowerWidth:     popupW(560)   // PowerMenu full grid (left-click)
+    readonly property int popupPowerHeight:    popupH(192)
+    readonly property int popupContextMenuWidth:  popupW(220)   // Compact right-click menus (bell, power)
+    readonly property int popupContextMenuRowHeight: sp(34)  // Height of one row in those menus
+    readonly property int popupCalendarWidth:  popupW(310)   // ClockPill calendar popup
+    readonly property int popupCalendarHeight: popupH(280)
     // --- BluetoothPill (adapter power, devices, profiles)
-    readonly property int popupBluetoothWidth:  380
-    readonly property int popupBluetoothHeight: 480
+    readonly property int popupBluetoothWidth:  popupW(380)
+    readonly property int popupBluetoothHeight: popupH(480)
     readonly property int bluetoothScanSeconds: 45   // Auto-stop discovery after this many seconds
     // --- NetworkPill (nm-applet replacement: wired/WiFi, radios, connection info)
     // Main column width; WiFi AP list opens as a second column of popupNetworkWifiWidth
-    readonly property int popupNetworkWidth:      520
-    readonly property int popupNetworkWifiWidth:  340   // right column when scanning / changing network
-    readonly property int popupNetworkHeight:     580
-    // --- SysStatsPill metrics popups (right-click CPU / Memory / GPU on the bar pill)
+    readonly property int popupNetworkWidth:      popupW(520)
+    readonly property int popupNetworkWifiWidth:  popupW(340)   // right column when scanning / changing network
+    readonly property int popupNetworkHeight:     popupH(580)
+    // --- SysStatsPill metrics popups (left-click CPU / Memory / GPU on the bar pill)
     // These are the large dropdown panels with charts and process lists — not the
     // compact numbers shown on the pill itself. Each section has its own size.
-    readonly property int popupStatsCpuWidth:  598   // CPU popup width in pixels
-    readonly property int popupStatsCpuHeight: 850   // CPU popup height in pixels
-    readonly property int popupStatsMemWidth:  598   // Memory popup width in pixels
-    readonly property int popupStatsMemHeight: 850   // Memory popup height in pixels
-    readonly property int popupStatsGpuWidth:  598   // GPU popup width in pixels
-    readonly property int popupStatsGpuHeight: 850   // GPU popup height in pixels
+    readonly property int popupStatsCpuWidth:  popupW(598)   // CPU popup width in pixels
+    readonly property int popupStatsCpuHeight: popupH(850)   // CPU popup height in pixels
+    readonly property int popupStatsMemWidth:  popupW(598)   // Memory popup width in pixels
+    readonly property int popupStatsMemHeight: popupH(850)   // Memory popup height in pixels
+    readonly property int popupStatsGpuWidth:  popupW(598)   // GPU popup width in pixels
+    readonly property int popupStatsGpuHeight: popupH(850)   // GPU popup height in pixels
 
     // --- Where each metrics popup appears on screen (widgets/SysStatsPill.qml)
     // Right-click CPU, Memory, or GPU to open its popup. Position is tuned per section
@@ -310,23 +409,23 @@ QtObject {
     // CPU section (left third of the pill)
     readonly property real popupStatsCpuAnchorX: 0.5
     readonly property bool popupStatsCpuAnchorWholePill: false
-    readonly property int popupStatsCpuOffsetX: 200
-    readonly property int popupStatsCpuOffsetY: 7
-    readonly property int popupStatsCpuBarGap: 2
+    readonly property int popupStatsCpuOffsetX: sp(200)
+    readonly property int popupStatsCpuOffsetY: sp(7)
+    readonly property int popupStatsCpuBarGap: sp(2)
 
     // Memory section (middle third)
     readonly property real popupStatsMemAnchorX: 0.5
     readonly property bool popupStatsMemAnchorWholePill: false
     readonly property int popupStatsMemOffsetX: 0
-    readonly property int popupStatsMemOffsetY: 7
-    readonly property int popupStatsMemBarGap: 2
+    readonly property int popupStatsMemOffsetY: sp(7)
+    readonly property int popupStatsMemBarGap: sp(2)
 
     // GPU section (right third)
     readonly property real popupStatsGpuAnchorX: 0.5
     readonly property bool popupStatsGpuAnchorWholePill: false
-    readonly property int popupStatsGpuOffsetX: -200
-    readonly property int popupStatsGpuOffsetY: 7
-    readonly property int popupStatsGpuBarGap: 2
+    readonly property int popupStatsGpuOffsetX: -sp(200)
+    readonly property int popupStatsGpuOffsetY: sp(7)
+    readonly property int popupStatsGpuBarGap: sp(2)
 
     // When you right-click and open a metrics popup, should charts update live?
     // true  = live graphs and numbers (uses a bit more CPU while open)
@@ -337,18 +436,18 @@ QtObject {
     // false = always use popupStatsLiveUpdates when you open a popup
     // true  = save per-section pause state to state/popup-stats.json
     readonly property bool popupStatsPersistPause: false
-    readonly property int popupHelpWidth:     1060  // Hypr Config Inspector default width
-    readonly property int popupHelpHeight:     720   // Hypr Config Inspector default height
-    readonly property int popupTrayMaxHeight:  520   // SystemTrayPill menu max height before scroll
+    readonly property int popupHelpWidth:     popupW(1060)  // Hypr Config Inspector default width
+    readonly property int popupHelpHeight:    popupH(720)   // Hypr Config Inspector default height
+    readonly property int popupTrayMaxHeight:  popupH(520)   // SystemTrayPill menu max height before scroll
 
     // Popup internal layout tokens (standardizes the repeated glass card patterns)
     readonly property real popupHeaderHighlightHeight: 1.5   // Top light edge on popup glass cards
-    readonly property int popupTitleSize:             16    // "Audio Controls", "Power Menu", etc.
-    readonly property int popupSectionSize:           13    // "Playback", "Recording", section headers
-    readonly property int popupHintSize:              11    // "right-click pill or outside to close"
-    readonly property int popupSpacing:               16    // Main content margin inside popups
-    readonly property int popupSpacingTight:          10    // Tighter popups (device lists, tray menus)
-    readonly property int popupSectionSpacing:         6    // Spacing between sections inside popups
+    readonly property int popupTitleSize:             sp(16)    // "Audio Controls", "Power Menu", etc.
+    readonly property int popupSectionSize:           sp(13)    // "Playback", "Recording", section headers
+    readonly property int popupHintSize:              sp(11)    // "right-click pill or outside to close"
+    readonly property int popupSpacing:               sp(16)    // Main content margin inside popups
+    readonly property int popupSpacingTight:          sp(10)    // Tighter popups (device lists, tray menus)
+    readonly property int popupSectionSpacing:         sp(6)    // Spacing between sections inside popups
 
     // =========================================================================
     // WIDGET VISIBILITY (bar pill defaults — IPC can override until qs restart)
@@ -373,7 +472,48 @@ QtObject {
     readonly property bool showPowerPill:           true   // PowerMenu.qml
     readonly property bool showKillTargetPill:    false  // KillTargetPill.qml (click-to-kill picker)
     readonly property bool showFreshRssPill:       true   // FreshRssPill.qml (FreshRSS reader)
-    readonly property bool showRadarPill:          true   // RadarPill.qml (NWS radar)
+    readonly property bool showRadarPill:          false  // RadarPill.qml (removed from bar; set true + re-add in shell.qml to restore)
+    readonly property bool showHyprInspPill:       false  // Opens HyprConfigInsp from the bar (shell.qml)
+
+    // Glyphs for bar position toggle in BarControlBar (right-click empty bar chrome)
+    readonly property string barPositionIconTop:    "󰁝"  // shown when bar is on bottom (click → move to top)
+    readonly property string barPositionIconBottom: "󰁅"  // shown when bar is on top (click → move to bottom)
+    readonly property string iconHyprInsp:          "󰒓"  // Hyprland Config Inspector bar pill
+
+    // Display controls in BarControlBar (family × Hz → hypr-resolution profiles)
+    // Daily 32:9 only in the strip; "More…" opens the full Rofi menu for recording modes.
+    readonly property string hyprResolutionBin: "hypr-resolution"  // on PATH, or absolute path
+
+    // Clock format (Qt.formatDateTime) — editable from BarControlBar; persisted in bar-layout.json
+    readonly property string clockFormat: "dddd, MM·dd·yyyy | HH:mm:ss"
+    // Presets shown in the control-bar Clock menu: { label, format, tip }
+    readonly property var clockFormatPresets: [
+        { label: "Full",   format: "dddd, MM·dd·yyyy | HH:mm:ss", tip: "Weekday, date, 24h with seconds" },
+        { label: "Date",   format: "ddd MM·dd·yyyy  HH:mm",       tip: "Short weekday + date + time" },
+        { label: "Time",   format: "HH:mm:ss",                    tip: "24-hour time with seconds" },
+        { label: "Short",  format: "HH:mm",                       tip: "24-hour time only" },
+        { label: "12h",    format: "h:mm AP",                     tip: "12-hour with AM/PM" },
+        { label: "US",     format: "ddd M/d/yyyy  h:mm AP",       tip: "US-style date + 12h" }
+    ]
+
+    // Default widget order + zone for BarControlBar layout editor / runtime reparent.
+    // zone: "left" | "center" | "right". Connectivity is Network+Bluetooth as one unit.
+    readonly property var defaultWidgetLayout: [
+        { id: "launcher",      zone: "left" },
+        { id: "quickLaunch",   zone: "left" },
+        { id: "freshRss",      zone: "left" },
+        { id: "media",         zone: "left" },
+        { id: "workspaces",    zone: "center" },
+        { id: "stats",         zone: "right" },
+        { id: "tray",          zone: "right" },
+        { id: "connectivity",  zone: "right" },
+        { id: "audio",         zone: "right" },
+        { id: "clock",         zone: "right" },
+        { id: "notifications", zone: "right" },
+        { id: "killTarget",    zone: "right" },
+        { id: "hyprInsp",      zone: "right" },
+        { id: "power",         zone: "right" }
+    ]
 
     // =========================================================================
     // NWS RADAR (widgets/RadarPill.qml + scripts/radar-fetch.sh)
@@ -401,10 +541,10 @@ QtObject {
     readonly property string radarDefaultProduct:  "cref"
     readonly property real   radarOverscan:        3.0    // 3× viewport coverage per fetch
     readonly property int    radarSettleMs:        420    // debounce before edge auto-reload
-    readonly property int    radarWidth:           980
-    readonly property int    radarHeight:          680
-    readonly property int    radarMinWidth:        560
-    readonly property int    radarMinHeight:       400
+    readonly property int    radarWidth:           popupW(980)
+    readonly property int    radarHeight:          popupH(680)
+    readonly property int    radarMinWidth:        sp(560)
+    readonly property int    radarMinHeight:       sp(400)
 
     // =========================================================================
     // FRESHRSS READER (widgets/FreshRssPill.qml + scripts/freshrss-api.sh)
@@ -430,14 +570,14 @@ QtObject {
     // When > 0, overrides per-feed and item-count caps (paginates until the window is covered).
     // 0 = unlimited (use per-feed / item limits only).
     readonly property int freshRssMaxDays:         30
-    readonly property int freshRssWidth:           980
-    readonly property int freshRssHeight:          640
-    readonly property int freshRssMinWidth:        640
-    readonly property int freshRssMinHeight:       420
-    readonly property int freshRssListWidth:       320   // default list pane width (SplitView)
-    readonly property int freshRssListMinWidth:    180   // drag limit — list pane
-    readonly property int freshRssListMaxWidth:    720
-    readonly property int freshRssDetailMinWidth:  260   // drag limit — article pane
+    readonly property int freshRssWidth:           popupW(980)
+    readonly property int freshRssHeight:          popupH(640)
+    readonly property int freshRssMinWidth:        sp(640)
+    readonly property int freshRssMinHeight:       sp(420)
+    readonly property int freshRssListWidth:       sp(320)   // default list pane width (SplitView)
+    readonly property int freshRssListMinWidth:    sp(180)   // drag limit — list pane
+    readonly property int freshRssListMaxWidth:    sp(720)
+    readonly property int freshRssDetailMinWidth:  sp(260)   // drag limit — article pane
 
     // =========================================================================
     // NOTIFICATION BELL (widgets/NotificationBell.qml)
@@ -508,16 +648,16 @@ QtObject {
     readonly property string fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
     readonly property string fontMono:   "JetBrains Mono Nerd Font, monospace"
 
-    // Sizes (chosen for ultrawide readability at 58px bar)
-    readonly property int fontClock:      15   // Main clock text (bold)
-    readonly property int fontPillLabel:  12   // % labels next to volume bars, small text
-    readonly property int fontPillLabelBold: 12   // Bold variant of pill labels (same size as fontPillLabel)
-    readonly property int fontPopupTitle: 16   // "Audio Controls", "Power Menu", etc. (prefer popupTitleSize for new popup code)
-    readonly property int fontSection:    13   // "Playback", "Recording", tab labels (prefer popupSectionSize)
-    readonly property int fontBody:       12   // Most body text in popups
-    readonly property int fontSmall:      11   // Hints, "click outside to close", tray menu items (prefer popupHintSize)
-    readonly property int fontTiny:       10   // Footer hints, help key pills
-    readonly property int fontPowerLabel: 12   // Text under big power icons
+    // Sizes (base designed for ~58px bar; scaled via uiScale, min 9px for readability)
+    readonly property int fontClock:      Math.max(9, sp(15))   // Main clock text (bold)
+    readonly property int fontPillLabel:  Math.max(9, sp(12))   // % labels next to volume bars, small text
+    readonly property int fontPillLabelBold: Math.max(9, sp(12))   // Bold variant of pill labels
+    readonly property int fontPopupTitle: Math.max(10, sp(16))   // "Audio Controls", "Power Menu", etc.
+    readonly property int fontSection:    Math.max(9, sp(13))   // "Playback", "Recording", tab labels
+    readonly property int fontBody:       Math.max(9, sp(12))   // Most body text in popups
+    readonly property int fontSmall:      Math.max(9, sp(11))   // Hints, tray menu items
+    readonly property int fontTiny:       Math.max(8, sp(10))   // Footer hints, help key pills
+    readonly property int fontPowerLabel: Math.max(9, sp(12))   // Text under big power icons
 
     // =========================================================================
     // ICON GLYPHS (single place to change the entire icon language)
@@ -581,11 +721,11 @@ QtObject {
     // aliases in shell.qml) or when they import the singleton directly.
 
     // Normal (full) volume bar — used in speaker/mic single views + audio popup
-    readonly property int  sliderBarHeight: 6     // Track thickness (VolumeBar default)
-    readonly property int  sliderPopupHeight: 8   // Taller version used in the audio popup row
+    readonly property int  sliderBarHeight: sp(6)     // Track thickness (VolumeBar default)
+    readonly property int  sliderPopupHeight: sp(8)   // Taller version used in the audio popup row
 
     // Compact dual-view bars (inside AudioPill when both speaker+mic shown)
-    readonly property int  sliderMiniHeight: 5
+    readonly property int  sliderMiniHeight: sp(5)
 
     // Volume bar fallback fill (AudioPill overrides per-level via audioSpeaker/MicUtilColor)
     readonly property color sliderFill:       accent   // CachyOS cyan (#00c4f5)
@@ -663,11 +803,11 @@ QtObject {
     readonly property color wsText:        "#7a7a80"
     readonly property color wsActiveTextLegacy: wsActiveText   // (the alias in shell.qml maps wsActiveText → this)
 
-    readonly property int  wsButtonWidth:   42   // Width of each workspace pill button
-    readonly property int  wsButtonHeight:  32   // Height of each workspace pill button
+    readonly property int  wsButtonWidth:   sp(42)   // Width of each workspace pill button
+    readonly property int  wsButtonHeight:  sp(32)   // Height of each workspace pill button
     readonly property int  wsIconSize:      iconSizeTray  // Glyph size inside workspace pills
-    readonly property int  wsNumberSize:    15   // Font size for workspace numbers (when no icon)
-    readonly property int  wsSpacing:        4   // Gap between workspace buttons
+    readonly property int  wsNumberSize:    Math.max(9, sp(15))   // Font size for workspace numbers (when no icon)
+    readonly property int  wsSpacing:        sp(4)   // Gap between workspace buttons
 
     // --- Per-workspace pill icons (edit here to remap without touching widget logic)
     // Nerd Font glyphs for most slots; Unicode emoji where noted for color/readability.
@@ -731,23 +871,23 @@ QtObject {
     // increase statPillWidth first. Then tweak section width and padding if needed.
 
     // Total width of the pill in pixels — the outer glass border you see on the bar.
-    // This is independent of the three columns inside; raise it if content overflows.
-    readonly property int  statPillWidth: 640
+    // This is independent of the three columns inside; raise base if content overflows.
+    readonly property int  statPillWidth: sp(640)
 
     // Width of each clickable column (CPU, Memory, GPU) inside the pill.
     // Wider columns give more room for the label, bar, and numbers.
-    readonly property int  statPillSectionWidth: 190
+    readonly property int  statPillSectionWidth: sp(190)
 
     // Empty space between the three columns (the thin vertical dividers sit here).
-    readonly property int  statPillSpacing: 10
+    readonly property int  statPillSpacing: sp(10)
 
     // Left and right padding inside the pill border so text is not flush to the edge.
-    readonly property int  statPillPaddingH: 12
+    readonly property int  statPillPaddingH: sp(12)
 
     // Small horizontal utilization bars (the colored fill behind the % numbers).
-    readonly property int  statGaugeWidth:   73
-    readonly property int  statGaugeHeight:   8
-    readonly property int  statGaugeRadius:   4
+    readonly property int  statGaugeWidth:   sp(73)
+    readonly property int  statGaugeHeight:   sp(8)
+    readonly property int  statGaugeRadius:   sp(4)
     readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.07)  // Bar background track on deep black
 
     // Utilization % bar and text color by load level (green → yellow → orange → red).
@@ -843,10 +983,10 @@ QtObject {
 
     // --- Window geometry (FloatingWindow defaults + resize limits)
     // popupHelpWidth/Height are the default inspector size (1060×720).
-    readonly property int inspMinWidth:  560
-    readonly property int inspMinHeight: 400
-    readonly property int inspContentPadding: 18      // inner margin around the whole layout
-    readonly property int inspSectionSpacing: 12      // vertical gap between header/tabs/content/footer
+    readonly property int inspMinWidth:  sp(560)
+    readonly property int inspMinHeight: sp(400)
+    readonly property int inspContentPadding: sp(18)      // inner margin around the whole layout
+    readonly property int inspSectionSpacing: sp(12)      // vertical gap between header/tabs/content/footer
 
     // --- Window background (inspector-only — does NOT affect audio/power/calendar popups)
     // Defaults mirror glassPopup* so the out-of-box look is unchanged.
@@ -870,62 +1010,62 @@ QtObject {
     readonly property color inspGradientBottom:   "#000000"  // solid true black
 
     // --- Tab bar (wrapping Flow of chips + vertical scrollbar when many tabs)
-    readonly property int inspTabBarMaxHeight: 102
-    readonly property int inspTabHeight:       30
-    readonly property int inspTabRadius:        7
-    readonly property int inspTabHPadding:     28    // added to label width for chip width
-    readonly property int inspTabSpacing:         6
-    readonly property int inspTabFontSize:     13
+    readonly property int inspTabBarMaxHeight:       sp(102)
+    readonly property int inspTabHeight:       sp(30)
+    readonly property int inspTabRadius:       sp(7)
+    readonly property int inspTabHPadding:       sp(28)    // added to label width for chip width
+    readonly property int inspTabSpacing:       sp(6)
+    readonly property int inspTabFontSize:     Math.max(9, sp(13))
     // Active tab reuses panelTabActive* tokens (shared tab-chip style)
     readonly property color inspTabActiveBg:      panelTabActiveBg
     readonly property color inspTabActiveBorder:  panelTabActiveBorder
     readonly property color inspTabHoverBg:       surface
 
     // --- Global search field (right of tab bar)
-    readonly property int inspSearchWidth:   220
-    readonly property int inspSearchHeight:   28        
-    readonly property int inspSearchRadius:    6
-    readonly property int inspSearchPadding:   4
-    readonly property int inspSearchFontSize:   12          //14
+    readonly property int inspSearchWidth:       sp(220)
+    readonly property int inspSearchHeight:       sp(28)        
+    readonly property int inspSearchRadius:       sp(6)
+    readonly property int inspSearchPadding:       sp(4)
+    readonly property int inspSearchFontSize:     Math.max(9, sp(12))          //14
     readonly property color inspSearchSelectionBg: "#0a4a5c"  // solid cyan selection
 
     // --- Header (title row, version/distro, keyboard hints)
-    readonly property int inspTitleFontSize:    18
-    readonly property int inspSubtitleFontSize: 13
-    readonly property int inspHeaderButtonHeight: 28
-    readonly property int inspRefreshButtonWidth: 78
-    readonly property int inspCloseButtonSize:    28
+    readonly property int inspTitleFontSize:     Math.max(9, sp(18))
+    readonly property int inspSubtitleFontSize:     Math.max(9, sp(13))
+    readonly property int inspHeaderButtonHeight:       sp(28)
+    readonly property int inspRefreshButtonWidth:       sp(78)
+    readonly property int inspCloseButtonSize:       sp(28)
     readonly property color inspHeaderDivider: divider
 
     // --- Footer (status line + action chips: Copy, Refresh, Edit)
-    readonly property int inspStatusFontSize: 12
-    readonly property int inspFooterButtonHeight: 22
-    readonly property int inspFooterButtonRadius:  5
-    readonly property int inspFooterButtonSpacing: 6
+    readonly property int inspStatusFontSize:     Math.max(9, sp(12))
+    readonly property int inspFooterButtonHeight:       sp(22)
+    readonly property int inspFooterButtonRadius:       sp(5)
+    readonly property int inspFooterButtonSpacing:       sp(6)
 
     // --- Scrollbars (tab bar + content Flickables)
-    readonly property int inspScrollBarWidth:  6
-    readonly property int inspScrollBarRadius: 3
+    readonly property int inspScrollBarWidth:       sp(6)
+    readonly property int inspScrollBarRadius:       sp(3)
     readonly property color inspScrollBarIdle: Qt.rgba(1, 1, 1, 0.2)
 
     // --- List/table row interaction (binds, env, system info rows)
     readonly property color inspRowHoverBg:       Qt.rgba(1, 1, 1, 0.03)
     readonly property color inspRowHoverBgStrong: Qt.rgba(1, 1, 1, 0.06)  // system info values
-    readonly property int inspRowRadius: 4
-    readonly property int inspBindRowHeight: 26
-    readonly property int inspEnvRowHeight:  28
-    readonly property int inspEnvHeaderHeight: 28
+    readonly property int inspRowRadius:       sp(4)
+    readonly property int inspBindRowHeight:       sp(26)
+    readonly property int inspEnvRowHeight:       sp(28)
+    readonly property int inspEnvHeaderHeight:       sp(28)
 
     // --- Environment variable table layout
-    readonly property int inspEnvTableSideMargin: 10
-    readonly property int inspEnvTableColSpacing: 12
-    readonly property int inspEnvVarColMinWidth:  180
-    readonly property int inspEnvVarColMaxWidth:  260
+    readonly property int inspEnvTableSideMargin:       sp(10)
+    readonly property int inspEnvTableColSpacing:       sp(12)
+    readonly property int inspEnvVarColMinWidth:       sp(180)
+    readonly property int inspEnvVarColMaxWidth:       sp(260)
     readonly property real inspEnvVarColRatio:    0.22   // fraction of usable width for Variable column
-    readonly property int inspEnvValueColMinWidth: 180
-    readonly property int inspEnvValueColMaxWidth: 340
+    readonly property int inspEnvValueColMinWidth:       sp(180)
+    readonly property int inspEnvValueColMaxWidth:       sp(340)
     readonly property real inspEnvValueColRatio:   0.28   // fraction of usable width for Value column
-    readonly property int inspEnvDescColMinWidth:  320    // minimum width for Description column
+    readonly property int inspEnvDescColMinWidth:       sp(320)    // minimum width for Description column
 
     // --- Key binding modifier pills (Catppuccin semantic colors)
     readonly property color inspKeyPillSuper:   "#00c4f5"  // CachyOS cyan
@@ -935,10 +1075,10 @@ QtObject {
     readonly property color inspKeyPillDefault: overlay
     readonly property color inspKeyPillTextOnDark:  "#ffffff"
     readonly property color inspKeyPillTextOnLight: "#000000"
-    readonly property int inspKeyPillHeight: 20
-    readonly property int inspKeyPillRadius:  5
-    readonly property int inspKeyPillHPadding: 12
-    readonly property int inspKeyPillFontSize: 11
+    readonly property int inspKeyPillHeight:       sp(20)
+    readonly property int inspKeyPillRadius:       sp(5)
+    readonly property int inspKeyPillHPadding:       sp(12)
+    readonly property int inspKeyPillFontSize:     Math.max(9, sp(11))
 
     // --- Environment variable semantic colors (keys + values)
     readonly property color inspEnvKeyHighlight: "#2dd4bf"   // graphics/wayland-related keys

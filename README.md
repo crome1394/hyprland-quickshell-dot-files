@@ -16,15 +16,35 @@ Personal Hyprland status bar built with [Quickshell](https://quickshell.org), pl
 
 ## Status bar
 
-The top (or bottom) Hyprland panel is a glassmorphic Quickshell `PanelWindow` defined in `shell.qml`. Widgets are grouped into **left**, **center**, and **right** zones. Each pill is a self-contained file under `widgets/` and reads colors, spacing, and behavior defaults from `Config.qml` via the shared `bar` object.
+The top Hyprland panel is a solid Quickshell `PanelWindow` defined in `shell.qml` (default `barPosition: "top"`). Widgets are grouped into **left**, **center**, and **right** zones. Each pill is a self-contained file under `widgets/` and reads colors, spacing, and behavior defaults from `Config.qml` via the shared `bar` object.
 
-Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"bottom"`, `barHeight`, `barEdgeMargin`). To rearrange widgets, cut and paste the marked blocks in `shell.qml` between the left, center, and right zones — no changes inside the widget files are required.
+Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"bottom"`, `barHeight`, `barEdgeMargin`). **Right-click empty bar chrome** (not on a pill) opens a short centered control strip (`BarControlBar.qml`) with the top/bottom toggle and display family × Hz chips (wired to `hypr-resolution`). Bar edge is saved to `state/bar-layout.json`. To rearrange widgets, cut and paste the marked blocks in `shell.qml` between the left, center, and right zones — no changes inside the widget files are required.
+
+**UI scale (multi-resolution):** Bar/pill/popup sizes scale with the monitor width. Full size at `uiDesignWidth` (default **2560** logical px) and above; narrower screens scale down to `uiScaleMin` (**0.65**). Popups are also clamped so they stay on-screen.
+
+| Control | How |
+|---------|-----|
+| Auto (default) | `uiScaleManual: 0` in `Config.qml` (or `state/bar-layout.json`) |
+| Force scale | Set `uiScaleManual: 0.85` in Config, or `qs ipc call shell setUiScale 0.85` |
+| Back to auto | `qs ipc call shell setUiScaleAuto` or `setUiScale 0` |
+
+**Priority on narrow screens:** Core pills stay visible; bulkier ones auto-hide by width (logical px). Thresholds in `Config.qml` (`uiDensityHide*Below`).
+
+| Priority | Widgets |
+|----------|---------|
+| **Always keep** (if enabled) | Workspaces · System tray · Audio · Clock/calendar · Notifications · Power |
+| Hide first (`< 2300`) | Quick Launch |
+| Then (`< 2000`) | Sys stats (CPU / Memory / GPU) |
+| Then (`< 1680`) | FreshRSS · Media · Kill target |
+| Then (`< 1480`) | Network + Bluetooth |
+
+IPC `setShow*` still sets your preference; density only gates visibility until the screen is wide enough again.
 
 ### Layout (default)
 
 | Zone | Widgets (left → right) |
 |------|-------------------------|
-| **Left** | App Launcher, Quick Launch, FreshRSS, NWS Radar, Media Player |
+| **Left** | App Launcher, Quick Launch, FreshRSS, Media Player |
 | **Center** | Workspaces |
 | **Right** | System Stats, System Tray, Network, Bluetooth, Audio, Clock, Notifications, Power |
 
@@ -33,66 +53,26 @@ Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"b
 | Widget | File | Description |
 |--------|------|-------------|
 | **App Launcher** | `shell.qml` (inline) | Opens the Rofi app drawer (`~/.local/bin/rofi-app-drawer`) |
-| **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps. Add or edit apps in `Config.qml` (search **QUICK LAUNCH** — `quickLaunchApps`: `icon`, `command`, `tooltip` per entry) |
+| **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps. Manage from control bar **Launch** panel (add from installed apps or custom, remove, reorder) or edit defaults in `Config.qml` (`quickLaunchApps`). Runtime pins persist in `state/bar-layout.json`. |
 | **FreshRSS** | `FreshRssPill.qml` | Local FreshRSS reader window (list + article body, open browser / play in `mpv`). See [FreshRSS reader](#freshrss-reader) below |
-| **NWS Radar** | `RadarPill.qml` | Native weather radar window (NOAA WMS + dark basemap). Manual refresh only; drag to pan, wheel to zoom. See [NWS Radar](#nws-radar) below |
 | **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
 | **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
-| **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. Left-click CPU or Memory opens `btop`; left-click GPU opens `nvtop`. Right-click each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
+| **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. **Left-click** each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). **Right-click** CPU or Memory opens `btop`; right-click GPU opens `nvtop`. Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
 | **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
 | **Network** | `NetworkPill.qml` | NetworkManager manager (nm-applet replacement): two-column popup (Adapters + Connections \| WiFi), traffic graph, radio toggles, connection info, optional nm-applet tray. Left-click opens the popup (use the header WiFi toggle or IPC for radio power). See [Network pill](#network-pill-networkpillqml) |
 | **Bluetooth** | `BluetoothPill.qml` | Adapter power, scan/pair, connect/disconnect, trust/block/remove, rename, battery, device info, BlueZ **audio profiles**, and Blueman tray control (session + sticky autostart). Left-click opens the popup; right-click toggles adapter power. See [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, collapsible L/R balance, real-time VU meters, BT battery, and optional **echo cancel** (PipeWire AEC). **Left-click** opens the full popup; right-click cycles speaker / mic / dual. See [Audio pill](#audio-pill-audiopillqml) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
 | **Notifications** | `NotificationBell.qml` | Bell with count badge and red DND styling. Polls your daemon's CLI from `Config.qml` (defaults: SwayNC / `swaync-client`) via timer sync + optional live subscribe — state and `Io.Process` polling live in this widget, not `shell.qml`. Left-click toggles panel; right-click opens menu (DND, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
+| **Bar control** | `BarControlBar.qml` | Temporary mini-bar opened by **right-clicking empty bar chrome**. Toolbar: **Position** · **Monitor** · **Widgets** · **Launch** · **Clock**. Position: top/bottom. Monitor: resolution family/Hz. Widgets: ✓/✕, L/C/R, ↑↓ (includes Hypr Inspector). **Launch**: pin/remove/reorder Quick Launch apps (desktop picker + custom). Clock: format presets. Persists in `state/bar-layout.json`. |
 | **Kill Target** | `KillTargetPill.qml` | xkill-style window picker (hidden by default). Click the pill to arm pick mode (crosshair on all monitors), then click a window to send **SIGTERM** to its process. Escape, right-click, empty click, or a second pill click cancels. Uses `window-at-point.sh` + `process-control.sh` (user-owned processes only). IPC: `qs ipc call killTargetPill activatePickMode` |
 | **Power** | `PowerMenu.qml` | Left-click opens the full session menu; right-click opens a compact quick menu. Actions and commands are configured in `Config.qml` (search **POWER MENU**) |
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
 
-### NWS Radar
+### NWS Radar (removed from bar)
 
-Native map window for [NWS radar](https://radar.weather.gov) data — not a browser embed. Opens from the **Radar** bar pill or IPC. There is **no background polling**; the image updates only on open (first time) and when you press **Refresh**.
-
-| Piece | Path |
-|-------|------|
-| Bar pill + window | `widgets/RadarPill.qml` |
-| Fetch / composite / geocode | `scripts/radar-fetch.sh` |
-| Defaults (center, zoom, size) | `Config.qml` (search **NWS RADAR**) |
-
-**Defaults** match a local mosaic bookmark centered on Ohio (`lon=-83.201`, `lat=40.326`, zoom `~7.086`).
-
-| Control | Action |
-|---------|--------|
-| Drag | Pan within the loaded buffer (no download until the edge) |
-| Mouse wheel | Zoom; auto-reloads after settle if zoom changed enough |
-| Double-click | Center on point and refresh |
-| Search box / `/` / `Ctrl+F` | City + state or ZIP → center, set zoom, refresh |
-| **Refresh** / `R` / `Ctrl+R` | Force re-download for the **visible** view |
-| **Home** / `H` | Restore Config default center/zoom and refresh |
-| **Product** / `P` | Toggle CREF (composite) ↔ BREF (base) reflectivity |
-| Escape | Close window (when search field not focused) |
-
-Each fetch loads an **overscanned** area (`Config.radarOverscan`, default **3×** the window). You can pan a long way (e.g. regional view from Orrville toward Chicago) without reloading. When pan/zoom **settles**, the widget auto-refreshes only if you left that buffer or changed zoom significantly.
-
-**Data sources**
-
-- Radar: NOAA OpenGeo WMS (`conus_cref_qcd` / `conus_bref_qcd`)
-- Basemap: Esri **World Street Map** (standard street map with place names)
-- Search: OpenStreetMap **Nominatim** (US city/state and ZIP)
-
-**IPC**
-
-```bash
-qs ipc call radar toggle
-qs ipc call radar show
-qs ipc call radar hide
-qs ipc call radar refresh
-qs ipc call shell setShowRadarPill true
-qs ipc call shell toggleShowRadarPill
-```
-
-Requires `curl`, `jq`, `python3`, and Pillow.
+The Radar pill is no longer loaded in `shell.qml`. Implementation remains under `widgets/RadarPill.qml`, `scripts/radar-fetch.sh`, and **NWS RADAR** tokens in `Config.qml` if you want to re-add it later.
 
 ### FreshRSS reader
 

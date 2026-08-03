@@ -11,8 +11,8 @@ import "../components"
 //
 // Purpose:
 //   Overlay gauges showing CPU + Memory + GPU utilization (and temps for CPU/GPU).
-//   Left-click CPU/Memory launches btop; left-click GPU launches nvtop.
-//   Right-click each third opens a metrics dropdown (Cpu/Memory/GpuMonitorView).
+//   Left-click each third opens a metrics dropdown (Cpu/Memory/GpuMonitorView).
+//   Right-click CPU/Memory launches btop; right-click GPU launches nvtop.
 //   Automatically hides when media is playing.
 //
 // Theme Properties Consumed:
@@ -129,7 +129,7 @@ Rectangle {
         })
     }
 
-    // ===== Rich metrics (right-click popups only) =====
+    // ===== Rich metrics (left-click popups; terminal apps on right-click) =====
     Io.FileView {
         id: statsPauseState
         path: bar.popupStatsPersistPause
@@ -329,13 +329,13 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) {
-                        root.showMetricsPopup(cpuMetricsPopup, cpuSection, "cpu")
-                    } else {
                         root.hideMetricsPopups()
                         Quickshell.execDetached(["kitty", "-e", "btop"])
+                    } else {
+                        root.showMetricsPopup(cpuMetricsPopup, cpuSection, "cpu")
                     }
                 }
-                ToolTip.text: "Left: btop · Right: CPU metrics"
+                ToolTip.text: "Left: CPU metrics · Right: btop"
                 ToolTip.visible: cpuClick.containsMouse
                 ToolTip.delay: bar.tooltipDelay
             }
@@ -431,13 +431,13 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) {
-                        root.showMetricsPopup(memMetricsPopup, memSection, "mem")
-                    } else {
                         root.hideMetricsPopups()
                         Quickshell.execDetached(["kitty", "-e", "btop"])
+                    } else {
+                        root.showMetricsPopup(memMetricsPopup, memSection, "mem")
                     }
                 }
-                ToolTip.text: "Left: btop · Right: Memory metrics"
+                ToolTip.text: "Left: Memory metrics · Right: btop"
                 ToolTip.visible: memClick.containsMouse
                 ToolTip.delay: bar.tooltipDelay
             }
@@ -533,13 +533,13 @@ Rectangle {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) {
-                        root.showMetricsPopup(gpuMetricsPopup, gpuSection, "gpu")
-                    } else {
                         root.hideMetricsPopups()
                         Quickshell.execDetached(["kitty", "-e", "nvtop"])
+                    } else {
+                        root.showMetricsPopup(gpuMetricsPopup, gpuSection, "gpu")
                     }
                 }
-                ToolTip.text: "Left: nvtop · Right: GPU metrics"
+                ToolTip.text: "Left: GPU metrics · Right: nvtop"
                 ToolTip.visible: gpuClick.containsMouse
                 ToolTip.delay: bar.tooltipDelay
             }

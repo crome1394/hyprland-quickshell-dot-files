@@ -9,7 +9,8 @@ import Quickshell
 //
 // Purpose:
 //   Horizontal row of icon buttons inside a pill. Apps and icons are defined in
-//   Config.qml (search QUICK LAUNCH — quickLaunchApps).
+//   Config.qml defaults (search QUICK LAUNCH); runtime list is bar.quickLaunchApps
+//   (editable from BarControlBar → Launch, persisted in bar-layout.json).
 //
 // Theme Properties Consumed:
 //   - bar.pillRadius, bar.pillBg, bar.pillBorder, bar.accent
@@ -23,7 +24,11 @@ Rectangle {
 
     required property var bar
 
-    Layout.preferredWidth: appsRow.implicitWidth + bar.quickLaunchPaddingH * 2
+    // Local copy so Repeater rebinds when shell replaces the array
+    property var appsModel: bar.quickLaunchApps || []
+
+    Layout.preferredWidth: Math.max(bar.quickLaunchIcon + bar.quickLaunchPaddingH * 2,
+                                    appsRow.implicitWidth + bar.quickLaunchPaddingH * 2)
     Layout.preferredHeight: 36
     Layout.alignment: Qt.AlignVCenter
 
@@ -31,6 +36,13 @@ Rectangle {
     color: bar.pillBg
     border.width: bar.controlBorderWidth
     border.color: bar.pillBorder
+
+    Connections {
+        target: bar
+        function onQuickLaunchAppsChanged() {
+            root.appsModel = bar.quickLaunchApps || []
+        }
+    }
 
     function launchEntry(entry) {
         if (!entry || entry.command === undefined || entry.command === null)
@@ -65,7 +77,7 @@ Rectangle {
         spacing: bar.quickLaunchSpacing
 
         Repeater {
-            model: bar.quickLaunchApps
+            model: root.appsModel
 
             // Per-icon hover (same idea as WorkspacesPill buttons)
             Rectangle {
