@@ -32,12 +32,36 @@ Editable text fields use a slightly lifted background so they read as inputs. To
 
 ## XDG Autostart panel
 
-Session user apps only (not Hyprland core). Scripts: `autostart-list-json.sh`, `autostart-set.sh`, `autostart-add.sh`, `autostart-run.sh`, `xdg-autostart-run.sh`. Desktop entries use real `Exec=` lines and `X-systemd-skip=true`. Failures log to `~/.local/state/quickshell/autostart-run.log`.
+Session user apps only (not Hyprland core). Scripts: `autostart-list-json.sh`, `autostart-set.sh`, `autostart-add.sh`, `autostart-run.sh`, `xdg-autostart-run.sh`. Failures log to `~/.local/state/quickshell/autostart-run.log`.
+
+### How entries are created
+
+| Source | Behavior |
+|--------|----------|
+| **Installed app** (picker / `--desktop-id` / `--desktop-file`) | **Copy** the real `.desktop` from `/usr/share/applications` (or other XDG apps dirs) into `~/.config/autostart/`. Preserves the app’s `Exec=`, `TryExec=`, icons, and other keys. Only forces `Hidden=false`, `X-GNOME-Autostart-enabled=true`, and `X-systemd-skip=true`. |
+| **Manual** (`--name` + `--exec`) | Synthesize a minimal entry with the given command. |
+
+Do **not** rewrite `Exec=` to `gtk-launch …`. That breaks apps with `DBusActivatable=true` (e.g. Telegram): `gtk-launch` can exit 0 without starting the process. The working system file has a real command (`Exec=Telegram -- %U`); the autostart copy must keep that.
+
+### How entries are run
+
+`autostart-run.sh` (and the login helper) always run the entry’s **`Exec=`** line with FreeDesktop field codes (`%U`, `%f`, …) stripped. It does not call `gtk-launch`.
 
 Login helper in Hyprland `autostarts.lua`:
 
 ```lua
 hl.exec_cmd("/home/crome/.config/quickshell/scripts/xdg-autostart-run.sh")
+```
+
+`X-systemd-skip=true` tells the systemd user xdg-autostart generator to ignore these files so only this helper starts them (avoids double-start / D-Bus activation quirks).
+
+### Repair a broken entry
+
+If an older build left a synthetic file (e.g. `Exec=gtk-launch org.telegram`), re-add from the system desktop file:
+
+```bash
+~/.config/quickshell/scripts/autostart-add.sh --desktop-id org.telegram.desktop
+# or: remove in the Autostart panel, then add again from the app list
 ```
 
 Put Telegram/Discord workspace placement in **window rules** (e.g. `special:magic silent`), not in Autostart `exec` workspace options.

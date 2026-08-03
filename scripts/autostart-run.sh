@@ -3,17 +3,38 @@
 # Usage:
 #   autostart-run.sh                 # run all enabled
 #   autostart-run.sh Flameshot.desktop
+#
+# Always uses the entry's Exec= line (field codes stripped). Do not use
+# gtk-launch here: DBusActivatable apps (e.g. Telegram) can exit 0 without
+# starting when activated that way during login.
 set -euo pipefail
 
 DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 ONLY="${1:-}"
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell"
+LOG_FILE="$LOG_DIR/autostart-run.log"
+mkdir -p "$LOG_DIR"
 
-python3 - "$DIR" "$ONLY" <<'PY'
+python3 - "$DIR" "$ONLY" "$LOG_FILE" <<'PY'
 import os, re, subprocess, sys, time
+from datetime import datetime
 from pathlib import Path
 
 root = Path(sys.argv[1]).expanduser()
 only = sys.argv[2].strip() if len(sys.argv) > 2 else ""
+log_file = Path(sys.argv[3]) if len(sys.argv) > 3 else None
+
+
+def log(msg: str):
+    if not log_file:
+        return
+    try:
+        ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        with log_file.open("a") as f:
+            f.write(f"{ts} {msg}\n")
+    except OSError:
+        pass
+
 
 def parse(path: Path):
     data = {}
@@ -29,6 +50,7 @@ def parse(path: Path):
         data.setdefault(k.strip(), v.strip())
     return data
 
+
 def is_enabled(data: dict) -> bool:
     if data.get("Type", "Application") not in ("Application", ""):
         return False
@@ -39,7 +61,8 @@ def is_enabled(data: dict) -> bool:
     # OnlyShowIn / NotShowIn — be lenient on Hyprland/wlroots
     return True
 
-def launch(data: dict, path: Path):
+
+def launch(data: dict, path: Path) -> bool:
     delay = data.get("X-GNOME-Autostart-Delay") or "0"
     try:
         d = int(delay)
@@ -48,25 +71,14 @@ def launch(data: dict, path: Path):
     if d > 0:
         time.sleep(min(d, 120))
 
-    # Prefer gtk-launch by desktop basename when available
-    name = path.name
-    if name.endswith(".desktop"):
-        try:
-            subprocess.Popen(
-                ["gtk-launch", name[:-8]],
-                start_new_session=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            return True
-        except Exception:
-            pass
-
     exec_line = data.get("Exec") or ""
+    # Strip FreeDesktop field codes (%u %U %f %F %i %c %k etc.)
     exec_clean = re.sub(r"\s+%[a-zA-Z@]", "", exec_line).strip()
+    # Trailing " --" left after stripping %U is fine for most apps
     if not exec_clean:
+        log(f"FAIL {path.name}: empty Exec")
         return False
-    # Shell form for complex Exec
+
     try:
         subprocess.Popen(
             exec_clean,
@@ -75,10 +87,14 @@ def launch(data: dict, path: Path):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             cwd=str(Path.home()),
+            env=os.environ.copy(),
         )
+        log(f"OK  {path.name}: {exec_clean}")
         return True
-    except Exception:
+    except Exception as e:
+        log(f"FAIL {path.name}: {exec_clean} ({e})")
         return False
+
 
 if not root.is_dir():
     print("ok 0")
@@ -92,6 +108,8 @@ if only:
     p = root / only
     if p.is_file():
         files = [p]
+    else:
+        log(f"FAIL {only}: not found")
 else:
     files = sorted(root.glob("*.desktop"))
 

@@ -10,7 +10,7 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
 - Widgets panel: A–Z list; row layout ✓/name · L/C/R · ↑↓; horizontal width scale.
 - Options: UI scale, workspaces, sticky applets, Sys Stats gauges, FreshRSS server Test/Save.
 - FreshRSS secrets moved to `~/.config/freshrss-quickshell/freshrss.env` (outside git).
-- Autostart: XDG `~/.config/autostart` scripts with real `Exec=` and `X-systemd-skip`.
+- **Autostart fix:** add copies the system `.desktop` (keeps real `Exec=`) instead of synthesizing `gtk-launch` entries; run uses `Exec=` only (not `gtk-launch`). Fixes Telegram and other `DBusActivatable` apps that silently failed under `gtk-launch`. Still sets `X-systemd-skip=true`; logs to `~/.local/state/quickshell/autostart-run.log`.
 - Config menu bar pill (`controlBar`).
 
 ## Earlier

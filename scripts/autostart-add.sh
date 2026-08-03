@@ -4,6 +4,10 @@
 #   autostart-add.sh --desktop-id firefox.desktop
 #   autostart-add.sh --desktop-file /usr/share/applications/foo.desktop
 #   autostart-add.sh --name Name --exec "cmd" [--icon path] [--id name.desktop]
+#
+# When given a real .desktop file, copy it into autostart (preserving Exec= and
+# other keys). Synthesizing minimal entries with gtk-launch is unreliable
+# (e.g. DBusActivatable apps like Telegram silently no-op under gtk-launch).
 set -euo pipefail
 
 DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
@@ -50,7 +54,7 @@ if [[ -n "$DESKTOP_ID" ]]; then
   fi
 fi
 
-python3 - "$DIR" "${DESKTOP_FILE:-}" "${NAME:-}" "${EXEC:-}" "${ICON:-}" "${OUT_ID:-}" "${DESKTOP_ID:-}" <<'PY'
+python3 - "$DIR" "${DESKTOP_FILE:-}" "${NAME:-}" "${EXEC:-}" "${ICON:-}" "${OUT_ID:-}" <<'PY'
 import re, sys
 from pathlib import Path
 
@@ -60,63 +64,94 @@ name = sys.argv[3] or ""
 exec_cmd = sys.argv[4] or ""
 icon = sys.argv[5] or ""
 out_id = sys.argv[6] or ""
-desktop_id = sys.argv[7] or ""
 
-def parse(path: Path):
-    data = {}
+# Keys we always force for login autostart
+FORCE_KEYS = {
+    "Hidden": "false",
+    "X-GNOME-Autostart-enabled": "true",
+    "X-systemd-skip": "true",  # our login helper runs these; skip systemd generator
+}
+
+
+def set_keys(content: str, pairs: dict) -> str:
+    """Update or append keys inside the [Desktop Entry] section only."""
+    lines = content.splitlines(keepends=True)
+    if not lines:
+        lines = ["[Desktop Entry]\n"]
+
+    has_entry = any(l.strip() == "[Desktop Entry]" for l in lines)
+    if not has_entry:
+        lines.insert(0, "[Desktop Entry]\n")
+
+    found = {k: False for k in pairs}
+    out = []
     in_entry = False
-    for line in path.read_text(errors="replace").splitlines():
+    for line in lines:
         s = line.strip()
         if s.startswith("["):
+            if in_entry:
+                for k, v in pairs.items():
+                    if not found[k]:
+                        out.append(f"{k}={v}\n")
+                        found[k] = True
             in_entry = s == "[Desktop Entry]"
+            out.append(line)
             continue
-        if not in_entry or not s or s.startswith("#") or "=" not in s:
-            continue
-        k, v = s.split("=", 1)
-        data.setdefault(k.strip(), v.strip())
-    return data
+        if in_entry and s and not s.startswith("#") and "=" in s:
+            k = s.split("=", 1)[0].strip()
+            if k in pairs:
+                out.append(f"{k}={pairs[k]}\n")
+                found[k] = True
+                continue
+        out.append(line)
+    if in_entry:
+        for k, v in pairs.items():
+            if not found[k]:
+                out.append(f"{k}={v}\n")
+    return "".join(out)
+
+
+def safe_out_id(candidate: str, fallback_name: str) -> str:
+    oid = Path(candidate).name if candidate else ""
+    if not oid:
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "-", fallback_name).strip("-").lower() or "app"
+        oid = safe
+    if not oid.endswith(".desktop"):
+        oid += ".desktop"
+    return oid
+
 
 if desktop_file:
     src = Path(desktop_file)
     if not src.is_file():
         print(f"error: not a file: {src}", file=sys.stderr)
         sys.exit(1)
-    data = parse(src)
-    name = name or data.get("Name") or src.stem
-    icon = icon or data.get("Icon") or ""
-    exec_raw = data.get("Exec") or ""
-    exec_clean = re.sub(r"\s+%[a-zA-Z@]", "", exec_raw).strip()
-    # Prefer gtk-launch for reliability
-    did = desktop_id or src.name
-    if did.endswith(".desktop"):
-        exec_cmd = exec_cmd or f"gtk-launch {did[:-8]}"
-    else:
-        exec_cmd = exec_cmd or exec_clean
-    out_id = out_id or src.name
+    # Copy the real desktop entry so Exec=/TryExec/DBus keys stay correct.
+    out_id = safe_out_id(out_id or src.name, src.stem)
+    dest = out_dir / out_id
+    content = set_keys(src.read_text(errors="replace"), FORCE_KEYS)
+    dest.write_text(content)
+    print(f"ok {dest}")
 else:
     if not name or not exec_cmd:
         print("error: need --name and --exec, or --desktop-id/--desktop-file", file=sys.stderr)
         sys.exit(1)
-    if not out_id:
-        safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-").lower() or "app"
-        out_id = safe if safe.endswith(".desktop") else f"{safe}.desktop"
-
-out_id = Path(out_id).name
-if not out_id.endswith(".desktop"):
-    out_id += ".desktop"
-
-# Only write inside autostart dir
-dest = out_dir / out_id
-content = f"""[Desktop Entry]
-Type=Application
-Name={name}
-Exec={exec_cmd}
-Icon={icon}
-Terminal=false
-StartupNotify=false
-Hidden=false
-X-GNOME-Autostart-enabled=true
-"""
-dest.write_text(content)
-print(f"ok {dest}")
+    out_id = safe_out_id(out_id, name)
+    dest = out_dir / out_id
+    # Manual entry only (no system .desktop to copy)
+    icon_line = f"Icon={icon}\n" if icon else ""
+    content = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={name}\n"
+        f"Exec={exec_cmd}\n"
+        f"{icon_line}"
+        "Terminal=false\n"
+        "StartupNotify=false\n"
+        "Hidden=false\n"
+        "X-GNOME-Autostart-enabled=true\n"
+        "X-systemd-skip=true\n"
+    )
+    dest.write_text(content)
+    print(f"ok {dest}")
 PY
