@@ -2986,8 +2986,10 @@ Rectangle {
                     // Echo cancel (system AEC for speaker→mic bleed) — collapsible
                     // Fully reversible: Off restores prior hardware defaults.
                     // Does not edit PipeWire conf; safe alongside Meet/Discord.
+                    // Hidden entirely when Options → “Show echo cancel in audio menu” is off.
                     // ---------------------------------------------------------
                     ColumnLayout {
+                        visible: bar.showEchoCancelInMenu !== false
                         Layout.fillWidth: true
                         Layout.topMargin: 2
                         spacing: 4

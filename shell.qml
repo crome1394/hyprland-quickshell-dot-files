@@ -136,7 +136,14 @@ ShellRoot {
     property bool showKillTargetPill: false
     property bool showFreshRssPill: true
     property bool showHyprInspPill: false
+    property bool showControlBarPill: true       // Bar control / config menu icon on the bar
     property bool showMagicWorkspacePill: true   // Magic pill inside WorkspacesPill (wsShowSpecialPill)
+    // Sys Stats gauges (Options panel; all on by default)
+    property bool showStatCpu: true
+    property bool showStatMem: true
+    property bool showStatGpu: true
+    // Hide Echo cancel block in Audio popup when false (Options)
+    property bool showEchoCancelInMenu: true
 
     // Clock format string (Qt.formatDateTime); Config default, persisted override.
     property string clockFormat: "dddd, MM·dd·yyyy | HH:mm:ss"
@@ -185,10 +192,11 @@ ShellRoot {
         { id: "notifications", label: "Notifications", vis: "showNotificationPill" },
         { id: "killTarget",    label: "Kill Target",   vis: "showKillTargetPill" },
         { id: "hyprInsp",      label: "Hypr Inspector", vis: "showHyprInspPill" },
+        { id: "controlBar",    label: "Config menu",   vis: "showControlBarPill" },
         { id: "power",         label: "Power",         vis: "showPowerPill" }
     ]
 
-    // Workspace behavior (config defaults in Config.qml; IPC overrides until qs restart)
+    // Workspace behavior (Config defaults; runtime + bar-layout.json via Options / IPC)
     property int  wsMinimumShown: 3
     property bool wsShowOnlyActive: false
     property int  wsStartupWorkspace: 0   // 0 = do not touch focus (safe for qs reload)
@@ -275,7 +283,12 @@ ShellRoot {
             root.showKillTargetPill = cfg.showKillTargetPill
             root.showFreshRssPill = cfg.showFreshRssPill
             root.showHyprInspPill = cfg.showHyprInspPill
+            root.showControlBarPill = cfg.showControlBarPill
             root.showMagicWorkspacePill = cfg.wsShowSpecialPill
+            root.showStatCpu = true
+            root.showStatMem = true
+            root.showStatGpu = true
+            root.showEchoCancelInMenu = true
             root.wsMinimumShown = cfg.wsMinimumShown
             root.wsShowOnlyActive = cfg.wsShowOnlyActive
             root.wsStartupWorkspace = cfg.wsStartupWorkspace
@@ -411,6 +424,14 @@ ShellRoot {
                 root.showKillTargetPill = barLayoutAdapter.showKillTargetPill
                 root.showFreshRssPill = barLayoutAdapter.showFreshRssPill
                 root.showHyprInspPill = barLayoutAdapter.showHyprInspPill
+                root.showControlBarPill = barLayoutAdapter.showControlBarPill
+                if (barLayoutAdapter.hasStatPrefs) {
+                    root.showStatCpu = barLayoutAdapter.showStatCpu
+                    root.showStatMem = barLayoutAdapter.showStatMem
+                    root.showStatGpu = barLayoutAdapter.showStatGpu
+                }
+                if (barLayoutAdapter.hasAudioMenuPrefs)
+                    root.showEchoCancelInMenu = barLayoutAdapter.showEchoCancelInMenu
                 // Layout JSON
                 if (barLayoutAdapter.widgetLayoutJson && barLayoutAdapter.widgetLayoutJson.length > 2) {
                     try {
@@ -436,6 +457,14 @@ ShellRoot {
                         if (sc && typeof sc === "object")
                             root.widgetScales = sc
                     } catch (e) {}
+                }
+                // Workspace Options (persisted; fall back to Config defaults when absent)
+                if (barLayoutAdapter.hasWorkspacePrefs) {
+                    root.showMagicWorkspacePill = barLayoutAdapter.showMagicWorkspacePill
+                    root.wsMinimumShown = Math.max(1, Math.min(10, barLayoutAdapter.wsMinimumShown))
+                    root.wsShowOnlyActive = barLayoutAdapter.wsShowOnlyActive
+                    root.wsStartupWorkspace = Math.max(0, Math.min(10, barLayoutAdapter.wsStartupWorkspace))
+                    root.wsStartupCloseMagic = barLayoutAdapter.wsStartupCloseMagic
                 }
                 bar.applyUiScale()
                 Qt.callLater(function() { bar.applyWidgetLayout() })
@@ -468,6 +497,22 @@ ShellRoot {
                 property bool showKillTargetPill: false
                 property bool showFreshRssPill: true
                 property bool showHyprInspPill: false
+                property bool showControlBarPill: true
+                // Workspace Options (BarControlBar → Options)
+                property bool hasWorkspacePrefs: false
+                property bool showMagicWorkspacePill: true
+                property int  wsMinimumShown: 3
+                property bool wsShowOnlyActive: false
+                property int  wsStartupWorkspace: 0
+                property bool wsStartupCloseMagic: false
+                // Sys stats section visibility
+                property bool hasStatPrefs: false
+                property bool showStatCpu: true
+                property bool showStatMem: true
+                property bool showStatGpu: true
+                // Audio popup sections
+                property bool hasAudioMenuPrefs: false
+                property bool showEchoCancelInMenu: true
             }
         }
 
@@ -508,6 +553,19 @@ ShellRoot {
             barLayoutAdapter.showKillTargetPill = root.showKillTargetPill
             barLayoutAdapter.showFreshRssPill = root.showFreshRssPill
             barLayoutAdapter.showHyprInspPill = root.showHyprInspPill
+            barLayoutAdapter.showControlBarPill = root.showControlBarPill
+            barLayoutAdapter.hasWorkspacePrefs = true
+            barLayoutAdapter.showMagicWorkspacePill = root.showMagicWorkspacePill
+            barLayoutAdapter.wsMinimumShown = root.wsMinimumShown
+            barLayoutAdapter.wsShowOnlyActive = root.wsShowOnlyActive
+            barLayoutAdapter.wsStartupWorkspace = root.wsStartupWorkspace
+            barLayoutAdapter.wsStartupCloseMagic = root.wsStartupCloseMagic
+            barLayoutAdapter.hasStatPrefs = true
+            barLayoutAdapter.showStatCpu = root.showStatCpu
+            barLayoutAdapter.showStatMem = root.showStatMem
+            barLayoutAdapter.showStatGpu = root.showStatGpu
+            barLayoutAdapter.hasAudioMenuPrefs = true
+            barLayoutAdapter.showEchoCancelInMenu = root.showEchoCancelInMenu
             barLayoutFile.writeAdapter()
             // Clear guard after filesystem watcher has had a chance to fire.
             Qt.callLater(function() {
@@ -515,6 +573,103 @@ ShellRoot {
                     bar._barLayoutWriteGuard = false
                 })
             })
+        }
+
+        // --- Options panel setters (shared with shell IPC) ---
+        function setShowControlBarPill(enabled) {
+            root.showControlBarPill = !!enabled
+            persistBarLayout()
+        }
+        function setShowStatCpu(enabled) {
+            root.showStatCpu = !!enabled
+            persistBarLayout()
+        }
+        function setShowStatMem(enabled) {
+            root.showStatMem = !!enabled
+            persistBarLayout()
+        }
+        function setShowStatGpu(enabled) {
+            root.showStatGpu = !!enabled
+            persistBarLayout()
+        }
+        function setShowEchoCancelInMenu(enabled) {
+            root.showEchoCancelInMenu = !!enabled
+            persistBarLayout()
+        }
+        function setShowMagicWorkspacePill(enabled) {
+            root.showMagicWorkspacePill = !!enabled
+            persistBarLayout()
+        }
+        function setWsMinimumShown(count) {
+            let n = Number(count)
+            if (!(n >= 1))
+                n = 1
+            if (n > 10)
+                n = 10
+            root.wsMinimumShown = Math.round(n)
+            persistBarLayout()
+        }
+        function setWsShowOnlyActive(enabled) {
+            root.wsShowOnlyActive = !!enabled
+            persistBarLayout()
+        }
+        function setWsStartupWorkspace(workspace) {
+            let n = Number(workspace)
+            if (!(n >= 0))
+                n = 0
+            if (n > 10)
+                n = 10
+            root.wsStartupWorkspace = Math.round(n)
+            persistBarLayout()
+        }
+        function setWsStartupCloseMagic(enabled) {
+            root.wsStartupCloseMagic = !!enabled
+            persistBarLayout()
+        }
+        function setEchoCancel(enabled) {
+            if (audioPill && audioPill.setEchoCancelEnabled)
+                audioPill.setEchoCancelEnabled(!!enabled)
+        }
+        function getEchoCancelEnabled() {
+            return !!(audioPill && audioPill.echoCancelEnabled)
+        }
+        function setNetworkAppletAutostart(enabled) {
+            if (networkPill && networkPill.setAppletAutostart)
+                networkPill.setAppletAutostart(!!enabled)
+        }
+        function getNetworkAppletAutostart() {
+            return networkPill ? !!networkPill.appletAutostartEnabled : true
+        }
+        function setBluetoothAppletAutostart(enabled) {
+            if (bluetoothPill && bluetoothPill.setAppletAutostart)
+                bluetoothPill.setAppletAutostart(!!enabled)
+        }
+        function getBluetoothAppletAutostart() {
+            return bluetoothPill ? !!bluetoothPill.bluemanAutostartEnabled : true
+        }
+        function setMetricsLiveUpdates(enabled) {
+            if (sysStatsPill && sysStatsPill.setMetricsLiveUpdates)
+                sysStatsPill.setMetricsLiveUpdates(!!enabled)
+        }
+        function getMetricsLiveUpdates() {
+            if (sysStatsPill)
+                return !!(sysStatsPill.cpuLiveUpdates || sysStatsPill.memLiveUpdates || sysStatsPill.gpuLiveUpdates)
+            return !!cfg.popupStatsLiveUpdates
+        }
+        function refreshOptionsState() {
+            // Nudge applets / echo-cancel to refresh status for Options panel
+            try {
+                if (audioPill && audioPill.refreshEchoCancelStatus)
+                    audioPill.refreshEchoCancelStatus()
+            } catch (e) {}
+            try {
+                if (networkPill && networkPill.refreshAppletStatus)
+                    networkPill.refreshAppletStatus()
+            } catch (e2) {}
+            try {
+                if (bluetoothPill && bluetoothPill.refreshBluemanStatus)
+                    bluetoothPill.refreshBluemanStatus()
+            } catch (e3) {}
         }
 
         function setBarPosition(pos) {
@@ -590,6 +745,7 @@ ShellRoot {
             case "notifications": return notificationBell
             case "killTarget": return killTargetPill
             case "hyprInsp": return hyprInspPill
+            case "controlBar": return controlBarPill
             case "power": return powerMenu
             default: return null
             }
@@ -648,6 +804,7 @@ ShellRoot {
             case "notifications": return root.showNotificationPill
             case "killTarget": return root.showKillTargetPill
             case "hyprInsp": return root.showHyprInspPill
+            case "controlBar": return root.showControlBarPill
             case "power": return root.showPowerPill
             default: return false
             }
@@ -675,6 +832,7 @@ ShellRoot {
             case "notifications": root.showNotificationPill = on; break
             case "killTarget": root.showKillTargetPill = on; break
             case "hyprInsp": root.showHyprInspPill = on; break
+            case "controlBar": root.showControlBarPill = on; break
             case "power": root.showPowerPill = on; break
             default: return
             }
@@ -1119,6 +1277,10 @@ ShellRoot {
         readonly property alias wallpaperAddScript: cfg.wallpaperAddScript
         readonly property alias wallpaperPickDirScript: cfg.wallpaperPickDirScript
         readonly property alias wallpaperMonitor: cfg.wallpaperMonitor
+        readonly property alias autostartListScript: cfg.autostartListScript
+        readonly property alias autostartSetScript: cfg.autostartSetScript
+        readonly property alias autostartAddScript: cfg.autostartAddScript
+        readonly property alias autostartRunScript: cfg.autostartRunScript
 
         // --- Popup sizes
         readonly property alias popupAudioWidth: cfg.popupAudioWidth
@@ -1209,6 +1371,7 @@ ShellRoot {
         readonly property alias iconBios: cfg.iconBios
         readonly property alias iconLauncher: cfg.iconLauncher
         readonly property alias iconHyprInsp: cfg.iconHyprInsp
+        readonly property alias iconControlBar: cfg.iconControlBar
         readonly property alias launcherCommand: cfg.launcherCommand
         readonly property alias launcherTooltip: cfg.launcherTooltip
         readonly property alias audioSpeakerIcon: cfg.audioSpeakerIcon
@@ -1263,11 +1426,17 @@ ShellRoot {
         readonly property alias wsSpecialName: cfg.wsSpecialName
         readonly property alias wsIconSpecial: cfg.wsIconSpecial
         readonly property alias wsShowSpecialPill: cfg.wsShowSpecialPill
-        property int wsMinimumShown: root.wsMinimumShown
-        property bool wsShowOnlyActive: root.wsShowOnlyActive
-        property int wsStartupWorkspace: root.wsStartupWorkspace
-        property bool wsStartupCloseMagic: root.wsStartupCloseMagic
-        property bool showMagicWorkspacePill: root.showMagicWorkspacePill
+        // Bound to root so Options / IPC / WorkspacesPill stay in sync
+        property alias wsMinimumShown: root.wsMinimumShown
+        property alias wsShowOnlyActive: root.wsShowOnlyActive
+        property alias wsStartupWorkspace: root.wsStartupWorkspace
+        property alias wsStartupCloseMagic: root.wsStartupCloseMagic
+        property alias showMagicWorkspacePill: root.showMagicWorkspacePill
+        property alias showControlBarPill: root.showControlBarPill
+        property alias showStatCpu: root.showStatCpu
+        property alias showStatMem: root.showStatMem
+        property alias showStatGpu: root.showStatGpu
+        property alias showEchoCancelInMenu: root.showEchoCancelInMenu
         function wsIconForId(id) { return cfg.wsIconForId(id) }
         function wsIsSpecialName(name) { return cfg.wsIsSpecialName(name) }
 
@@ -1625,6 +1794,45 @@ ShellRoot {
                     ToolTip.visible: containsMouse
                     ToolTip.delay: bar.tooltipDelay
                     ToolTip.text: "Hyprland Config Inspector"
+                }
+            }
+
+            // ─ Bar control / config menu ─
+            Rectangle {
+                id: controlBarPill
+                parent: widgetPool
+                visible: root.showControlBarPill
+                Layout.preferredWidth: bar.widgetW("controlBar", bar.sp(42))
+                Layout.preferredHeight: bar.pillHeight
+                Layout.alignment: Qt.AlignVCenter
+                radius: bar.pillRadius
+                color: controlBarMouse.containsMouse || (barControlBar && barControlBar.open)
+                       ? bar.glassHover : bar.pillBg
+                border.width: bar.controlBorderWidth
+                border.color: controlBarMouse.containsMouse || (barControlBar && barControlBar.open)
+                              ? bar.accent : bar.pillBorder
+
+                Text {
+                    anchors.centerIn: parent
+                    text: bar.iconControlBar
+                    font.pixelSize: bar.widgetW("controlBar", bar.iconSizePillLarge)
+                    font.family: bar.fontFamily
+                    color: controlBarMouse.containsMouse || (barControlBar && barControlBar.open)
+                           ? bar.accent : bar.subtext
+                }
+
+                MouseArea {
+                    id: controlBarMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (barControlBar && barControlBar.toggle)
+                            barControlBar.toggle()
+                    }
+                    ToolTip.visible: containsMouse
+                    ToolTip.delay: bar.tooltipDelay
+                    ToolTip.text: "Config menu (or right-click empty bar)"
                 }
             }
 
@@ -2055,23 +2263,44 @@ ShellRoot {
         function toggleShowHyprInspPill(): void {
             bar.toggleWidgetVisible("hyprInsp")
         }
+        function setShowControlBarPill(enabled: bool): void {
+            bar.setWidgetVisible("controlBar", enabled)
+        }
+        function toggleShowControlBarPill(): void {
+            bar.toggleWidgetVisible("controlBar")
+        }
         function setShowMagicWorkspacePill(enabled: bool): void {
-            root.showMagicWorkspacePill = enabled
+            if (bar && bar.setShowMagicWorkspacePill)
+                bar.setShowMagicWorkspacePill(enabled)
+            else
+                root.showMagicWorkspacePill = enabled
         }
         function toggleShowMagicWorkspacePill(): void {
-            root.showMagicWorkspacePill = !root.showMagicWorkspacePill
+            setShowMagicWorkspacePill(!root.showMagicWorkspacePill)
         }
         function setWsMinimumShown(count: int): void {
-            root.wsMinimumShown = Math.max(1, Math.min(10, count))
+            if (bar && bar.setWsMinimumShown)
+                bar.setWsMinimumShown(count)
+            else
+                root.wsMinimumShown = Math.max(1, Math.min(10, count))
         }
         function setWsShowOnlyActive(enabled: bool): void {
-            root.wsShowOnlyActive = enabled
+            if (bar && bar.setWsShowOnlyActive)
+                bar.setWsShowOnlyActive(enabled)
+            else
+                root.wsShowOnlyActive = enabled
         }
         function setWsStartupWorkspace(workspace: int): void {
-            root.wsStartupWorkspace = Math.max(0, Math.min(10, workspace))
+            if (bar && bar.setWsStartupWorkspace)
+                bar.setWsStartupWorkspace(workspace)
+            else
+                root.wsStartupWorkspace = Math.max(0, Math.min(10, workspace))
         }
         function setWsStartupCloseMagic(enabled: bool): void {
-            root.wsStartupCloseMagic = enabled
+            if (bar && bar.setWsStartupCloseMagic)
+                bar.setWsStartupCloseMagic(enabled)
+            else
+                root.wsStartupCloseMagic = enabled
         }
     }
 }

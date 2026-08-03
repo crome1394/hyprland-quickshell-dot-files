@@ -474,11 +474,13 @@ QtObject {
     readonly property bool showFreshRssPill:       true   // FreshRssPill.qml (FreshRSS reader)
     readonly property bool showRadarPill:          false  // RadarPill.qml (removed from bar; set true + re-add in shell.qml to restore)
     readonly property bool showHyprInspPill:       false  // Opens HyprConfigInsp from the bar (shell.qml)
+    readonly property bool showControlBarPill:     true   // Opens BarControlBar (config strip) from the bar
 
     // Glyphs for bar position toggle in BarControlBar (right-click empty bar chrome)
     readonly property string barPositionIconTop:    "󰁝"  // shown when bar is on bottom (click → move to top)
     readonly property string barPositionIconBottom: "󰁅"  // shown when bar is on top (click → move to bottom)
     readonly property string iconHyprInsp:          "󰒓"  // Hyprland Config Inspector bar pill
+    readonly property string iconControlBar:        "󰢻"  // Bar control / config menu pill
 
     // Display controls (hypr-resolution CLI still available; bar UI uses Wallpaper panel)
     readonly property string hyprResolutionBin: "hypr-resolution"  // on PATH, or absolute path
@@ -491,6 +493,12 @@ QtObject {
     readonly property string wallpaperApplyScript: "/home/crome/.config/quickshell/scripts/wallpaper-apply.sh"
     readonly property string wallpaperAddScript:   "/home/crome/.config/quickshell/scripts/wallpaper-add.sh"
     readonly property string wallpaperPickDirScript: "/home/crome/.config/quickshell/scripts/wallpaper-pick-dir.sh"
+
+    // XDG Autostart (BarControlBar → Autostart panel; ~/.config/autostart)
+    readonly property string autostartListScript: "/home/crome/.config/quickshell/scripts/autostart-list-json.sh"
+    readonly property string autostartSetScript:  "/home/crome/.config/quickshell/scripts/autostart-set.sh"
+    readonly property string autostartAddScript:  "/home/crome/.config/quickshell/scripts/autostart-add.sh"
+    readonly property string autostartRunScript:  "/home/crome/.config/quickshell/scripts/autostart-run.sh"
 
     // Clock format (Qt.formatDateTime) — editable from BarControlBar; persisted in bar-layout.json
     readonly property string clockFormat: "dddd, MM·dd·yyyy | HH:mm:ss"
@@ -519,6 +527,7 @@ QtObject {
         { id: "notifications", zone: "right" },
         { id: "killTarget",    zone: "right" },
         { id: "hyprInsp",      zone: "right" },
+        { id: "controlBar",    zone: "right" },
         { id: "power",         zone: "right" }
     ]
 

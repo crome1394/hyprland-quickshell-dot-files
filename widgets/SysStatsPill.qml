@@ -57,10 +57,19 @@ Rectangle {
     readonly property int _secW: Math.max(72, Math.round(bar.statPillSectionWidth * _ws))
     readonly property int _rowGap: Math.max(3, Math.round(7 * _ws))
     readonly property int _valGap: Math.max(2, Math.round(4 * _ws))
-    Layout.preferredWidth: Math.round(bar.statPillWidth * _ws)
+    // Options: which gauges appear on the pill
+    readonly property bool _showCpu: bar.showStatCpu !== undefined ? !!bar.showStatCpu : true
+    readonly property bool _showMem: bar.showStatMem !== undefined ? !!bar.showStatMem : true
+    readonly property bool _showGpu: bar.showStatGpu !== undefined ? !!bar.showStatGpu : true
+    readonly property int _nSec: (_showCpu ? 1 : 0) + (_showMem ? 1 : 0) + (_showGpu ? 1 : 0)
+    readonly property int _padH: Math.max(4, Math.round(bar.statPillPaddingH * _ws))
+    readonly property int _secGap: Math.max(2, Math.round(bar.statPillSpacing * _ws))
+    Layout.preferredWidth: _nSec <= 0
+        ? 0
+        : Math.round(_padH * 2 + _secW * _nSec + _secGap * Math.max(0, _nSec - 1))
     Layout.preferredHeight: bar.pillHeight
     Layout.alignment: Qt.AlignVCenter
-    visible: !mediaActive && sysStatsReady
+    visible: !mediaActive && sysStatsReady && _nSec > 0
     implicitWidth: Layout.preferredWidth
     implicitHeight: Layout.preferredHeight
     radius: bar.pillRadius
@@ -324,6 +333,7 @@ Rectangle {
         // ----- CPU -----
         Rectangle {
             id: cpuSection
+            visible: root._showCpu
             width: root._secW
             height: 26
             radius: bar.workspaceRadius
@@ -427,6 +437,7 @@ Rectangle {
         // ----- Memory -----
         Rectangle {
             id: memSection
+            visible: root._showMem
             width: root._secW
             height: 26
             radius: bar.workspaceRadius
@@ -530,6 +541,7 @@ Rectangle {
         // ----- GPU -----
         Rectangle {
             id: gpuSection
+            visible: root._showGpu
             width: root._secW
             height: 26
             radius: bar.workspaceRadius

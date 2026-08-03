@@ -64,14 +64,64 @@ IPC `setShow*` still sets your preference; density only gates visibility until t
 | **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, collapsible L/R balance, real-time VU meters, BT battery, and optional **echo cancel** (PipeWire AEC). **Left-click** opens the full popup; right-click cycles speaker / mic / dual. See [Audio pill](#audio-pill-audiopillqml) |
 | **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
 | **Notifications** | `NotificationBell.qml` | Bell with count badge and red DND styling. Polls your daemon's CLI from `Config.qml` (defaults: SwayNC / `swaync-client`) via timer sync + optional live subscribe — state and `Io.Process` polling live in this widget, not `shell.qml`. Left-click toggles panel; right-click opens menu (DND, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
+<<<<<<< HEAD
 | **Bar control** | `BarControlBar.qml` | Temporary mini-bar opened by **right-clicking empty bar chrome**. Toolbar: **Position** · **Wallpaper** · **Widgets** · **Sizes** · **Launch** · **Clock**. Wallpaper: thumbnail grid + apply via hyprpaper. Widgets: show/zone/order (Net·BT·Audio is one pill). **Sizes**: per-widget pill scale (block slider + typed %). Launch: Quick Launch pins. Persists in `state/bar-layout.json`. |
+=======
+| **Bar control** | `BarControlBar.qml` | Temporary mini-bar opened by **right-clicking empty bar chrome**. Toolbar: **Position** · **Wallpaper** · **Widgets** · **Sizes** · **Launch** · **Autostart** · **Clock**. Wallpaper: hyprpaper thumbs. Widgets: show/zone/order (Net·BT·Audio one pill). **Sizes**: horizontal width %. Launch: Quick Launch pins. **Autostart**: XDG `~/.config/autostart` enable/disable/add/remove/run (session apps; Hyprland core stays in `autostarts.lua`). |
+>>>>>>> 147e5ec (Add bar control strip: layout, wallpaper, sizes, Launch, and XDG Autostart.)
 | **Kill Target** | `KillTargetPill.qml` | xkill-style window picker (hidden by default). Click the pill to arm pick mode (crosshair on all monitors), then click a window to send **SIGTERM** to its process. Escape, right-click, empty click, or a second pill click cancels. Uses `window-at-point.sh` + `process-control.sh` (user-owned processes only). IPC: `qs ipc call killTargetPill activatePickMode` |
 | **Power** | `PowerMenu.qml` | Left-click opens the full session menu; right-click opens a compact quick menu. Actions and commands are configured in `Config.qml` (search **POWER MENU**) |
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
 
+<<<<<<< HEAD
 ### NWS Radar (removed from bar)
 
+=======
+### Bar control strip (`BarControlBar.qml`)
+
+**Right-click empty bar chrome** (not on a pill) opens a temporary centered mini-bar. Click a toolbar button to expand a panel; click the same button again (or outside the popup) to close.
+
+| Panel | What it does |
+|-------|----------------|
+| **Position** | Pin bar **top** or **bottom**; edge is written to `state/bar-layout.json` |
+| **Wallpaper** | Browse / apply wallpapers via hyprpaper (`scripts/wallpaper-*.sh`); pick folder, add images |
+| **Widgets** | Show/hide pills (✓ green / ✕ red), zone (left/center/right), reorder; Network·Bluetooth·Audio can share one combined AV pill |
+| **Sizes** | Per-widget **horizontal width** scale (about 80–180%); persists with bar layout |
+| **Launch** | Manage **Quick Launch** pins: search installed `.desktop` apps, add custom command, remove, reorder |
+| **Autostart** | Manage **XDG** login apps in `~/.config/autostart` (see below) |
+| **Clock** | Pick clock date/time format presets |
+
+Layout, widget visibility, scales, Quick Launch pins, wallpaper folder, and related prefs persist in `state/bar-layout.json` (guarded writes). UI scale and density hide thresholds stay in `Config.qml` / IPC as documented above.
+
+#### XDG Autostart panel
+
+Session **user apps** (Flameshot, Discord, Logseq, …) are managed here — not Hyprland core services.
+
+| Piece | Path |
+|-------|------|
+| Control panel | `widgets/BarControlBar.qml` → **Autostart** |
+| List / enable / disable / remove | `scripts/autostart-list-json.sh`, `autostart-set.sh` |
+| Add from `.desktop` or custom | `scripts/autostart-add.sh` |
+| Run one or all enabled now | `scripts/autostart-run.sh` |
+| Login helper (Hyprland) | `scripts/xdg-autostart-run.sh` |
+| Desktop files | `~/.config/autostart/*.desktop` |
+
+**At login:** call the helper once from Hyprland, e.g. in `~/.config/hypr/config/autostarts.lua`:
+
+```lua
+hl.exec_cmd("/home/crome/.config/quickshell/scripts/xdg-autostart-run.sh")
+```
+
+Keep **hyprpaper, hypridle, qs, swaync**, etc. in `autostarts.lua`. Put optional session apps in XDG so the control bar can toggle them without editing Lua.
+
+**Workspace on open (e.g. magic space):** Autostart only starts the process. Place windows with **Hyprland window rules** in `windows-and-workspaces.lua` (preferred), for example Telegram/Discord → `special:magic silent`. Then you can remove `hl.exec_cmd("Telegram", { workspace = "…" })` from `autostarts.lua` and add those apps from the Autostart panel instead.
+
+**Panel UX:** Current entries list with enable ✓/✕, run now, remove; searchable installed-app list with its own scroll area; **Open folder** / **Run enabled now** / **Refresh**.
+
+### NWS Radar (removed from bar)
+
+>>>>>>> 147e5ec (Add bar control strip: layout, wallpaper, sizes, Launch, and XDG Autostart.)
 The Radar pill is no longer loaded in `shell.qml`. Implementation remains under `widgets/RadarPill.qml`, `scripts/radar-fetch.sh`, and **NWS RADAR** tokens in `Config.qml` if you want to re-add it later.
 
 ### FreshRSS reader
