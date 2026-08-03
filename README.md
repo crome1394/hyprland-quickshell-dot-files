@@ -18,7 +18,7 @@ Personal Hyprland status bar built with [Quickshell](https://quickshell.org), pl
 
 The top Hyprland panel is a solid Quickshell `PanelWindow` defined in `shell.qml` (default `barPosition: "top"`). Widgets are grouped into **left**, **center**, and **right** zones. Each pill is a self-contained file under `widgets/` and reads colors, spacing, and behavior defaults from `Config.qml` via the shared `bar` object.
 
-Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"bottom"`, `barHeight`, `barEdgeMargin`). **Right-click empty bar chrome** (not on a pill) opens a short centered control strip (`BarControlBar.qml`) with the top/bottom toggle and display family × Hz chips (wired to `hypr-resolution`). Bar edge is saved to `state/bar-layout.json`. To rearrange widgets, cut and paste the marked blocks in `shell.qml` between the left, center, and right zones — no changes inside the widget files are required.
+Bar position and edge gap are set in `Config.qml` (`barPosition`: `"top"` or `"bottom"`, `barHeight`, `barEdgeMargin`). Open the **control strip** (`BarControlBar.qml`) by **right-clicking empty bar chrome** or the **Config menu** gear pill (`controlBar`, default on). The toolbar sits on the **bottom** of the popup; panels expand above and **size to content** (scrollbar only when needed). Layout and most prefs save to `state/bar-layout.json`. At runtime use **Widgets** / **Options**; in code you can still reparent marked blocks in `shell.qml`.
 
 **UI scale (multi-resolution):** Bar/pill/popup sizes scale with the monitor width. Full size at `uiDesignWidth` (default **2560** logical px) and above; narrower screens scale down to `uiScaleMin` (**0.65**). Popups are also clamped so they stay on-screen.
 
@@ -46,164 +46,119 @@ IPC `setShow*` still sets your preference; density only gates visibility until t
 |------|-------------------------|
 | **Left** | App Launcher, Quick Launch, FreshRSS, Media Player |
 | **Center** | Workspaces |
-| **Right** | System Stats, System Tray, Network, Bluetooth, Audio, Clock, Notifications, Power |
+| **Right** | System Stats, System Tray, Network·BT·Audio (combined), Clock, Notifications, Kill Target (off), Hypr Inspector (off), **Config menu**, Power |
 
 ### Bar widgets
 
 | Widget | File | Description |
 |--------|------|-------------|
 | **App Launcher** | `shell.qml` (inline) | Opens the Rofi app drawer (`~/.local/bin/rofi-app-drawer`) |
-| **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps. Manage from control bar **Launch** panel (add from installed apps or custom, remove, reorder) or edit defaults in `Config.qml` (`quickLaunchApps`). Runtime pins persist in `state/bar-layout.json`. |
-| **FreshRSS** | `FreshRssPill.qml` | Local FreshRSS reader window (list + article body, open browser / play in `mpv`). See [FreshRSS reader](#freshrss-reader) below |
-| **Media Player** | `MediaPill.qml` | MPRIS media controls with Cava visualizer and rich popup (play/pause, seek, player picker). Hidden by default — see visibility IPC below |
-| **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic-space pill, configurable count); click to switch, scroll wheel to cycle |
-| **System Stats** | `SysStatsPill.qml` | CPU, Memory, and GPU gauges (lightweight bar polling; always live). CPU/GPU show utilization + temperature; Memory shows utilization + used GiB. **Left-click** each third opens a metrics dropdown (inspector CPU/Memory/GPU tabs; `sysmon-poller.sh`). **Right-click** CPU or Memory opens `btop`; right-click GPU opens `nvtop`. Pill width and column layout in `Config.qml` (search **SYS STATS PILL**): `statPillWidth` (total border — tune this first), `statPillSectionWidth`, `statPillSpacing`, `statPillPaddingH`. Popup size and position are set per section in `Config.qml` — CPU: `popupStatsCpu*`; Memory: `popupStatsMem*`; GPU: `popupStatsGpu*`. **Pause updates** / **Resume updates** on each popup, or `sysStatsPill` IPC, suspends metrics-popup polling only. `popupStatsLiveUpdates` sets the default on open (persists across reboot). `popupStatsPersistPause: true` also saves Pause/Resume (and IPC) choices to `state/popup-stats.json`. Click outside or focus another window to dismiss. Hides automatically while media is playing |
-| **System Tray** | `SystemTrayPill.qml` | Tray icons with themed popup menus (avoids clashing native GTK/Qt menus) |
-| **Network** | `NetworkPill.qml` | NetworkManager manager (nm-applet replacement): two-column popup (Adapters + Connections \| WiFi), traffic graph, radio toggles, connection info, optional nm-applet tray. Left-click opens the popup (use the header WiFi toggle or IPC for radio power). See [Network pill](#network-pill-networkpillqml) |
-| **Bluetooth** | `BluetoothPill.qml` | Adapter power, scan/pair, connect/disconnect, trust/block/remove, rename, battery, device info, BlueZ **audio profiles**, and Blueman tray control (session + sticky autostart). Left-click opens the popup; right-click toggles adapter power. See [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
-| **Audio** | `AudioPill.qml` | Speaker and microphone volume, mute, scroll-wheel, device + card **profile** pickers, collapsible L/R balance, real-time VU meters, BT battery, and optional **echo cancel** (PipeWire AEC). **Left-click** opens the full popup; right-click cycles speaker / mic / dual. See [Audio pill](#audio-pill-audiopillqml) |
-| **Clock** | `ClockPill.qml` | Live date/time; click opens a calendar popup. IPC: `qs ipc call clockPill showCalendar` |
-| **Notifications** | `NotificationBell.qml` | Bell with count badge and red DND styling. Polls your daemon's CLI from `Config.qml` (defaults: SwayNC / `swaync-client`) via timer sync + optional live subscribe — state and `Io.Process` polling live in this widget, not `shell.qml`. Left-click toggles panel; right-click opens menu (DND, clear all). IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
-<<<<<<< HEAD
-| **Bar control** | `BarControlBar.qml` | Temporary mini-bar opened by **right-clicking empty bar chrome**. Toolbar: **Position** · **Wallpaper** · **Widgets** · **Sizes** · **Launch** · **Clock**. Wallpaper: thumbnail grid + apply via hyprpaper. Widgets: show/zone/order (Net·BT·Audio is one pill). **Sizes**: per-widget pill scale (block slider + typed %). Launch: Quick Launch pins. Persists in `state/bar-layout.json`. |
-=======
-| **Bar control** | `BarControlBar.qml` | Temporary mini-bar opened by **right-clicking empty bar chrome**. Toolbar: **Position** · **Wallpaper** · **Widgets** · **Sizes** · **Launch** · **Autostart** · **Clock**. Wallpaper: hyprpaper thumbs. Widgets: show/zone/order (Net·BT·Audio one pill). **Sizes**: horizontal width %. Launch: Quick Launch pins. **Autostart**: XDG `~/.config/autostart` enable/disable/add/remove/run (session apps; Hyprland core stays in `autostarts.lua`). |
->>>>>>> 147e5ec (Add bar control strip: layout, wallpaper, sizes, Launch, and XDG Autostart.)
-| **Kill Target** | `KillTargetPill.qml` | xkill-style window picker (hidden by default). Click the pill to arm pick mode (crosshair on all monitors), then click a window to send **SIGTERM** to its process. Escape, right-click, empty click, or a second pill click cancels. Uses `window-at-point.sh` + `process-control.sh` (user-owned processes only). IPC: `qs ipc call killTargetPill activatePickMode` |
-| **Power** | `PowerMenu.qml` | Left-click opens the full session menu; right-click opens a compact quick menu. Actions and commands are configured in `Config.qml` (search **POWER MENU**) |
+| **Quick Launch** | `QuickLaunchPill.qml` | Icon row for pinned apps. Manage from control bar **Launch** panel or `Config.qml` (`quickLaunchApps`). Pins persist in `state/bar-layout.json`. |
+| **FreshRSS** | `FreshRssPill.qml` | Reader window (list + article, browser / `mpv`). Collapsible **Filters** (search, max days, per feed). Credentials via Options or external env. See [FreshRSS reader](#freshrss-reader). |
+| **Media Player** | `MediaPill.qml` | MPRIS + Cava; hidden by default — see visibility IPC |
+| **Workspaces** | `WorkspacesPill.qml` | Hyprland workspace pills (optional magic pill); click / scroll to switch |
+| **System Stats** | `SysStatsPill.qml` | CPU / Memory / GPU gauges. **Options** can hide individual gauges. Left-click → metrics popup; right-click CPU/Mem → `btop`, GPU → `nvtop`. Hides while media plays. |
+| **System Tray** | `SystemTrayPill.qml` | Tray icons with themed menus |
+| **Network** | `NetworkPill.qml` | NetworkManager UI; see [Network pill](#network-pill-networkpillqml) |
+| **Bluetooth** | `BluetoothPill.qml` | Devices, profiles, Blueman sticky autostart; see [Bluetooth pill](#bluetooth-pill-bluetoothpillqml) |
+| **Audio** | `AudioPill.qml` | Volume, devices, profiles, VU, optional echo cancel (hide AEC UI via Options); see [Audio pill](#audio-pill-audiopillqml) |
+| **Clock** | `ClockPill.qml` | Date/time; calendar on click. IPC: `qs ipc call clockPill showCalendar` |
+| **Notifications** | `NotificationBell.qml` | Badge + DND. IPC: `qs ipc call notificationBell toggleDoNotDisturb` |
+| **Config menu** | `shell.qml` + `BarControlBar.qml` | Gear pill opens the control strip (same as right-click empty chrome). IPC: `setShowControlBarPill` / `toggleShowControlBarPill` |
+| **Bar control** | `BarControlBar.qml` | Control strip panels — see below |
+| **Kill Target** | `KillTargetPill.qml` | Window pick → SIGTERM (off by default). IPC: `killTargetPill activatePickMode` |
+| **Power** | `PowerMenu.qml` | Session menu (`Config.qml` **POWER MENU**) |
 
 The **Hyprland Config Inspector** is also loaded from `shell.qml` but is not a bar pill; it opens as a separate floating window (see below).
 
-<<<<<<< HEAD
-### NWS Radar (removed from bar)
-
-=======
 ### Bar control strip (`BarControlBar.qml`)
 
-**Right-click empty bar chrome** (not on a pill) opens a temporary centered mini-bar. Click a toolbar button to expand a panel; click the same button again (or outside the popup) to close.
+Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar on the **bottom**; content expands above and resizes to fit (scroll only for tall panels: Wallpaper, Widgets, Options, Launch, Autostart).
 
 | Panel | What it does |
 |-------|----------------|
-| **Position** | Pin bar **top** or **bottom**; edge is written to `state/bar-layout.json` |
-| **Wallpaper** | Browse / apply wallpapers via hyprpaper (`scripts/wallpaper-*.sh`); pick folder, add images |
-| **Widgets** | Show/hide pills (✓ green / ✕ red), zone (left/center/right), reorder; Network·Bluetooth·Audio can share one combined AV pill |
-| **Sizes** | Per-widget **horizontal width** scale (about 80–180%); persists with bar layout |
-| **Launch** | Manage **Quick Launch** pins: search installed `.desktop` apps, add custom command, remove, reorder |
-| **Autostart** | Manage **XDG** login apps in `~/.config/autostart` (see below) |
-| **Clock** | Pick clock date/time format presets |
+| **Position** | Pin bar top/bottom → `state/bar-layout.json` |
+| **Wallpaper** | hyprpaper thumbs, apply, pick folder, add images |
+| **Widgets** | **A–Z list**; each row is three columns: **✓/✕ + full name** · **L C R** · **↑ ↓**; width slider 80–180%. Names use flexible width (Notifications, Hypr Inspector, etc. not clipped). Net·BT·Audio is one pill. **Reset layout** / **Reset sizes** |
+| **Options** | Behavior prefs (not layout) — table below |
+| **Launch** | Quick Launch pins (installed apps or custom) |
+| **Autostart** | XDG `~/.config/autostart` (see Autostart subsection) |
+| **Clock** | Clock format presets |
 
-Layout, widget visibility, scales, Quick Launch pins, wallpaper folder, and related prefs persist in `state/bar-layout.json` (guarded writes). UI scale and density hide thresholds stay in `Config.qml` / IPC as documented above.
+#### Options panel
+
+| Section | Controls | Persistence |
+|---------|----------|-------------|
+| **Bar / UI** | UI scale auto/manual · Config menu icon on bar | `bar-layout.json` |
+| **Workspaces** | Magic pill · only-active · min pills · startup workspace · close magic on start | `bar-layout.json` |
+| **Audio** | Echo cancel AEC · show AEC in audio popup | AEC scripts; visibility → `bar-layout.json` |
+| **Network** | nm-applet sticky login autostart | XDG / applet control |
+| **Bluetooth** | Blueman sticky login autostart | XDG / applet control |
+| **System stats** | Show CPU / Memory / GPU · metrics live updates | gauges → `bar-layout.json` |
+| **FreshRSS** | Filters expanded on open · HTTPS/HTTP · host · user · API password · **Test** / **Save server** | filters → `bar-layout.json`; credentials → `~/.config/freshrss-quickshell/freshrss.env` (never git) |
+
+Editable text fields use a slightly lifted background so they read as inputs. Toggle/number columns share a fixed right-hand control slot for alignment.
 
 #### XDG Autostart panel
 
-Session **user apps** (Flameshot, Discord, Logseq, …) are managed here — not Hyprland core services.
+Session user apps only (not Hyprland core). Scripts: `autostart-list-json.sh`, `autostart-set.sh`, `autostart-add.sh`, `autostart-run.sh`, `xdg-autostart-run.sh`. Desktop entries use real `Exec=` lines and `X-systemd-skip=true`. Failures log to `~/.local/state/quickshell/autostart-run.log`.
 
-| Piece | Path |
-|-------|------|
-| Control panel | `widgets/BarControlBar.qml` → **Autostart** |
-| List / enable / disable / remove | `scripts/autostart-list-json.sh`, `autostart-set.sh` |
-| Add from `.desktop` or custom | `scripts/autostart-add.sh` |
-| Run one or all enabled now | `scripts/autostart-run.sh` |
-| Login helper (Hyprland) | `scripts/xdg-autostart-run.sh` |
-| Desktop files | `~/.config/autostart/*.desktop` |
-
-**At login:** call the helper once from Hyprland, e.g. in `~/.config/hypr/config/autostarts.lua`:
+Login helper in Hyprland `autostarts.lua`:
 
 ```lua
 hl.exec_cmd("/home/crome/.config/quickshell/scripts/xdg-autostart-run.sh")
 ```
 
-Keep **hyprpaper, hypridle, qs, swaync**, etc. in `autostarts.lua`. Put optional session apps in XDG so the control bar can toggle them without editing Lua.
-
-**Workspace on open (e.g. magic space):** Autostart only starts the process. Place windows with **Hyprland window rules** in `windows-and-workspaces.lua` (preferred), for example Telegram/Discord → `special:magic silent`. Then you can remove `hl.exec_cmd("Telegram", { workspace = "…" })` from `autostarts.lua` and add those apps from the Autostart panel instead.
-
-**Panel UX:** Current entries list with enable ✓/✕, run now, remove; searchable installed-app list with its own scroll area; **Open folder** / **Run enabled now** / **Refresh**.
+Put Telegram/Discord workspace placement in **window rules** (e.g. `special:magic silent`), not in Autostart `exec` workspace options.
 
 ### NWS Radar (removed from bar)
 
->>>>>>> 147e5ec (Add bar control strip: layout, wallpaper, sizes, Launch, and XDG Autostart.)
 The Radar pill is no longer loaded in `shell.qml`. Implementation remains under `widgets/RadarPill.qml`, `scripts/radar-fetch.sh`, and **NWS RADAR** tokens in `Config.qml` if you want to re-add it later.
 
 ### FreshRSS reader
 
-Floating reader for a local FreshRSS server (default `http://10.74.10.8`). Opens from a bar pill or IPC.
+Floating reader for a FreshRSS server. Opens from the bar pill or IPC (`qs ipc call freshRss toggle` / `refresh` / `show` / `hide`).
 
 | Piece | Path |
 |-------|------|
 | Bar pill + window | `widgets/FreshRssPill.qml` |
 | API client | `scripts/freshrss-api.sh` |
-| Secrets (gitignored) | `secrets/freshrss.env` |
-| Example secrets | `secrets/freshrss.env.example` |
-| Theme / limits | `Config.qml` (search **FRESHRSS**) |
+| Secrets (**outside git**) | `~/.config/freshrss-quickshell/freshrss.env` |
+| Example template | `secrets/freshrss.env.example` |
+| Read/write/test helpers | `freshrss-secrets-read.sh`, `freshrss-secrets-write.sh`, `freshrss-connection-test.sh` |
+| Options UI | Control bar → **Options → FreshRSS** |
+| Theme / limits | `Config.qml` (**FRESHRSS**) |
 
-**How auth works**
-
-- FreshRSS **Authentication** (form login, anonymous reading, allow API) is *server policy* — it does **not** hold the API password.
-- The **API password** is under **Login → Profile** after signing in as your user. It is separate from the web form password.
-- Anonymous IP browsing can show articles without Profile controls; that is expected.
+**Auth:** Profile → **API password** (not the web form password). Without it, public RSS is read-only.
 
 **Data backends**
 
-| Scope chip | Backend | Notes |
-|------------|---------|--------|
-| **All** / **Read** | Google Reader API, **per feed** (parallel) | Every subscription is represented (quiet channels included). Read+unread for All; read-only for Read. |
-| **Unread** / **Starred** | Fever API id lists | True unread/starred sets from the server. |
-| (no API password) | Public RSS ` /i/?a=rss` | Read-only fallback. |
-
-**Counters (match FreshRSS)**
-
-| Location | Source | What you see |
-|----------|--------|----------------|
-| **Bar pill badge** | GReader `unread-count` → `max` | Same total as FreshRSS’s `(N)` title |
-| **Status line** in the window | Same global unread + in-view filter stats | e.g. `all · all dates · 21 unread · 40 shown · 5u/35r in view` |
-| **Feed headers** | GReader per-feed unread (`titles` / `feeds` maps) | Accent number = unread (sidebar-style); `·N` = articles currently loaded for that feed |
-| **Date sub-rows** | Loaded list `is_read` flags | `unread` or `unread/total` for that day in the window |
-
-`freshrss-api.sh status` returns `{ unread, feeds, titles, labels, source }` for debugging. The bar badge only uses `unread`; in-window feed numbers use `titles` (feed name → count).
+| Scope | Backend |
+|-------|---------|
+| All / Read | Google Reader API (per-feed parallel) |
+| Unread / Starred | Fever API id lists |
+| No API password | Public RSS `/i/?a=rss` (read-only) |
 
 **Setup**
 
-1. Enable **Allow API access** and set **Profile → API password**.
-2. Create secrets (gitignored):
-
 ```bash
+mkdir -p ~/.config/freshrss-quickshell
 cp ~/.config/quickshell/secrets/freshrss.env.example \
-   ~/.config/quickshell/secrets/freshrss.env
-# edit: FRESHRSS_BASE_URL, FRESHRSS_USER, FRESHRSS_API_PASSWORD
-chmod 600 ~/.config/quickshell/secrets/freshrss.env
-```
+   ~/.config/freshrss-quickshell/freshrss.env
+# FRESHRSS_BASE_URL, FRESHRSS_USER, FRESHRSS_API_PASSWORD
+chmod 600 ~/.config/freshrss-quickshell/freshrss.env
 
-3. Smoke test:
-
-```bash
 ~/.config/quickshell/scripts/freshrss-api.sh status
-# expect: "unread":N matching FreshRSS, "source":"greader"
-#         .titles."Alex Jones Live" etc. match the FreshRSS sidebar
-~/.config/quickshell/scripts/freshrss-api.sh items 80 all 12 | jq '{count,feeds,ms,workers}'
+# Or Options → FreshRSS → Test / Save server
 ```
-
-**Defaults (reader window)**
-
-| Setting | Default |
-|---------|---------|
-| Scope | **All** (read + unread) |
-| Date filter | **All dates** |
-| Categories | **Collapsed** (expand feeds you care about) |
-| Category order | **A–Z** |
-| Inside a feed | Grouped by **date** (Today / Yesterday / full date), newest first |
 
 **Reader UI**
 
-- Expand a feed → **date sub-groups** (collapsible); articles under each day.
-- Scope: Unread · **All** · Read · Starred.
-- Date chips: All dates · Today · 7 days.
-- Type: Any type · Video.
-- **Per feed / max items** steppers + presets (reloads from server).
-- Search (`/` or `Ctrl+F`) over title, feed, author, summary (not full HTML).
-- **Play in mpv** only on **video** articles (YouTube, `.m4v`/`.mp4`, etc.); body video links also open in mpv. Needs `yt-dlp` on `PATH` (e.g. `~/.local/bin/yt-dlp`).
-- Mark item read / star when API password is configured.
-- **Mark whole feed** read/unread (detail buttons + shortcuts) via GReader/Fever.
-- Feed header numbers track FreshRSS unread; `·N` is articles loaded in the window.
+- Always visible: date chips, scope, type, collapse/expand all feeds.
+- **Filters** (collapsible, default open via Options): search, max days, per feed / max items.
+- Feed expand → date groups; mark read/star when API password is set; **Play in mpv** on video items (`yt-dlp` on `PATH`).
+
+**Defaults:** scope All, date All, categories collapsed A–Z, filters panel open by default (`freshRssFiltersExpanded`).
 
 **Keyboard shortcuts** (window focused; not while typing in search)
 
@@ -256,7 +211,7 @@ Optional Hyprland: `bind = SUPER, R, exec, qs ipc call freshRss toggle`
 
 ### Bar widget visibility (`Config.qml` + IPC)
 
-Every bar pill can be hidden or shown. Defaults live in `Config.qml` (search for **WIDGET VISIBILITY**). `shell.qml` applies them on startup; **IPC overrides last until `qs` restarts**.
+Every bar pill can be hidden or shown. Defaults live in `Config.qml` (search for **WIDGET VISIBILITY**). Control-bar **Widgets** and IPC also write `state/bar-layout.json`, so most choices survive a `qs` restart.
 
 | Config property | Default | IPC `set` / `toggle` | Widget |
 |-----------------|---------|----------------------|--------|
@@ -273,19 +228,21 @@ Every bar pill can be hidden or shown. Defaults live in `Config.qml` (search for
 | `showClockPill` | `true` | `setShowClockPill` / `toggleShowClockPill` | Clock |
 | `showNotificationPill` | `true` | `setShowNotificationPill` / `toggleShowNotificationPill` | Notifications |
 | `showKillTargetPill` | `false` | `setShowKillTargetPill` / `toggleShowKillTargetPill` | Kill Target |
+| `showHyprInspPill` | `false` | `setShowHyprInspPill` / `toggleShowHyprInspPill` | Hypr Inspector |
+| `showControlBarPill` | `true` | `setShowControlBarPill` / `toggleShowControlBarPill` | Config menu gear |
 | `showPowerPill` | `true` | `setShowPowerPill` / `toggleShowPowerPill` | Power |
 
-The **magic workspace pill** (🪄 inside the workspaces strip) is separate: `wsShowSpecialPill` in config, plus `setShowMagicWorkspacePill` / `toggleShowMagicWorkspacePill` via IPC.
+The **magic workspace pill** (inside the workspaces strip) is separate: `wsShowSpecialPill` in config, plus `setShowMagicWorkspacePill` / `toggleShowMagicWorkspacePill` via IPC (also under **Options → Workspaces**).
 
 **Examples**
 
 ```bash
-# Runtime (until qs restarts)
 qs ipc call shell setShowAudioPill false
 qs ipc call shell toggleShowPowerPill
-qs ipc call shell setShowWorkspacesPill true
+qs ipc call shell setShowControlBarPill true
+qs ipc call shell toggleBarControlBar
 
-# Permanent default in Config.qml
+# Config.qml defaults apply when bar-layout has no override
 showAudioPill: false
 showMediaPill: true
 ```
