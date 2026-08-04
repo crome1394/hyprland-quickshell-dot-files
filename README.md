@@ -14,7 +14,7 @@ Personal [Hyprland](https://hyprland.org) status bar and floating **Config Inspe
 ## Features
 
 - Glassmorphic bar (top or bottom) with left / center / right zones
-- **Control strip** — right-click empty chrome or **Config menu** gear: layout, wallpaper, Options, Quick Launch, XDG Autostart, systemd Services, Keybinds editor, clock formats
+- **Control strip** — right-click empty chrome or **Config menu** gear: layout, Display (resolution / refresh / bit depth), wallpaper, Options, Quick Launch, XDG Autostart, systemd Services, Keybinds editor, clock formats
 - Network, Bluetooth, Audio (optional combined pill), workspaces (incl. magic space), sys stats, tray, notifications, power
 - FreshRSS reader pill (external secrets file)
 - Floating Hyprland Config Inspector (metrics, logs, services, split Lua configs)
@@ -59,6 +59,7 @@ Reorder / show-hide at runtime: **Config menu → Widgets**. Defaults and catalo
 | Panel | Purpose |
 |-------|---------|
 | **Position** | Bar top / bottom |
+| **Display** | Res / refresh / 8·10-bit, adapter + NVIDIA stats, Apply (`hyprctl` modes) |
 | **Wallpaper** | hyprpaper apply / folder |
 | **Widgets** | A–Z list: ✓ · name · L/C/R · ↑↓ · width % |
 | **Options** | Behavior prefs (scale, workspaces, applets, stats gauges, FreshRSS server) |

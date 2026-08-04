@@ -2,11 +2,12 @@
 
 # Bar control strip (`BarControlBar.qml`)
 
-Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar on the **bottom**; content expands above and resizes to fit (scroll only for tall panels: Wallpaper, Widgets, Options, Launch, Autostart).
+Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar on the **bottom**; content expands above and resizes to fit (scroll only for tall panels: Display, Wallpaper, Widgets, Options, Launch, Autostart).
 
 | Panel | What it does |
 |-------|----------------|
 | **Position** | Pin bar top/bottom → `state/bar-layout.json` |
+| **Display** | Monitor resolution / refresh / bit depth + adapter stats from `hyprctl` (see Display subsection) |
 | **Wallpaper** | hyprpaper thumbs, apply, pick folder, add images |
 | **Widgets** | **A–Z list**; each row is three columns: **✓/✕ + full name** · **L C R** · **↑ ↓**; width slider 80–180%. Names use flexible width (Notifications, Hypr Inspector, etc. not clipped). Net·BT·Audio is one pill. **Reset layout** / **Reset sizes** |
 | **Options** | Behavior prefs (not layout) — table below |
@@ -15,6 +16,44 @@ Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar o
 | **Services** | systemd user/system units — filter, select, **Start / Stop / Restart** (reuses Inspector `ServicesView`) |
 | **Keybinds** | Browse `keybindings.lua` by category; **edit key chord, category, description** (not the action) |
 | **Clock** | Clock format presets |
+
+## Display panel
+
+Runtime mode switcher for the focused (or configured) Hyprland monitor. Modes come live from `hyprctl monitors -j` → `availableModes` via `scripts/monitor-mode.sh` — not a hardcoded list.
+
+Layout (top → bottom): status · adapter · **Resolution | Refresh | Bit depth** row · Apply.
+
+| Control | Behavior |
+|---------|----------|
+| **Indicator** | Current resolution, refresh, bit depth, make/model/serial, connector + format + scale, physical size, position |
+| **NVIDIA** | Button with Nerd Font `md-nvidia` glyph + label; opens `nvidia-settings` |
+| **Adapter** | DRM connector + NVIDIA name/driver; util, temp, P-state, power, VRAM, clocks. Mini GPU/VRAM bars. |
+| **Resolution** | Stepped block slider over `WxH` in the selected refresh **family**, sorted **width then height descending** |
+| **Refresh rate** | Dropdown of **exact** rates for the selected resolution only (hyprctl). Changing rate refilters the resolution list by Hz **family** (e.g. 239.76 / 239.90 / 239.97 → ~240) |
+| **Bit depth** | Dropdown: **8-bit** / **10-bit** (pending until Apply) |
+| **Apply** | Commits pending mode + bitdepth at **scale 1.0** |
+
+**Linked filtering**
+
+- Pick a **resolution** → refresh dropdown lists only rates hyprctl reports for that `WxH`.
+- Pick a **refresh rate** → resolution slider lists only `WxH` values that advertise a rate in the same family (~60 / ~75 / ~120 / ~240).
+- Moving the slider snaps the pending rate to that panel’s exact EDID value in the same family so Apply always uses a real mode string.
+
+**Polling / resources**
+
+- GPU/status soft-poll runs **only** while the Display panel is open (default **3s**).
+- Poll **pauses** while dragging the resolution slider; no background work when Display is closed.
+- Selection changes do **not** bump global layout ticks (keeps the slider responsive).
+
+Pending changes do **not** take effect until **Apply**. Apply uses:
+
+```bash
+hyprctl eval 'hl.monitor({ output="…", mode="WxH@rate", position="0x0", scale=1, bitdepth=N })'
+```
+
+`hyprctl reload` re-applies `monitors.lua` and can snap back to the config default.
+
+Related CLI (outside this repo, on PATH): `hypr-resolution` — rofi menu over the same EDID modes (default 10-bit, scale 1).
 
 ## Options panel
 

@@ -1292,6 +1292,9 @@ ShellRoot {
         readonly property alias wallpaperAddScript: cfg.wallpaperAddScript
         readonly property alias wallpaperPickDirScript: cfg.wallpaperPickDirScript
         readonly property alias wallpaperMonitor: cfg.wallpaperMonitor
+        readonly property alias monitorModeScript: cfg.monitorModeScript
+        readonly property alias monitorName: cfg.monitorName
+        // hyprResolutionBin is aliased once above (Display / hypr-resolution CLI)
         readonly property alias autostartListScript: cfg.autostartListScript
         readonly property alias autostartSetScript: cfg.autostartSetScript
         readonly property alias autostartAddScript: cfg.autostartAddScript

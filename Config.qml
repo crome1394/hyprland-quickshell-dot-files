@@ -482,8 +482,11 @@ QtObject {
     readonly property string iconHyprInsp:          "󰒓"  // Hyprland Config Inspector bar pill
     readonly property string iconControlBar:        "󰢻"  // Bar control / config menu pill
 
-    // Display controls (hypr-resolution CLI still available; bar UI uses Wallpaper panel)
-    readonly property string hyprResolutionBin: "hypr-resolution"  // on PATH, or absolute path
+    // Display (BarControlBar → Display panel; hyprctl modes + bitdepth)
+    // CLI/rofi: hypr-resolution (on PATH). Script: list/status/apply for the control strip.
+    readonly property string hyprResolutionBin: "hypr-resolution"
+    readonly property string monitorModeScript: "/home/crome/.config/quickshell/scripts/monitor-mode.sh"
+    readonly property string monitorName: "DP-1"
 
     // Wallpaper (BarControlBar → Wallpaper panel; hyprpaper apply)
     readonly property string wallpaperDir: "/home/crome/Pictures/wallpapers"
