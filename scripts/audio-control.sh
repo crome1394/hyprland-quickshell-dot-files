@@ -432,6 +432,10 @@ list_streams() {
             if (app=="" && binary!="") app=binary
             if (app=="") app="Unknown"
             if (media=="") media="-"
+            # Hide internal peak meters (PwNodePeakMonitor → "Quickshell Peak Detect")
+            low = tolower(app " " binary " " media)
+            if (low ~ /peak detect/) return
+            if (low ~ /quickshell peak/) return
             printf "{\"index\":%s,\"app\":\"%s\",\"media\":\"%s\",\"device_index\":\"%s\",\"mute\":%s,\"volume_pct\":%d,\"corked\":%s}\n",
                 idx, jesc(app), jesc(media), jesc(dev), mute, vol, corked
         }

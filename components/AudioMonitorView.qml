@@ -3,9 +3,13 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell.Io as Io
+import Quickshell.Services.Pipewire
 import ".."
 
 // PulseAudio/PipeWire audio devices via pactl (sinks, sources, ports, defaults).
+// Used by Inspector Audio tab and BarControlBar Audio panel.
+// Optional tools strip (pw-top / restart / AEC) via showTools.
+// Defaults: card profiles + VU levels (name-resolved PipeWire nodes, gated while active).
 Item {
     id: root
 
@@ -13,6 +17,20 @@ Item {
 
     property string globalFilter: ""
     property bool active: false
+    // Tools + echo cancel (control bar + inspector). Safe off for minimal embeds.
+    property bool showTools: true
+
+    // Section visibility (Options → Audio; defaults on)
+    property bool showSummary: true
+    property bool showDefaults: true
+    property bool showLevelMeters: true
+    property bool showEchoCancel: true
+    // Expanded prefs (Options “keep expanded”); applied each time panel opens
+    property bool summaryExpandedPref: true
+    property bool defaultsExpandedPref: true
+    // Session expand state (headers toggle these)
+    property bool summaryExpanded: true
+    property bool defaultsExpanded: true
 
     property color textColor: "#ececee"
     property color subtextColor: "#b0b0b2"
@@ -39,7 +57,8 @@ Item {
         sources: [],
         streams: { playback: [], recording: [] }
     })
-    property bool streamsExpanded: false
+    // Default open — matches AudioPill “Active streams” glance section
+    property bool streamsExpanded: true
     property string selectedSinkName: ""
     property string selectedSourceName: ""
     property bool loading: false
@@ -48,18 +67,69 @@ Item {
     property string lastAction: ""
     property int dataVersion: 0
 
+    // Echo cancel (same sticky path as AudioPill / audio-control.sh)
+    property bool echoCancelEnabled: false
+    property bool echoCancelPreferred: false
+    property bool echoCancelBusy: false
+    property string echoCancelError: ""
+    property string echoCancelHint: ""
+    property bool audioRestartBusy: false
+    property string toolsStatus: ""
+
+    // Default-device profiles + VU (gated while active)
+    property bool speakerLevelMeterOn: true
+    property bool micLevelMeterOn: true
+    property var peakSpeaker: null
+    property var peakMic: null
+    property string speakerCard: ""
+    property string micCard: ""
+    property string speakerProfileActive: ""
+    property string micProfileActive: ""
+    property var speakerProfiles: []
+    property var micProfiles: []
+    property bool speakerProfileMenuOpen: false
+    property bool micProfileMenuOpen: false
+
     property bool _loadHandled: false
     property bool _actionHandled: false
     property int _lastActionExitCode: 0
+    // Last defaults we loaded profiles for — avoid re-spawning list-card-profiles every soft-poll
+    property string _profilesSinkKey: ""
+    property string _profilesSourceKey: ""
 
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10
     readonly property int sectionSpacing: 8
     readonly property int deviceRowHeight: 66
-    readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
-    readonly property int streamsHeaderHeight: 34
-    readonly property int streamsRowHeight: 24
-    readonly property int streamsMaxBodyHeight: 132
+    readonly property int streamsHeaderHeight: 28
+    readonly property int streamsRowHeight: 22
+    readonly property int streamsMaxBodyHeight: 120
+
+    // Peak sampling ONLY while active + levels enabled. node:null tears down PipeWire
+    // peak streams (avoids "Quickshell Peak Detect" and CPU when menu is closed).
+    readonly property bool samplingPeaks: root.active && root.showLevelMeters
+                                          && (root.speakerLevelMeterOn || root.micLevelMeterOn)
+
+    // Track only name-resolved peak nodes — never Pipewire.defaultAudio*
+    PwObjectTracker {
+        objects: root.samplingPeaks
+            ? [root.peakSpeaker, root.peakMic].filter(function (n) { return !!n })
+            : []
+    }
+
+    PwNodePeakMonitor {
+        id: speakerPeakMon
+        node: (root.active && root.showLevelMeters && root.speakerLevelMeterOn && root.peakSpeaker)
+              ? root.peakSpeaker : null
+        enabled: root.active && root.showLevelMeters && root.speakerLevelMeterOn && !!root.peakSpeaker
+    }
+
+    PwNodePeakMonitor {
+        id: micPeakMon
+        node: (root.active && root.showLevelMeters && root.micLevelMeterOn && root.peakMic)
+              ? root.peakMic : null
+        enabled: root.active && root.showLevelMeters && root.micLevelMeterOn && !!root.peakMic
+    }
 
     function filterQuery() {
         return (globalFilter && globalFilter.trim()) ? globalFilter.toLowerCase().trim() : ""
@@ -97,10 +167,30 @@ Item {
         return out
     }
 
+    // Hide internal PipeWire peak monitors (PwNodePeakMonitor → "Quickshell Peak Detect")
+    function isInternalStream(s) {
+        if (!s) return true
+        const app = String(s.app || s.binary || "").toLowerCase()
+        const media = String(s.media || "").toLowerCase()
+        const binary = String(s.binary || "").toLowerCase()
+        if (app.indexOf("peak detect") >= 0 || binary.indexOf("peak detect") >= 0)
+            return true
+        if (media === "peak detect" || media.indexOf("peak detect") >= 0)
+            return true
+        if (app.indexOf("quickshell peak") >= 0 || binary.indexOf("quickshell peak") >= 0)
+            return true
+        return false
+    }
+
     function streamList(kind) {
         const tick = dataVersion + "|" + globalFilter
         const streams = audioData.streams || {}
-        const list = kind === "recording" ? (streams.recording || []) : (streams.playback || [])
+        const raw = kind === "recording" ? (streams.recording || []) : (streams.playback || [])
+        const list = []
+        for (let i = 0; i < raw.length; i++) {
+            if (!isInternalStream(raw[i]))
+                list.push(raw[i])
+        }
         const q = filterQuery()
         if (!q) return list
         const out = []
@@ -233,6 +323,8 @@ Item {
     }
 
     function refresh() {
+        // No background sampling when the panel/tab is closed
+        if (!root.active) return
         if (pollProcess.running) return
         loading = true
         lastError = ""
@@ -242,6 +334,7 @@ Item {
     }
 
     function runControl(action, target, name, port) {
+        if (!root.active) return
         if (!name || acting || pollProcess.running) return
         acting = true
         lastAction = ""
@@ -275,6 +368,9 @@ Item {
         if (_loadHandled) return
         _loadHandled = true
         loading = false
+        // Discard late process results after the menu/tab closed — no state thrash
+        if (!root.active)
+            return
         const raw = (pollStdout.text || "").trim()
         if (!raw) {
             lastError = "Empty response from audio poller"
@@ -282,6 +378,8 @@ Item {
         }
         try {
             const parsed = JSON.parse(raw)
+            const prevSink = audioData.default_sink || ""
+            const prevSource = audioData.default_source || ""
             audioData = parsed
             dataVersion++
             const sinkNames = {}
@@ -292,6 +390,14 @@ Item {
             for (let i = 0; i < sources.length; i++) sourceNames[sources[i].name] = true
             if (selectedSinkName && !sinkNames[selectedSinkName]) selectedSinkName = ""
             if (selectedSourceName && !sourceNames[selectedSourceName]) selectedSourceName = ""
+            root.refreshPeakNodes()
+            // Profiles only when defaults change (or first fill) — not every 3s soft-poll
+            const nextSink = parsed.default_sink || ""
+            const nextSource = parsed.default_source || ""
+            if (nextSink !== prevSink || nextSource !== prevSource
+                    || nextSink !== root._profilesSinkKey || nextSource !== root._profilesSourceKey) {
+                root.refreshProfiles()
+            }
         } catch (e) {
             lastError = "Failed to parse audio JSON"
         }
@@ -301,6 +407,8 @@ Item {
         if (_actionHandled) return
         _actionHandled = true
         acting = false
+        if (!root.active)
+            return
         const code = exitCode !== undefined ? exitCode : _lastActionExitCode
         if (code !== 0) {
             const err = (actionStderr.text || actionStdout.text || "").trim()
@@ -308,7 +416,283 @@ Item {
             return
         }
         lastAction = "Updated"
-        Qt.callLater(function() { root.refresh() })
+        Qt.callLater(function() {
+            if (root.active)
+                root.refresh()
+        })
+    }
+
+    // Tear down all background work when the panel/tab closes.
+    // Safe to call repeatedly; prevents peak sampling, poll, and profile process leaks.
+    function stopAllWork() {
+        volumeRefreshTimer.stop()
+        osdTimer.stop()
+        softPollTimer.stop()
+        toolsStatusClear.stop()
+
+        if (pollProcess.running)
+            pollProcess.running = false
+        if (actionProcess.running)
+            actionProcess.running = false
+        if (echoCancelStatusProcess.running)
+            echoCancelStatusProcess.running = false
+        if (speakerProfileProcess.running)
+            speakerProfileProcess.running = false
+        if (micProfileProcess.running)
+            micProfileProcess.running = false
+        // Leave echoCancelToggleProcess / audioRestartProcess / profileSetProcess if mid-flight
+        // so sticky AEC / restart can finish; their handlers no-op UI when !active.
+
+        clearPeakNodes()
+        loading = false
+        acting = false
+        _loadHandled = true
+        speakerProfileMenuOpen = false
+        micProfileMenuOpen = false
+        _profilesSinkKey = ""
+        _profilesSourceKey = ""
+        toolsStatus = ""
+    }
+
+    // Parse first JSON object from process stdout (tolerates trailing noise).
+    function parseJsonPayload(text) {
+        const raw = (text || "").trim()
+        if (!raw.length) return null
+        try {
+            return JSON.parse(raw)
+        } catch (e) {
+            const start = raw.indexOf("{")
+            const end = raw.lastIndexOf("}")
+            if (start >= 0 && end > start) {
+                try {
+                    return JSON.parse(raw.substring(start, end + 1))
+                } catch (e2) {
+                    return null
+                }
+            }
+            return null
+        }
+    }
+
+    function applyEchoCancelStatus(data) {
+        if (!data) return
+        echoCancelEnabled = !!data.enabled
+        echoCancelPreferred = !!data.preferred
+        echoCancelError = data.error || ""
+        if (echoCancelEnabled) {
+            echoCancelHint = "On · cleaned mic/speakers (sticky)"
+        } else if (echoCancelPreferred && !echoCancelEnabled) {
+            echoCancelHint = "Preferred on · applying…"
+        } else if (echoCancelError.length) {
+            echoCancelHint = echoCancelError
+        } else {
+            echoCancelHint = "Off · hardware path"
+        }
+    }
+
+    function refreshEchoCancelStatus() {
+        if (!root.active || !root.showTools) return
+        if (echoCancelStatusProcess.running)
+            echoCancelStatusProcess.running = false
+        echoCancelStatusProcess.command = [root.controlScript, "echo-cancel-status"]
+        echoCancelStatusProcess.running = true
+    }
+
+    function setEchoCancel(wantOn) {
+        if (!root.active || !root.showTools || echoCancelBusy) return
+        echoCancelBusy = true
+        echoCancelError = ""
+        toolsStatus = wantOn ? "Enabling echo cancel…" : "Disabling echo cancel…"
+        if (echoCancelToggleProcess.running)
+            echoCancelToggleProcess.running = false
+        echoCancelToggleProcess.command = [
+            root.controlScript,
+            wantOn ? "echo-cancel-on" : "echo-cancel-off"
+        ]
+        echoCancelToggleProcess.running = true
+    }
+
+    function openPwTop() {
+        Quickshell.execDetached(["kitty", "-e", "pw-top"])
+    }
+
+    function restartSoundSystem() {
+        if (!root.active || audioRestartBusy) return
+        audioRestartBusy = true
+        toolsStatus = "Restarting audio…"
+        if (audioRestartProcess.running)
+            audioRestartProcess.running = false
+        audioRestartProcess.command = [root.controlScript, "restart-audio"]
+        audioRestartProcess.running = true
+    }
+
+    // ---- Card / profile helpers (name-based — no live defaultAudio* binding) ----
+
+    function cardNameFromDeviceName(nm) {
+        if (!nm) return ""
+        const name = String(nm)
+        if (name.indexOf("alsa_output.") === 0 || name.indexOf("alsa_input.") === 0) {
+            const rest = name.replace(/^alsa_(output|input)\./, "")
+            const lastDot = rest.lastIndexOf(".")
+            if (lastDot > 0)
+                return "alsa_card." + rest.substring(0, lastDot)
+        }
+        if (name.indexOf("bluez_output.") === 0) {
+            let bout = name.substring("bluez_output.".length)
+            bout = bout.replace(/\.[0-9]+$/, "")
+            return "bluez_card." + bout.replace(/:/g, "_")
+        }
+        if (name.indexOf("bluez_input.") === 0) {
+            const bin = name.substring("bluez_input.".length)
+            return "bluez_card." + bin.replace(/:/g, "_")
+        }
+        return ""
+    }
+
+    function safeNodeName(node) {
+        if (!node) return ""
+        try { return String(node.name || "") } catch (e) { return "" }
+    }
+
+    function findNodeByName(wantName) {
+        if (!wantName) return null
+        try {
+            const vals = (Pipewire.nodes && Pipewire.nodes.values) ? Pipewire.nodes.values : []
+            for (let i = 0; i < vals.length; i++) {
+                const n = vals[i]
+                if (!n) continue
+                try {
+                    if (!n.audio) continue
+                    if (n.isStream) continue
+                    if (safeNodeName(n) === wantName)
+                        return n
+                } catch (e1) {
+                    continue
+                }
+            }
+        } catch (e) {}
+        return null
+    }
+
+    function clearPeakNodes() {
+        peakSpeaker = null
+        peakMic = null
+    }
+
+    function refreshPeakNodes() {
+        if (!root.active) {
+            clearPeakNodes()
+            return
+        }
+        const sinkName = audioData.default_sink || ""
+        const sourceName = audioData.default_source || ""
+        // Assign from list resolution only — never store Pipewire.defaultAudio*
+        peakSpeaker = sinkName ? findNodeByName(sinkName) : null
+        peakMic = sourceName ? findNodeByName(sourceName) : null
+    }
+
+    function applyProfilePayload(isSink, data) {
+        if (!data || !root.active) return
+        const profiles = data.profiles || []
+        if (isSink) {
+            speakerCard = data.card || ""
+            speakerProfileActive = data.active || ""
+            speakerProfiles = profiles
+            _profilesSinkKey = audioData.default_sink || ""
+        } else {
+            micCard = data.card || ""
+            micProfileActive = data.active || ""
+            micProfiles = profiles
+            _profilesSourceKey = audioData.default_source || ""
+        }
+    }
+
+    function filteredProfiles(isSink) {
+        const list = isSink ? speakerProfiles : micProfiles
+        const activeProf = isSink ? speakerProfileActive : micProfileActive
+        const out = []
+        for (let i = 0; i < list.length; i++) {
+            const p = list[i]
+            if (!p || !p.name) continue
+            if (p.name === "off" && p.name !== activeProf)
+                continue
+            const isActive = (p.name === activeProf)
+            const hasRole = isSink
+                ? (p.sinks === undefined || Number(p.sinks) > 0)
+                : (p.sources === undefined || Number(p.sources) > 0)
+            if (isActive || hasRole)
+                out.push(p)
+        }
+        return out
+    }
+
+    function getProfileLabel(isSink) {
+        const activeProf = isSink ? speakerProfileActive : micProfileActive
+        const list = isSink ? speakerProfiles : micProfiles
+        if (!activeProf || activeProf.length === 0)
+            return "No profile"
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].name === activeProf)
+                return list[i].description || activeProf
+        }
+        return activeProf
+    }
+
+    function startProfileFetch(isSink) {
+        if (!root.active) return
+        const devName = isSink
+            ? (audioData.default_sink || "")
+            : (audioData.default_source || "")
+        const card = cardNameFromDeviceName(devName)
+        if (!card || card.length === 0) {
+            applyProfilePayload(isSink, { card: "", active: "", profiles: [] })
+            return
+        }
+        const proc = isSink ? speakerProfileProcess : micProfileProcess
+        if (proc.running)
+            proc.running = false
+        proc.command = [root.controlScript, "list-card-profiles", card]
+        proc.running = true
+    }
+
+    function refreshProfiles() {
+        if (!root.active) return
+        startProfileFetch(true)
+        startProfileFetch(false)
+    }
+
+    function setCardProfile(card, profileName) {
+        if (!root.active || !card || !profileName) return
+        if (profileSetProcess.running)
+            profileSetProcess.running = false
+        // Force profile re-fetch after set (defaults may be unchanged)
+        _profilesSinkKey = ""
+        _profilesSourceKey = ""
+        profileSetProcess.command = [
+            root.controlScript, "set-card-profile", card, profileName
+        ]
+        profileSetProcess.running = true
+        speakerProfileMenuOpen = false
+        micProfileMenuOpen = false
+    }
+
+    function defaultSinkMuted() {
+        const d = defaultSinkDevice()
+        return !!(d && d.mute)
+    }
+
+    function defaultSourceMuted() {
+        const d = defaultSourceDevice()
+        return !!(d && d.mute)
+    }
+
+    function streamAppLabel(stream) {
+        if (!stream) return "--"
+        const app = stream.app || stream.binary || "Unknown"
+        if (stream.media && stream.media !== app && stream.media !== "Playback"
+                && stream.media !== "Recording" && stream.media !== "-")
+            return app + " · " + stream.media
+        return app
     }
 
     function resetScroll() {
@@ -337,16 +721,27 @@ Item {
     }
 
     onActiveChanged: {
-        if (active && !(audioData.sinks && audioData.sinks.length)) {
+        if (active) {
+            // Restore expand prefs each open (Options → keep expanded)
+            summaryExpanded = summaryExpandedPref
+            // defaultsExpandedPref repurposed: keep Active streams expanded
+            streamsExpanded = defaultsExpandedPref
+            defaultsExpanded = true
+            _profilesSinkKey = ""
+            _profilesSourceKey = ""
             refresh()
-        } else if (!active) {
-            volumeRefreshTimer.stop()
-            osdTimer.stop()
-            if (pollProcess.running)
-                pollProcess.running = false
-            loading = false
+            if (showTools)
+                refreshEchoCancelStatus()
+            softPollTimer.restart()
+            if (typeof audioScroll !== "undefined" && audioScroll)
+                audioScroll.contentY = 0
+        } else {
+            // Full teardown: no peak sampling, no poll, no profile processes
+            stopAllWork()
         }
     }
+
+    Component.onDestruction: stopAllWork()
 
     Timer {
         id: volumeRefreshTimer
@@ -365,6 +760,25 @@ Item {
         repeat: false
         running: false
         onTriggered: root.flushVolumeOsd()
+    }
+
+    // Soft re-poll while panel/tab is open (device hotplug, BT, volume elsewhere).
+    Timer {
+        id: softPollTimer
+        interval: 3000
+        repeat: true
+        running: false
+        onTriggered: {
+            if (!root.active || root.loading || root.acting)
+                return
+            root.refresh()
+        }
+    }
+
+    Timer {
+        id: toolsStatusClear
+        interval: 4000
+        onTriggered: root.toolsStatus = ""
     }
 
     Io.Process {
@@ -389,91 +803,227 @@ Item {
         }
     }
 
-    ColumnLayout {
+    Io.Process {
+        id: echoCancelStatusProcess
+        running: false
+        stdout: Io.StdioCollector { id: echoCancelStatusStdout }
+        onExited: (code) => {
+            const data = root.parseJsonPayload(echoCancelStatusStdout.text)
+            if (data)
+                root.applyEchoCancelStatus(data)
+        }
+    }
+
+    Io.Process {
+        id: echoCancelToggleProcess
+        running: false
+        stdout: Io.StdioCollector { id: echoCancelToggleStdout }
+        onExited: (code) => {
+            root.echoCancelBusy = false
+            const data = root.parseJsonPayload(echoCancelToggleStdout.text)
+            if (data)
+                root.applyEchoCancelStatus(data)
+            if (!root.active)
+                return
+            if (data) {
+                root.toolsStatus = root.echoCancelEnabled ? "Echo cancel on" : "Echo cancel off"
+            } else {
+                root.echoCancelError = code === 0 ? "" : "Echo cancel command failed"
+                root.toolsStatus = root.echoCancelError || "Echo cancel updated"
+                root.refreshEchoCancelStatus()
+            }
+            toolsStatusClear.restart()
+            root.refresh()
+        }
+    }
+
+    Io.Process {
+        id: audioRestartProcess
+        running: false
+        stdout: Io.StdioCollector { id: audioRestartStdout }
+        onExited: (code) => {
+            root.audioRestartBusy = false
+            if (!root.active)
+                return
+            const data = root.parseJsonPayload(audioRestartStdout.text)
+            if (code === 0 && data && data.ok) {
+                const ecNote = data.echo_cancel_enabled ? " · echo cancel re-applied" : ""
+                root.toolsStatus = "Audio restarted" + ecNote
+                root.refresh()
+                root.refreshEchoCancelStatus()
+            } else {
+                root.toolsStatus = (data && data.error) ? data.error : "Audio restart failed"
+            }
+            toolsStatusClear.restart()
+        }
+    }
+
+    Io.Process {
+        id: speakerProfileProcess
+        running: false
+        stdout: Io.StdioCollector { id: speakerProfileStdout }
+        onExited: (code) => {
+            if (!root.active) return
+            const data = root.parseJsonPayload(speakerProfileStdout.text)
+            if (data)
+                root.applyProfilePayload(true, data)
+        }
+    }
+
+    Io.Process {
+        id: micProfileProcess
+        running: false
+        stdout: Io.StdioCollector { id: micProfileStdout }
+        onExited: (code) => {
+            if (!root.active) return
+            const data = root.parseJsonPayload(micProfileStdout.text)
+            if (data)
+                root.applyProfilePayload(false, data)
+        }
+    }
+
+    Io.Process {
+        id: profileSetProcess
+        running: false
+        onExited: (code) => {
+            if (!root.active) return
+            if (code === 0) {
+                root.refreshProfiles()
+                root.refresh()
+            }
+        }
+    }
+
+    Flickable {
+        id: audioScroll
         anchors.fill: parent
-        spacing: root.sectionSpacing
+        contentWidth: width
+        contentHeight: mainCol.implicitHeight + 8
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height + 4
+        ScrollBar.vertical: ScrollBar {
+            policy: audioScroll.contentHeight > audioScroll.height + 4 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+            width: 8
+            contentItem: Rectangle {
+                implicitWidth: 6
+                radius: 3
+                color: root.accentColor
+                opacity: 0.55
+            }
+        }
 
-        Rectangle {
+        ColumnLayout {
+            id: mainCol
+            width: audioScroll.width - (audioScroll.contentHeight > audioScroll.height + 4 ? 10 : 0)
+            spacing: root.sectionSpacing
+
+        // Tools row (Refresh / pw-top / Restart) — control bar + inspector
+        RowLayout {
+            visible: root.showTools
             Layout.fillWidth: true
-            Layout.preferredHeight: root.summaryHeight
-            Layout.minimumHeight: 64
-            radius: root.cardRadius
-            color: root.surfaceColor
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.08)
+            spacing: 6
 
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: root.cardMargin
-                spacing: 4
+            Text {
+                text: root.toolsStatus.length ? root.toolsStatus
+                      : (root.loading ? "loading…" : (root.lastAction || ""))
+                color: root.toolsStatus.length ? root.okColor : root.overlayColor
+                font.pixelSize: 10
+                font.family: "monospace"
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
 
+            Rectangle {
+                Layout.preferredHeight: 22
+                Layout.preferredWidth: Math.max(56, refreshLbl.implicitWidth + 14)
+                radius: 4
+                color: refreshMa.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.04)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.10)
+                opacity: root.loading ? 0.5 : 1
                 Text {
-                    text: "AUDIO SUMMARY"
-                    color: root.accentColor
-                    font.pixelSize: 12
-                    font.bold: true
+                    id: refreshLbl
+                    anchors.centerIn: parent
+                    text: "Refresh"
+                    color: root.subtextColor
+                    font.pixelSize: 10
                     font.family: "monospace"
                 }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    ColumnLayout {
-                        spacing: 1
-                        Text {
-                            text: "Output: " + root.deviceLabel(root.defaultSinkDevice())
-                            color: root.textColor
-                            font.pixelSize: 11
-                            font.family: "monospace"
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                        Text {
-                            text: "Input: " + root.deviceLabel(root.defaultSourceDevice())
-                            color: root.textColor
-                            font.pixelSize: 11
-                            font.family: "monospace"
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
+                MouseArea {
+                    id: refreshMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: !root.loading
+                    onClicked: {
+                        root.refresh()
+                        root.refreshEchoCancelStatus()
                     }
+                }
+            }
 
-                    Item { Layout.fillWidth: true }
+            Rectangle {
+                Layout.preferredHeight: 22
+                Layout.preferredWidth: Math.max(52, pwTopLbl.implicitWidth + 14)
+                radius: 4
+                color: pwTopMa.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.04)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.10)
+                Text {
+                    id: pwTopLbl
+                    anchors.centerIn: parent
+                    text: "pw-top"
+                    color: root.accentColor
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                }
+                MouseArea {
+                    id: pwTopMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.openPwTop()
+                }
+            }
 
-                    ColumnLayout {
-                        spacing: 1
-                        Text {
-                            text: (audioData.sinks ? audioData.sinks.length : 0) + " sinks"
-                            color: root.subtextColor
-                            font.pixelSize: 11
-                            font.family: "monospace"
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        Text {
-                            text: (audioData.sources ? audioData.sources.length : 0) + " sources"
-                            color: root.subtextColor
-                            font.pixelSize: 11
-                            font.family: "monospace"
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        Text {
-                            text: root.loading ? "loading..." : (root.lastAction || "pactl")
-                            color: root.overlayColor
-                            font.pixelSize: 10
-                            font.family: "monospace"
-                            horizontalAlignment: Text.AlignRight
-                        }
-                    }
+            Rectangle {
+                Layout.preferredHeight: 22
+                Layout.preferredWidth: Math.max(72, restartLbl.implicitWidth + 14)
+                radius: 4
+                color: restartMa.containsMouse ? Qt.rgba(0.91, 0.36, 0.43, 0.18) : Qt.rgba(1, 1, 1, 0.04)
+                border.width: 1
+                border.color: root.audioRestartBusy
+                    ? Qt.rgba(0.91, 0.36, 0.43, 0.45)
+                    : Qt.rgba(1, 1, 1, 0.10)
+                opacity: root.audioRestartBusy ? 0.55 : 1
+                Text {
+                    id: restartLbl
+                    anchors.centerIn: parent
+                    text: root.audioRestartBusy ? "…" : "Restart audio"
+                    color: root.errorColor
+                    font.pixelSize: 10
+                    font.family: "monospace"
+                }
+                MouseArea {
+                    id: restartMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: !root.audioRestartBusy
+                    onClicked: root.restartSoundSystem()
                 }
             }
         }
 
+
+        // Combined overview card: Summary → Active streams → Levels (no dead space)
         Rectangle {
+            visible: true
             Layout.fillWidth: true
-            Layout.preferredHeight: root.streamsExpanded
-                ? (root.streamsHeaderHeight + root.streamsBodyHeight())
-                : root.streamsHeaderHeight
+            Layout.preferredHeight: overviewCol.implicitHeight + root.cardMargin * 2
+            Layout.minimumHeight: 28 + root.cardMargin * 2
             radius: root.cardRadius
             color: root.surfaceColor
             border.width: 1
@@ -481,242 +1031,393 @@ Item {
             clip: true
 
             ColumnLayout {
-                anchors.fill: parent
+                id: overviewCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
                 anchors.margins: root.cardMargin
-                spacing: 4
+                spacing: 8
 
-                Item {
+                // --- Audio Summary ---
+                ColumnLayout {
+                    visible: root.showSummary
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.streamsHeaderHeight - root.cardMargin * 2
+                    spacing: 4
 
-                    RowLayout {
-                        anchors.fill: parent
-                        spacing: 8
-
-                        Text {
-                            text: root.streamsExpanded ? "▼" : "▶"
-                            color: root.overlayColor
-                            font.pixelSize: 9
-                            font.family: "monospace"
-                        }
-
-                        Text {
-                            text: "Active Apps"
-                            color: root.accentColor
-                            font.pixelSize: 11
-                            font.bold: true
-                            font.family: "monospace"
-                        }
-
-                        Rectangle {
-                            Layout.preferredHeight: 16
-                            Layout.preferredWidth: Math.max(18, activeCountLabel.implicitWidth + 10)
-                            radius: 8
-                            color: root.activeStreamCount() > 0
-                                ? Qt.rgba(0.55, 0.70, 0.96, 0.22)
-                                : Qt.rgba(1, 1, 1, 0.05)
-                            border.width: 1
-                            border.color: Qt.rgba(1, 1, 1, 0.08)
-
+                    Item {
+                        id: summaryHead
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
+                        Layout.minimumHeight: 28
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 8
                             Text {
-                                id: activeCountLabel
-                                anchors.centerIn: parent
-                                text: String(root.activeStreamCount())
-                                color: root.activeStreamCount() > 0 ? root.textColor : root.overlayColor
-                                font.pixelSize: 9
+                                text: root.summaryExpanded ? "▾" : "▸"
+                                color: root.overlayColor
+                                font.pixelSize: 11
+                                Layout.preferredWidth: 14
+                            }
+                            Text {
+                                text: "AUDIO SUMMARY"
+                                color: root.accentColor
+                                font.pixelSize: 12
                                 font.bold: true
                                 font.family: "monospace"
                             }
+                            Item { Layout.fillWidth: true }
                         }
-
-                        Text {
-                            text: streamList("playback").length + " playing · " + streamList("recording").length + " recording"
-                            color: root.subtextColor
-                            font.pixelSize: 9
-                            font.family: "monospace"
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.summaryExpanded = !root.summaryExpanded
                         }
                     }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.streamsExpanded = !root.streamsExpanded
+                    RowLayout {
+                        visible: root.summaryExpanded
+                        Layout.fillWidth: true
+                        spacing: 10
+
+                        ColumnLayout {
+                            spacing: 1
+                            Layout.fillWidth: true
+                            Text {
+                                text: "Output: " + root.deviceLabel(root.defaultSinkDevice())
+                                color: root.textColor
+                                font.pixelSize: 11
+                                font.family: "monospace"
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Text {
+                                text: "Input: " + root.deviceLabel(root.defaultSourceDevice())
+                                color: root.textColor
+                                font.pixelSize: 11
+                                font.family: "monospace"
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        ColumnLayout {
+                            spacing: 1
+                            Text {
+                                text: (audioData.sinks ? audioData.sinks.length : 0) + " sinks"
+                                color: root.subtextColor
+                                font.pixelSize: 11
+                                font.family: "monospace"
+                                horizontalAlignment: Text.AlignRight
+                            }
+                            Text {
+                                text: (audioData.sources ? audioData.sources.length : 0) + " sources"
+                                color: root.subtextColor
+                                font.pixelSize: 11
+                                font.family: "monospace"
+                                horizontalAlignment: Text.AlignRight
+                            }
+                            Text {
+                                text: root.loading ? "loading..." : (root.lastAction || "pactl")
+                                color: root.overlayColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                horizontalAlignment: Text.AlignRight
+                            }
+                        }
                     }
                 }
 
-                Flickable {
-                    visible: root.streamsExpanded
+                // Subtle divider when both summary and streams show
+                Rectangle {
+                    visible: root.showSummary
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.streamsBodyHeight()
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    contentWidth: width
-                    contentHeight: streamsContent.implicitHeight
+                    Layout.preferredHeight: 1
+                    color: Qt.rgba(1, 1, 1, 0.08)
+                }
 
-                    property int _tick: root.dataVersion + (root.streamsExpanded ? 1 : 0)
+                // --- Active streams ---
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
 
-                    Column {
-                        id: streamsContent
-                        width: parent.width
-                        spacing: 4
+                    Item {
+                        id: streamHeadRow
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
+                        Layout.minimumHeight: 28
 
-                        Text {
-                            width: parent.width
-                            visible: root.activeStreamCount() === 0
-                            text: "No active playback or recording streams"
-                            color: root.overlayColor
-                            font.pixelSize: 9
-                            font.family: "monospace"
-                        }
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 8
 
-                        Text {
-                            width: parent.width
-                            visible: streamList("playback").length > 0
-                            text: "Playing"
-                            color: theme.audioSpeakerIcon
-                            font.pixelSize: 9
-                            font.bold: true
-                            font.family: "monospace"
-                        }
+                            Text {
+                                text: root.streamsExpanded ? "▾" : "▸"
+                                color: root.overlayColor
+                                font.pixelSize: 12
+                                Layout.preferredWidth: 14
+                            }
 
-                        Repeater {
-                            model: streamList("playback")
-                            delegate: Rectangle {
-                                readonly property var stream: modelData
-                                width: parent.width
-                                height: root.streamsRowHeight
-                                radius: 3
-                                color: Qt.rgba(0, 0, 0, 0.14)
+                            Text {
+                                text: "Active streams"
+                                color: root.accentColor
+                                font.pixelSize: 12
+                                font.bold: true
+                                font.family: "monospace"
+                            }
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 6
-                                    anchors.rightMargin: 6
-                                    spacing: 6
-
-                                    Text {
-                                        text: theme.iconSpeaker
-                                        color: stream.mute ? theme.audioSpeakerIconMuted : theme.audioSpeakerIcon
-                                        font.pixelSize: 11
-                                        font.family: theme.fontFamily
-                                    }
-
-                                    Text {
-                                        text: root.streamLabel(stream)
-                                        color: root.textColor
-                                        font.pixelSize: 9
-                                        font.family: "monospace"
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-
-                                    Text {
-                                        text: stream.device_name || "--"
-                                        color: root.subtextColor
-                                        font.pixelSize: 8
-                                        font.family: "monospace"
-                                        elide: Text.ElideRight
-                                        Layout.maximumWidth: 120
-                                    }
-
-                                    Text {
-                                        text: root.streamStatus(stream)
-                                        color: stream.mute ? root.warnColor : (stream.corked ? root.overlayColor : root.okColor)
-                                        font.pixelSize: 8
-                                        font.family: "monospace"
-                                    }
-
-                                    Text {
-                                        text: stream.mute ? "—" : (Number(stream.volume_pct || 0).toFixed(0) + "%")
-                                        color: root.subtextColor
-                                        font.pixelSize: 8
-                                        font.family: "monospace"
-                                    }
-                                }
+                            Text {
+                                text: streamList("playback").length + " playing · "
+                                      + streamList("recording").length + " recording"
+                                color: root.subtextColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
                             }
                         }
 
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.streamsExpanded = !root.streamsExpanded
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.streamsExpanded
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(140, Math.max(40, streamPillCol.implicitHeight + 12))
+                        radius: 4
+                        color: Qt.rgba(0, 0, 0, 0.18)
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.06)
+                        clip: true
+
+                        Flickable {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            contentHeight: streamPillCol.implicitHeight
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            interactive: contentHeight > height
+
+                            ColumnLayout {
+                                id: streamPillCol
+                                width: parent.width
+                                spacing: 3
+
+                                Repeater {
+                                    model: streamList("playback")
+                                    delegate: RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        required property var modelData
+
+                                        Text {
+                                            text: modelData.corked ? "‖" : "▶"
+                                            color: modelData.mute ? root.overlayColor : "#10B981"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            Layout.preferredWidth: 14
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.streamAppLabel(modelData)
+                                            color: modelData.mute ? root.overlayColor : root.textColor
+                                            font.pixelSize: 11
+                                            font.family: theme.fontFamily
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            text: modelData.mute ? "muted"
+                                                  : ((modelData.volume_pct !== undefined ? modelData.volume_pct : 0) + "%")
+                                            color: root.subtextColor
+                                            font.pixelSize: 10
+                                            Layout.preferredWidth: 42
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+                                    }
+                                }
+
+                                Repeater {
+                                    model: streamList("recording")
+                                    delegate: RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        required property var modelData
+
+                                        Text {
+                                            text: "●"
+                                            color: modelData.mute ? root.overlayColor : "#00c4f5"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                            Layout.preferredWidth: 14
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "REC · " + root.streamAppLabel(modelData)
+                                            color: modelData.mute ? root.overlayColor : root.textColor
+                                            font.pixelSize: 11
+                                            font.family: theme.fontFamily
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            text: modelData.mute ? "muted"
+                                                  : ((modelData.volume_pct !== undefined ? modelData.volume_pct : 0) + "%")
+                                            color: root.subtextColor
+                                            font.pixelSize: 10
+                                            Layout.preferredWidth: 42
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    visible: root.activeStreamCount() === 0
+                                    text: "No active app streams (playback or recording)"
+                                    color: root.overlayColor
+                                    font.pixelSize: 10
+                                    font.italic: true
+                                    font.family: theme.fontFamily
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Divider before levels
+                Rectangle {
+                    visible: root.showLevelMeters
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    color: Qt.rgba(1, 1, 1, 0.08)
+                }
+
+                // --- Levels (attached bottom of overview pill) ---
+                ColumnLayout {
+                    id: levelsCol
+                    visible: root.showLevelMeters
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Text {
+                        text: "LEVELS"
+                        color: root.accentColor
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.family: "monospace"
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
                         Text {
-                            width: parent.width
-                            visible: streamList("recording").length > 0
+                            text: "Playback"
+                            color: theme.audioSpeakerIcon
+                            font.pixelSize: 10
+                            font.family: "monospace"
+                            Layout.preferredWidth: 64
+                        }
+
+                        Rectangle {
+                            width: 36
+                            height: 18
+                            radius: 3
+                            color: spkLevelMa.containsMouse
+                                ? (root.speakerLevelMeterOn ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.55, 0.70, 0.96, 0.22))
+                                : Qt.rgba(1, 1, 1, 0.04)
+                            border.width: 1
+                            border.color: Qt.rgba(1, 1, 1, 0.10)
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.speakerLevelMeterOn ? "Off" : "On"
+                                color: root.subtextColor
+                                font.pixelSize: 9
+                                font.family: "monospace"
+                            }
+                            MouseArea {
+                                id: spkLevelMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.speakerLevelMeterOn = !root.speakerLevelMeterOn
+                            }
+                        }
+
+                        AudioLevelMeter {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 10
+                            barHeight: 8
+                            muted: root.defaultSinkMuted() || !root.speakerLevelMeterOn
+                            level: (root.active && root.showLevelMeters && root.speakerLevelMeterOn
+                                    && !root.defaultSinkMuted())
+                                   ? speakerPeakMon.peak : 0
+                            opacity: root.speakerLevelMeterOn ? 1.0 : 0.35
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Text {
                             text: "Recording"
                             color: theme.audioMicIcon
-                            font.pixelSize: 9
-                            font.bold: true
+                            font.pixelSize: 10
                             font.family: "monospace"
+                            Layout.preferredWidth: 64
                         }
 
-                        Repeater {
-                            model: streamList("recording")
-                            delegate: Rectangle {
-                                readonly property var stream: modelData
-                                width: parent.width
-                                height: root.streamsRowHeight
-                                radius: 3
-                                color: Qt.rgba(0, 0, 0, 0.14)
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 6
-                                    anchors.rightMargin: 6
-                                    spacing: 6
-
-                                    Text {
-                                        text: theme.iconMic
-                                        color: stream.mute ? theme.audioMicIconMuted : theme.audioMicIcon
-                                        font.pixelSize: 11
-                                        font.family: theme.fontFamily
-                                    }
-
-                                    Text {
-                                        text: root.streamLabel(stream)
-                                        color: root.textColor
-                                        font.pixelSize: 9
-                                        font.family: "monospace"
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-
-                                    Text {
-                                        text: stream.device_name || "--"
-                                        color: root.subtextColor
-                                        font.pixelSize: 8
-                                        font.family: "monospace"
-                                        elide: Text.ElideRight
-                                        Layout.maximumWidth: 120
-                                    }
-
-                                    Text {
-                                        text: root.streamStatus(stream)
-                                        color: stream.mute ? root.warnColor : (stream.corked ? root.overlayColor : root.okColor)
-                                        font.pixelSize: 8
-                                        font.family: "monospace"
-                                    }
-
-                                    Text {
-                                        text: stream.mute ? "—" : (Number(stream.volume_pct || 0).toFixed(0) + "%")
-                                        color: root.subtextColor
-                                        font.pixelSize: 8
-                                        font.family: "monospace"
-                                    }
-                                }
+                        Rectangle {
+                            width: 36
+                            height: 18
+                            radius: 3
+                            color: micLevelMa.containsMouse
+                                ? (root.micLevelMeterOn ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0.55, 0.70, 0.96, 0.22))
+                                : Qt.rgba(1, 1, 1, 0.04)
+                            border.width: 1
+                            border.color: Qt.rgba(1, 1, 1, 0.10)
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.micLevelMeterOn ? "Off" : "On"
+                                color: root.subtextColor
+                                font.pixelSize: 9
+                                font.family: "monospace"
                             }
+                            MouseArea {
+                                id: micLevelMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.micLevelMeterOn = !root.micLevelMeterOn
+                            }
+                        }
+
+                        AudioLevelMeter {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 10
+                            barHeight: 8
+                            muted: root.defaultSourceMuted() || !root.micLevelMeterOn
+                            level: (root.active && root.showLevelMeters && root.micLevelMeterOn
+                                    && !root.defaultSourceMuted())
+                                   ? micPeakMon.peak : 0
+                            opacity: root.micLevelMeterOn ? 1.0 : 0.35
                         }
                     }
                 }
             }
         }
 
+        // Devices — size to content; outer view Flickable scrolls
         RowLayout {
             Layout.fillWidth: true
-            Layout.fillHeight: true
             spacing: root.sectionSpacing
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.preferredHeight: sinksOuterCol.implicitHeight + root.cardMargin * 2
+                Layout.minimumHeight: 120
                 radius: root.cardRadius
                 color: root.surfaceColor
                 border.width: 1
@@ -724,7 +1425,10 @@ Item {
                 clip: true
 
                 ColumnLayout {
-                    anchors.fill: parent
+                    id: sinksOuterCol
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
                     anchors.margins: root.cardMargin
                     spacing: 4
 
@@ -756,27 +1460,16 @@ Item {
                     Flickable {
                         id: sinksFlickable
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        Layout.preferredHeight: Math.max(80, sinksList.implicitHeight)
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         contentWidth: width
                         contentHeight: sinksList.implicitHeight
+                        interactive: false
                         focus: true
 
                         property int _tick: root.dataVersion
 
-                        WheelHandler {
-                            onWheel: function(event) {
-                                const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
-                                if (delta === 0) return
-                                const maxY = Math.max(0, sinksFlickable.contentHeight - sinksFlickable.height)
-                                if (maxY > 0) {
-                                    const ticks = delta / 120
-                                    sinksFlickable.contentY = Math.max(0, Math.min(maxY, sinksFlickable.contentY - ticks * 28))
-                                }
-                                event.accepted = true
-                            }
-                        }
 
                         ScrollBar.vertical: ScrollBar {
                             policy: sinksFlickable.contentHeight > sinksFlickable.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
@@ -1036,12 +1729,130 @@ Item {
                             }
                         }
                     }
+
+                    // Playback profile (default sink card)
+                    ColumnLayout {
+                        visible: root.showDefaults
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        spacing: 4
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            visible: root.speakerCard.length > 0 && root.speakerProfiles.length > 0
+
+                            Text {
+                                text: "Profile"
+                                color: root.subtextColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                Layout.preferredWidth: 48
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 24
+                                radius: 4
+                                color: spkProfMa.containsMouse
+                                    ? Qt.rgba(1, 1, 1, 0.10)
+                                    : Qt.rgba(0, 0, 0, 0.18)
+                                border.width: 1
+                                border.color: root.speakerProfileMenuOpen
+                                    ? root.accentColor
+                                    : Qt.rgba(1, 1, 1, 0.10)
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 6
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.getProfileLabel(true)
+                                        color: root.textColor
+                                        font.pixelSize: 10
+                                        font.family: "monospace"
+                                        elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        text: root.speakerProfileMenuOpen ? "▴" : "▾"
+                                        color: root.overlayColor
+                                        font.pixelSize: 10
+                                    }
+                                }
+                                MouseArea {
+                                    id: spkProfMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.micProfileMenuOpen = false
+                                        root.speakerProfileMenuOpen = !root.speakerProfileMenuOpen
+                                    }
+                                }
+                            }
+                        }
+
+                        Column {
+                            Layout.fillWidth: true
+                            visible: root.speakerProfileMenuOpen
+                            spacing: 2
+
+                            Repeater {
+                                model: root.filteredProfiles(true)
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: parent.width
+                                    height: 22
+                                    radius: 3
+                                    color: modelData.name === root.speakerProfileActive
+                                        ? Qt.rgba(0.55, 0.70, 0.96, 0.18)
+                                        : (spkProfItemMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.12))
+                                    border.width: 1
+                                    border.color: modelData.name === root.speakerProfileActive
+                                        ? Qt.rgba(0.55, 0.70, 0.96, 0.40)
+                                        : "transparent"
+
+                                    Text {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        text: modelData.description || modelData.name
+                                        color: root.textColor
+                                        font.pixelSize: 10
+                                        font.family: "monospace"
+                                        elide: Text.ElideRight
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    MouseArea {
+                                        id: spkProfItemMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.setCardProfile(root.speakerCard, modelData.name)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: !(root.speakerCard.length > 0 && root.speakerProfiles.length > 0)
+                            text: "No card profiles for default output"
+                            color: root.overlayColor
+                            font.pixelSize: 9
+                            font.family: "monospace"
+                            font.italic: true
+                        }
+                    }
+
                 }
             }
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.preferredHeight: sourcesOuterCol.implicitHeight + root.cardMargin * 2
+                Layout.minimumHeight: 120
                 radius: root.cardRadius
                 color: root.surfaceColor
                 border.width: 1
@@ -1049,7 +1860,10 @@ Item {
                 clip: true
 
                 ColumnLayout {
-                    anchors.fill: parent
+                    id: sourcesOuterCol
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
                     anchors.margins: root.cardMargin
                     spacing: 4
 
@@ -1081,26 +1895,15 @@ Item {
                     Flickable {
                         id: sourcesFlickable
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        Layout.preferredHeight: Math.max(80, sourcesList.implicitHeight)
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         contentWidth: width
                         contentHeight: sourcesList.implicitHeight
+                        interactive: false
 
                         property int _tick: root.dataVersion
 
-                        WheelHandler {
-                            onWheel: function(event) {
-                                const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x
-                                if (delta === 0) return
-                                const maxY = Math.max(0, sourcesFlickable.contentHeight - sourcesFlickable.height)
-                                if (maxY > 0) {
-                                    const ticks = delta / 120
-                                    sourcesFlickable.contentY = Math.max(0, Math.min(maxY, sourcesFlickable.contentY - ticks * 28))
-                                }
-                                event.accepted = true
-                            }
-                        }
 
                         ScrollBar.vertical: ScrollBar {
                             policy: sourcesFlickable.contentHeight > sourcesFlickable.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
@@ -1350,8 +2153,221 @@ Item {
                             }
                         }
                     }
+
+                    // Recording profile (default source card)
+                    ColumnLayout {
+                        visible: root.showDefaults
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        spacing: 4
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            visible: root.micCard.length > 0 && root.micProfiles.length > 0
+
+                            Text {
+                                text: "Profile"
+                                color: root.subtextColor
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                Layout.preferredWidth: 48
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 24
+                                radius: 4
+                                color: micProfMa.containsMouse
+                                    ? Qt.rgba(1, 1, 1, 0.10)
+                                    : Qt.rgba(0, 0, 0, 0.18)
+                                border.width: 1
+                                border.color: root.micProfileMenuOpen
+                                    ? root.accentColor
+                                    : Qt.rgba(1, 1, 1, 0.10)
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 6
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.getProfileLabel(false)
+                                        color: root.textColor
+                                        font.pixelSize: 10
+                                        font.family: "monospace"
+                                        elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        text: root.micProfileMenuOpen ? "▴" : "▾"
+                                        color: root.overlayColor
+                                        font.pixelSize: 10
+                                    }
+                                }
+                                MouseArea {
+                                    id: micProfMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root.speakerProfileMenuOpen = false
+                                        root.micProfileMenuOpen = !root.micProfileMenuOpen
+                                    }
+                                }
+                            }
+                        }
+
+                        Column {
+                            Layout.fillWidth: true
+                            visible: root.micProfileMenuOpen
+                            spacing: 2
+
+                            Repeater {
+                                model: root.filteredProfiles(false)
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: parent.width
+                                    height: 22
+                                    radius: 3
+                                    color: modelData.name === root.micProfileActive
+                                        ? Qt.rgba(0.55, 0.70, 0.96, 0.18)
+                                        : (micProfItemMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.12))
+                                    border.width: 1
+                                    border.color: modelData.name === root.micProfileActive
+                                        ? Qt.rgba(0.55, 0.70, 0.96, 0.40)
+                                        : "transparent"
+
+                                    Text {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        text: modelData.description || modelData.name
+                                        color: root.textColor
+                                        font.pixelSize: 10
+                                        font.family: "monospace"
+                                        elide: Text.ElideRight
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    MouseArea {
+                                        id: micProfItemMa
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.setCardProfile(root.micCard, modelData.name)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: !(root.micCard.length > 0 && root.micProfiles.length > 0)
+                            text: "No card profiles for default input"
+                            color: root.overlayColor
+                            font.pixelSize: 9
+                            font.family: "monospace"
+                            font.italic: true
+                        }
+                    }
+
                 }
             }
+        }
+
+
+        // Echo cancel — bottom of panel
+        Rectangle {
+            visible: root.showTools && root.showEchoCancel
+            Layout.fillWidth: true
+            Layout.preferredHeight: aecCol.implicitHeight + root.cardMargin * 2
+            radius: root.cardRadius
+            color: root.surfaceColor
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+            clip: true
+
+            ColumnLayout {
+                id: aecCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: root.cardMargin
+                spacing: 4
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Text {
+                        text: "Echo cancel"
+                        color: root.textColor
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.family: "monospace"
+                    }
+
+                    Rectangle {
+                        Layout.preferredHeight: 18
+                        Layout.preferredWidth: Math.max(36, aecStateLbl.implicitWidth + 12)
+                        radius: 4
+                        color: root.echoCancelEnabled
+                            ? Qt.rgba(0.13, 0.77, 0.37, 0.28)
+                            : Qt.rgba(1, 1, 1, 0.05)
+                        border.width: 1
+                        border.color: root.echoCancelEnabled
+                            ? Qt.rgba(0.13, 0.77, 0.37, 0.55)
+                            : Qt.rgba(1, 1, 1, 0.10)
+                        Text {
+                            id: aecStateLbl
+                            anchors.centerIn: parent
+                            text: root.echoCancelBusy ? "…" : (root.echoCancelEnabled ? "On" : "Off")
+                            color: root.echoCancelEnabled ? root.okColor : root.overlayColor
+                            font.pixelSize: 9
+                            font.bold: true
+                            font.family: "monospace"
+                        }
+                    }
+
+                    Text {
+                        text: root.echoCancelHint
+                        color: root.overlayColor
+                        font.pixelSize: 9
+                        font.family: "monospace"
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+
+                    Rectangle {
+                        Layout.preferredHeight: 22
+                        Layout.preferredWidth: Math.max(52, aecToggleLbl.implicitWidth + 14)
+                        radius: 4
+                        color: aecToggleMa.containsMouse
+                            ? (root.echoCancelEnabled ? Qt.rgba(0.91, 0.36, 0.43, 0.18) : Qt.rgba(0.13, 0.77, 0.37, 0.18))
+                            : Qt.rgba(1, 1, 1, 0.04)
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.10)
+                        opacity: root.echoCancelBusy ? 0.5 : 1
+                        Text {
+                            id: aecToggleLbl
+                            anchors.centerIn: parent
+                            text: root.echoCancelEnabled ? "Turn off" : "Turn on"
+                            color: root.echoCancelEnabled ? root.warnColor : root.okColor
+                            font.pixelSize: 9
+                            font.family: "monospace"
+                        }
+                        MouseArea {
+                            id: aecToggleMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: !root.echoCancelBusy
+                            onClicked: root.setEchoCancel(!root.echoCancelEnabled)
+                        }
+                    }
+                }
+            }
+        }
+
         }
     }
 }

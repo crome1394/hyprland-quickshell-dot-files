@@ -28,6 +28,7 @@ Pill volume bars are display + wheel only (no click-drag). Volume % and mute sta
 - **Echo cancel** — **Collapsed by default**; header shows On/Off status. Expand for the toggle + sticky-preference hint.
 - **BT battery** — polled via `audio-control.sh bt-battery` (BlueZ Battery1), shown on the pill and in the popup when available. Name/MAC based — no live BlueZ property bindings in the UI path.
 - Popup size: `popupAudioWidth` / `popupAudioHeight` in `Config.qml`.
+Popup content scrolls in a `Flickable` when tall (expanded L/R or Echo cancel) so chrome borders stay intact.
 
 ## Stability (Bluetooth disconnect)
 
@@ -97,13 +98,36 @@ systemctl --user disable --now quickshell-echo-cancel.service   # stop autostart
 
 No permanent PipeWire `conf.d` is written; everything is reversible.
 
+## Control-bar Audio panel
+
+The bar **Config** strip has an **Audio** toolbar button that opens a sound-manager panel (same pattern as Services). Full layout and Options table: [control-bar.md](control-bar.md#audio-panel).
+
+| Block | Contents |
+|-------|----------|
+| **Overview** (single pill) | Summary → Active streams → Levels |
+| **Devices** | Output / Input columns: volume, mute, set default, ports, **Profile** under each |
+| **Echo cancel** | Sticky On/Off at bottom (Options only shows/hides the section) |
+
+- Shared view: `components/AudioMonitorView.qml` (also Inspector **Audio** tab)
+- Tools: Refresh, `pw-top`, Restart audio
+- Active streams list hides internal peak-detect monitors (`Quickshell Peak Detect`)
+- **No sampling when closed**: peak monitors, soft-poll, and profile processes tear down with `active: false`
+- Pill stays the glance + wheel volume control; this panel is multi-device management
+
+### Options (control strip → Options → Audio)
+
+Persisted in `state/bar-layout.json`: show AEC section, show Summary / device profiles / Level meters, keep Summary / Active streams expanded on open. AEC **on/off** is only in the Audio panel (and pill), not Options.
+
 ## Related files
 
 | Path | Role |
 |------|------|
 | `widgets/AudioPill.qml` | Bar pill + popup + IPC |
+| `widgets/BarControlBar.qml` | Control-bar **Audio** panel host |
+| `components/AudioMonitorView.qml` | Multi-device manager (Inspector + control bar) |
 | `components/AudioLevelMeter.qml` | VU / peak meter visuals |
 | `components/VolumeBar.qml` / `MiniVolumeBar.qml` | Volume sliders |
-| `scripts/audio-control.sh` | Profiles, channel volume, echo cancel, BT battery |
+| `scripts/audio-control.sh` | Profiles, channel volume, echo cancel, BT battery, restart |
+| `scripts/audio-poller.sh` | pactl JSON for sinks/sources/streams |
 | `scripts/audio-osd.sh` | Volume OSD helper for wheel steps |
 | `Config.qml` | `popupAudioWidth`, `popupAudioHeight`, volume color tiers |

@@ -14,7 +14,7 @@ Personal [Hyprland](https://hyprland.org) status bar and floating **Config Inspe
 ## Features
 
 - Glassmorphic bar (top or bottom) with left / center / right zones
-- **Control strip** — right-click empty chrome or **Config menu** gear: layout, Display (resolution / refresh / bit depth), wallpaper, Options, Quick Launch, XDG Autostart, systemd Services, Keybinds editor, clock formats
+- **Control strip** — right-click empty chrome or **Config menu** gear: layout, Display (resolution / refresh / bit depth), wallpaper, Options, Quick Launch, XDG Autostart, systemd Services, **Audio** (devices/ports/AEC), Keybinds editor, clock formats
 - Network, Bluetooth, Audio (optional combined pill), workspaces (incl. magic space), sys stats, tray, notifications, power
 - FreshRSS reader pill (external secrets file)
 - Floating Hyprland Config Inspector (metrics, logs, services, split Lua configs)
@@ -62,9 +62,12 @@ Reorder / show-hide at runtime: **Config menu → Widgets**. Defaults and catalo
 | **Display** | Res / refresh / 8·10-bit, adapter + NVIDIA stats, Apply (`hyprctl` modes) |
 | **Wallpaper** | hyprpaper apply / folder |
 | **Widgets** | A–Z list: ✓ · name · L/C/R · ↑↓ · width % |
-| **Options** | Behavior prefs (scale, workspaces, applets, stats gauges, FreshRSS server) |
+| **Options** | Behavior prefs (scale, workspaces, applets, stats gauges, Audio panel sections, FreshRSS server) |
 | **Launch** | Quick Launch pins |
 | **Autostart** | XDG `~/.config/autostart` |
+| **Services** | systemd units Start / Stop / Restart |
+| **Audio** | Devices, ports, profiles, streams, levels, echo cancel |
+| **Keybinds** | Edit key chord / category / description |
 | **Clock** | Date/time format |
 
 Details: [docs/control-bar.md](docs/control-bar.md)
@@ -113,7 +116,7 @@ Token reference: [docs/config.md](docs/config.md)
 | [IPC](docs/ipc.md) | Visibility + action commands |
 | [Network](docs/network.md) | Network pill |
 | [Bluetooth](docs/bluetooth.md) | Bluetooth pill |
-| [Audio](docs/audio.md) | Audio pill, echo cancel |
+| [Audio](docs/audio.md) | Audio pill, control-bar Audio panel, echo cancel |
 | [Workspaces](docs/workspaces.md) | Magic pill, min shown, startup |
 | [Inspector](docs/inspector.md) | Hyprland Config Inspector |
 | [Config tokens](docs/config.md) | `Config.qml` deep dive |

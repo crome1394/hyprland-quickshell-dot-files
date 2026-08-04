@@ -4,6 +4,12 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
 
 ## 2026-08 — Control bar & FreshRSS
 
+- **Audio panel** (control strip → **Audio**):
+  - Multi-device manager via Inspector `AudioMonitorView` (ports, set-default, volume/mute, profiles under Output/Input).
+  - Overview pill: **Summary → Active streams → Levels**; tools (**Refresh**, **pw-top**, **Restart audio**); sticky **echo cancel** at bottom.
+  - Options: show AEC section / Summary / profiles / Level meters; keep Summary & Active streams expanded. AEC on/off is only in the Audio panel/pill.
+  - Idle when closed: no peak sampling, poll, or profile processes (`stopAllWork`). Peak-detect streams filtered from app lists.
+  - AudioPill popup scrolls when tall so Echo cancel no longer overlaps the border.
 - **Display panel** (control strip → **Display**):
   - Live monitor indicator (res, Hz, bit depth, make/model/serial, scale, physical size).
   - Adapter card (DRM + NVIDIA util/temp/power/VRAM); soft-poll **only while the panel is open**.
@@ -11,7 +17,7 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
   - Resolution block slider + refresh dropdown + bit-depth dropdown; linked by hyprctl modes / Hz families.
   - **Apply** at scale 1.0 via `scripts/monitor-mode.sh` (pending until Apply).
 - **SysStats pill layout:** center CPU/Memory/GPU; sections hug content (Memory no longer clips); snug fit with no empty side ballast; single separator slots between visible gauges.
-- Control strip: Position, **Display**, Wallpaper, Widgets, Options, Launch, Autostart, **Services**, **Keybinds**, Clock (toolbar on bottom).
+- Control strip: Position, **Display**, Wallpaper, Widgets, Options, Launch, Autostart, **Services**, **Audio**, **Keybinds**, Clock (toolbar on bottom).
 - **Keybinds** panel: browse `keybindings.lua` by category; edit key chord / category / description (in-place write + backup; Reload Hypr separate).
 - **Services** panel: systemd user/system units with filter + Start/Stop/Restart (reuses Inspector `ServicesView`).
 - Widgets panel: A–Z list; row layout ✓/name · L/C/R · ↑↓; horizontal width scale.

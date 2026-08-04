@@ -1916,6 +1916,8 @@ Rectangle {
             color: bar.glassPopupBg
             border.width: bar.controlBorderWidth
             border.color: bar.glassPopupBorder
+            // Keep content (esp. expanded Echo cancel / L/R) inside the rounded frame
+            clip: true
 
             Rectangle {
                 anchors.top: parent.top
@@ -1924,12 +1926,26 @@ Rectangle {
                 height: bar.popupHeaderHighlightHeight
                 color: bar.glassPopupHighlight
                 radius: parent.radius
+                z: 1
             }
 
-            ColumnLayout {
+            // Scroll when content exceeds fixed popup height so Echo cancel
+            // never paints over the bottom border.
+            Flickable {
+                id: audioPopupFlick
                 anchors.fill: parent
                 anchors.margins: bar.popupSpacing
-                spacing: 16
+                contentWidth: width
+                contentHeight: audioPopupCol.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height + 1
+                flickableDirection: Flickable.VerticalFlick
+
+                ColumnLayout {
+                    id: audioPopupCol
+                    width: audioPopupFlick.width
+                    spacing: 16
 
                 // Header + tools (top-right: pw-top, restart audio)
                 RowLayout {
@@ -3101,6 +3117,8 @@ Rectangle {
                             Text {
                                 Layout.fillWidth: true
                                 Layout.leftMargin: 20
+                                // Keep hint inside card; avoid long lines painting past the border
+                                Layout.bottomMargin: 2
                                 text: root.echoCancelHint.length
                                       ? root.echoCancelHint
                                       : "Sticky preference · survives reboot when On"
@@ -3112,18 +3130,19 @@ Rectangle {
                         }
                     }
                 }
-            }
-        }
+                } // audioPopupCol
+            } // audioPopupFlick
 
-        MouseArea {
-            anchors.fill: parent
-            z: -1
-            onClicked: {
-                audioPopup.visible = false
-                audioDeviceListPopup.visible = false
-                audioProfileListPopup.visible = false
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                onClicked: {
+                    audioPopup.visible = false
+                    audioDeviceListPopup.visible = false
+                    audioProfileListPopup.visible = false
+                }
             }
-        }
+        } // glass chrome
     }
 
     // Device list popup (shared) — same centralization pattern applied

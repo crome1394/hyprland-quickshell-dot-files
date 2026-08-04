@@ -7,9 +7,9 @@
 //
 // Single PopupWindow (grabFocus). Expandable panel on top; toolbar buttons
 // along the bottom: Position · Display · Wallpaper · Widgets · Options ·
-// Launch · Autostart · Services · Keybinds · Clock
+// Launch · Autostart · Services · Audio · Keybinds · Clock
 // Widgets = layout; Options = behavior prefs; Services = systemd;
-// Keybinds = edit chord/category/description in keybindings.lua.
+// Audio = devices/ports/AEC (AudioMonitorView); Keybinds = chord/category/desc.
 // Display = monitor resolution / refresh / bit depth (Apply to switch).
 // Window height follows content; tall menus scroll only when needed.
 //
@@ -35,7 +35,7 @@ Item {
     readonly property bool open: controlPopup.visible
 
     // "" | "position" | "display" | "wallpaper" | "widgets" | "options" |
-    // "launch" | "autostart" | "services" | "keybinds" | "clock"
+    // "launch" | "autostart" | "services" | "audio" | "keybinds" | "clock"
     // ("sizes" accepted as alias of "widgets" for any leftover callers)
     property string activeMenu: ""
     property int menuTick: 0
@@ -95,6 +95,9 @@ Item {
 
     // Services panel (reuse components/ServicesView.qml)
     property string servicesFilter: ""
+
+    // Audio panel (reuse components/AudioMonitorView.qml)
+    property string audioFilter: ""
 
     // Keybinds panel (components/KeybindsView.qml)
     property string keybindsFilter: ""
@@ -375,6 +378,26 @@ Item {
         case "setShowEchoCancelInMenu":
             if (typeof bar.setShowEchoCancelInMenu === "function")
                 bar.setShowEchoCancelInMenu(on)
+            break
+        case "setShowAudioSummary":
+            if (typeof bar.setShowAudioSummary === "function")
+                bar.setShowAudioSummary(on)
+            break
+        case "setShowAudioDefaults":
+            if (typeof bar.setShowAudioDefaults === "function")
+                bar.setShowAudioDefaults(on)
+            break
+        case "setShowAudioLevelMeters":
+            if (typeof bar.setShowAudioLevelMeters === "function")
+                bar.setShowAudioLevelMeters(on)
+            break
+        case "setAudioSummaryExpanded":
+            if (typeof bar.setAudioSummaryExpanded === "function")
+                bar.setAudioSummaryExpanded(on)
+            break
+        case "setAudioDefaultsExpanded":
+            if (typeof bar.setAudioDefaultsExpanded === "function")
+                bar.setAudioDefaultsExpanded(on)
             break
         case "setFreshRssFiltersExpanded":
             if (typeof bar.setFreshRssFiltersExpanded === "function")
@@ -1855,8 +1878,10 @@ Item {
                                      || root.activeMenu === "widgets"
                                      || root.activeMenu === "display"
                                      || root.activeMenu === "services"
+                                     || root.activeMenu === "audio"
                                      || root.activeMenu === "keybinds")
                                         ? ((root.activeMenu === "services"
+                                            || root.activeMenu === "audio"
                                             || root.activeMenu === "keybinds") ? 620 : 520)
                                         : 420)
             implicitHeight: mainCol.implicitHeight + root.pad * 2
@@ -4766,68 +4791,6 @@ Item {
                                             Layout.minimumWidth: 0
                                             spacing: 0
                                             Text {
-                                                text: "Echo cancel (AEC)"
-                                                color: bar.text
-                                                font.pixelSize: 12
-                                                font.family: bar.fontFamily
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                            }
-                                            Text {
-                                                text: "Sticky PipeWire preference"
-                                                color: bar.overlay
-                                                font.pixelSize: 10
-                                                font.family: bar.fontFamily
-                                                elide: Text.ElideRight
-                                                Layout.fillWidth: true
-                                            }
-                                        }
-                                        Item {
-                                            Layout.preferredWidth: root.optControlColW
-                                            Layout.maximumWidth: root.optControlColW
-                                            Layout.minimumWidth: root.optControlColW
-                                            Layout.fillHeight: true
-                                            Rectangle {
-                                                anchors.centerIn: parent
-                                                width: root.optToggleW
-                                                height: root.optToggleH
-                                                radius: 4
-                                                border.width: 1
-                                                border.color: (root.optEchoCancel()) ? root.onGreen : root.offRed
-                                                color: "transparent"
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: (root.optEchoCancel()) ? "✓" : "✕"
-                                                    color: (root.optEchoCancel()) ? root.onGreen : root.offRed
-                                                    font.pixelSize: 14
-                                                    font.bold: true
-                                                }
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: root.setOptToggle("setEchoCancel", !root.optEchoCancel())
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 40
-                                    radius: root.chipR
-                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
-                                    border.width: 1
-                                    border.color: bar.dividerStrong
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 10
-                                        anchors.rightMargin: 10
-                                        spacing: 10
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            Layout.minimumWidth: 0
-                                            spacing: 0
-                                            Text {
                                                 text: "Show echo cancel in audio menu"
                                                 color: bar.text
                                                 font.pixelSize: 12
@@ -4836,7 +4799,7 @@ Item {
                                                 Layout.fillWidth: true
                                             }
                                             Text {
-                                                text: "Hide the Echo cancel section in the audio popup"
+                                                text: "Show AEC section on Audio pill + control-bar Audio (on/off stays in the panel)"
                                                 color: bar.overlay
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
@@ -4868,6 +4831,317 @@ Item {
                                                     anchors.fill: parent
                                                     cursorShape: Qt.PointingHandCursor
                                                     onClicked: root.setOptToggle("setShowEchoCancelInMenu", !bar.showEchoCancelInMenu)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // Control-bar Audio panel section visibility
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
+                                                text: "Show Audio Summary"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "Control-bar Audio panel section"
+                                                color: bar.overlay
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.showAudioSummary !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.showAudioSummary !== false) ? "✓" : "✕"
+                                                    color: (bar.showAudioSummary !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setShowAudioSummary", !(bar.showAudioSummary !== false))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
+                                                text: "Show device profiles"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "Profile dropdowns under Output / Input devices"
+                                                color: bar.overlay
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.showAudioDefaults !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.showAudioDefaults !== false) ? "✓" : "✕"
+                                                    color: (bar.showAudioDefaults !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setShowAudioDefaults", !(bar.showAudioDefaults !== false))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
+                                                text: "Show Level meters"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "Playback / Recording VU meters below Active streams"
+                                                color: bar.overlay
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.showAudioLevelMeters !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.showAudioLevelMeters !== false) ? "✓" : "✕"
+                                                    color: (bar.showAudioLevelMeters !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setShowAudioLevelMeters", !(bar.showAudioLevelMeters !== false))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
+                                                text: "Keep Audio Summary expanded"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "When opening the control-bar Audio panel"
+                                                color: bar.overlay
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.audioSummaryExpanded !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.audioSummaryExpanded !== false) ? "✓" : "✕"
+                                                    color: (bar.audioSummaryExpanded !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setAudioSummaryExpanded", !(bar.audioSummaryExpanded !== false))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
+                                                text: "Keep Active streams expanded"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "When opening the control-bar Audio panel"
+                                                color: bar.overlay
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.audioDefaultsExpanded !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.audioDefaultsExpanded !== false) ? "✓" : "✕"
+                                                    color: (bar.audioDefaultsExpanded !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setAudioDefaultsExpanded", !(bar.audioDefaultsExpanded !== false))
                                                 }
                                             }
                                         }
@@ -5667,6 +5941,97 @@ Item {
                                 }
                             }
 
+                            // ===== AUDIO (devices / ports / AEC — same engine as Inspector) =====
+                            ColumnLayout {
+                                id: audioPanel
+                                visible: root.activeMenu === "audio"
+                                Layout.fillWidth: true
+                                // Fixed tall panel; AudioMonitorView scrolls internally
+                                Layout.preferredHeight: Math.max(320, root.panelMaxH - 12)
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Audio"
+                                        color: bar.text
+                                        font.pixelSize: bar.popupTitleSize
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    Text {
+                                        visible: controlAudio.lastError.length > 0
+                                        text: controlAudio.lastError
+                                        color: root.offRed
+                                        font.pixelSize: 10
+                                        font.family: bar.fontFamily
+                                        elide: Text.ElideRight
+                                        Layout.maximumWidth: 220
+                                    }
+                                    Text {
+                                        visible: controlAudio.toolsStatus.length > 0
+                                                 && controlAudio.lastError.length === 0
+                                        text: controlAudio.toolsStatus
+                                        color: root.onGreen
+                                        font.pixelSize: 10
+                                        font.family: bar.fontFamily
+                                        elide: Text.ElideRight
+                                        Layout.maximumWidth: 200
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "Sinks, sources, ports, and defaults (same as Inspector Audio). Tools: Refresh, pw-top, Restart audio, echo cancel. Pill stays the quick volume control."
+                                    color: bar.overlay
+                                    font.pixelSize: bar.popupHintSize
+                                    font.family: bar.fontFamily
+                                }
+                                TextField {
+                                    id: audioFilterField
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 30
+                                    placeholderText: "Filter devices / apps…"
+                                    color: bar.text
+                                    placeholderTextColor: bar.overlay
+                                    font.pixelSize: 12
+                                    font.family: bar.fontFamily
+                                    text: root.audioFilter
+                                    background: Rectangle {
+                                        radius: root.chipR
+                                        color: parent.activeFocus ? root.optFieldBgFocus : root.optFieldBg
+                                        border.width: 1
+                                        border.color: audioFilterField.activeFocus ? bar.accent : bar.pillBorder
+                                    }
+                                    onTextChanged: root.audioFilter = text
+                                }
+                                AudioMonitorView {
+                                    id: controlAudio
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    Layout.minimumHeight: 200
+                                    active: audioPanel.visible && controlPopup.visible
+                                    showTools: true
+                                    showSummary: bar.showAudioSummary !== false
+                                    showDefaults: bar.showAudioDefaults !== false
+                                    showLevelMeters: bar.showAudioLevelMeters !== false
+                                    showEchoCancel: bar.showEchoCancelInMenu !== false
+                                    summaryExpandedPref: bar.audioSummaryExpanded !== false
+                                    defaultsExpandedPref: bar.audioDefaultsExpanded !== false
+                                    globalFilter: root.audioFilter
+                                    textColor: bar.text
+                                    subtextColor: bar.subtext
+                                    accentColor: bar.accent
+                                    surfaceColor: Qt.rgba(0.08, 0.08, 0.10, 0.95)
+                                    overlayColor: bar.overlay
+                                    okColor: root.onGreen
+                                    warnColor: "#e8c56a"
+                                    errorColor: root.offRed
+                                }
+                            }
+
                             // ===== KEYBINDS (edit chord / category / description) =====
                             ColumnLayout {
                                 id: keybindsPanel
@@ -5834,6 +6199,7 @@ Item {
                             { id: "launch",    label: "Launch" },
                             { id: "autostart", label: "Autostart" },
                             { id: "services",  label: "Services" },
+                            { id: "audio",     label: "Audio" },
                             { id: "keybinds",  label: "Keybinds" },
                             { id: "clock",     label: "Clock" }
                         ]

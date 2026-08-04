@@ -142,8 +142,15 @@ ShellRoot {
     property bool showStatCpu: true
     property bool showStatMem: true
     property bool showStatGpu: true
-    // Hide Echo cancel block in Audio popup when false (Options)
+    // Hide Echo cancel block in Audio popup / control-bar Audio panel when false (Options)
     property bool showEchoCancelInMenu: true
+    // Control-bar Audio panel section visibility (Options + bar-layout.json)
+    property bool showAudioSummary: true
+    property bool showAudioDefaults: true
+    property bool showAudioLevelMeters: true
+    // Keep sections expanded when the Audio panel opens
+    property bool audioSummaryExpanded: true
+    property bool audioDefaultsExpanded: true
     // FreshRSS reader: Filters section open on window start (Options + bar-layout.json)
     property bool freshRssFiltersExpanded: true
 
@@ -291,6 +298,11 @@ ShellRoot {
             root.showStatMem = true
             root.showStatGpu = true
             root.showEchoCancelInMenu = true
+            root.showAudioSummary = true
+            root.showAudioDefaults = true
+            root.showAudioLevelMeters = true
+            root.audioSummaryExpanded = true
+            root.audioDefaultsExpanded = true
             root.freshRssFiltersExpanded = cfg.freshRssFiltersExpandedDefault !== undefined
                 ? !!cfg.freshRssFiltersExpandedDefault
                 : true
@@ -435,8 +447,14 @@ ShellRoot {
                     root.showStatMem = barLayoutAdapter.showStatMem
                     root.showStatGpu = barLayoutAdapter.showStatGpu
                 }
-                if (barLayoutAdapter.hasAudioMenuPrefs)
+                if (barLayoutAdapter.hasAudioMenuPrefs) {
                     root.showEchoCancelInMenu = barLayoutAdapter.showEchoCancelInMenu
+                    root.showAudioSummary = barLayoutAdapter.showAudioSummary
+                    root.showAudioDefaults = barLayoutAdapter.showAudioDefaults
+                    root.showAudioLevelMeters = barLayoutAdapter.showAudioLevelMeters
+                    root.audioSummaryExpanded = barLayoutAdapter.audioSummaryExpanded
+                    root.audioDefaultsExpanded = barLayoutAdapter.audioDefaultsExpanded
+                }
                 if (barLayoutAdapter.hasFreshRssPrefs)
                     root.freshRssFiltersExpanded = barLayoutAdapter.freshRssFiltersExpanded
                 // Layout JSON
@@ -517,9 +535,14 @@ ShellRoot {
                 property bool showStatCpu: true
                 property bool showStatMem: true
                 property bool showStatGpu: true
-                // Audio popup sections
+                // Audio popup / control-bar Audio panel sections
                 property bool hasAudioMenuPrefs: false
                 property bool showEchoCancelInMenu: true
+                property bool showAudioSummary: true
+                property bool showAudioDefaults: true
+                property bool showAudioLevelMeters: true
+                property bool audioSummaryExpanded: true
+                property bool audioDefaultsExpanded: true
                 property bool hasFreshRssPrefs: false
                 property bool freshRssFiltersExpanded: true
             }
@@ -575,6 +598,11 @@ ShellRoot {
             barLayoutAdapter.showStatGpu = root.showStatGpu
             barLayoutAdapter.hasAudioMenuPrefs = true
             barLayoutAdapter.showEchoCancelInMenu = root.showEchoCancelInMenu
+            barLayoutAdapter.showAudioSummary = root.showAudioSummary
+            barLayoutAdapter.showAudioDefaults = root.showAudioDefaults
+            barLayoutAdapter.showAudioLevelMeters = root.showAudioLevelMeters
+            barLayoutAdapter.audioSummaryExpanded = root.audioSummaryExpanded
+            barLayoutAdapter.audioDefaultsExpanded = root.audioDefaultsExpanded
             barLayoutAdapter.hasFreshRssPrefs = true
             barLayoutAdapter.freshRssFiltersExpanded = root.freshRssFiltersExpanded
             barLayoutFile.writeAdapter()
@@ -605,6 +633,26 @@ ShellRoot {
         }
         function setShowEchoCancelInMenu(enabled) {
             root.showEchoCancelInMenu = !!enabled
+            persistBarLayout()
+        }
+        function setShowAudioSummary(enabled) {
+            root.showAudioSummary = !!enabled
+            persistBarLayout()
+        }
+        function setShowAudioDefaults(enabled) {
+            root.showAudioDefaults = !!enabled
+            persistBarLayout()
+        }
+        function setShowAudioLevelMeters(enabled) {
+            root.showAudioLevelMeters = !!enabled
+            persistBarLayout()
+        }
+        function setAudioSummaryExpanded(enabled) {
+            root.audioSummaryExpanded = !!enabled
+            persistBarLayout()
+        }
+        function setAudioDefaultsExpanded(enabled) {
+            root.audioDefaultsExpanded = !!enabled
             persistBarLayout()
         }
         function setFreshRssFiltersExpanded(enabled) {
@@ -1455,6 +1503,11 @@ ShellRoot {
         property alias showStatMem: root.showStatMem
         property alias showStatGpu: root.showStatGpu
         property alias showEchoCancelInMenu: root.showEchoCancelInMenu
+        property alias showAudioSummary: root.showAudioSummary
+        property alias showAudioDefaults: root.showAudioDefaults
+        property alias showAudioLevelMeters: root.showAudioLevelMeters
+        property alias audioSummaryExpanded: root.audioSummaryExpanded
+        property alias audioDefaultsExpanded: root.audioDefaultsExpanded
         property alias freshRssFiltersExpanded: root.freshRssFiltersExpanded
         readonly property alias freshRssSecretsReadScript: cfg.freshRssSecretsReadScript
         readonly property alias freshRssSecretsWriteScript: cfg.freshRssSecretsWriteScript

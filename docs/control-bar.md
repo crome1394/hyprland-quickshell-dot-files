@@ -14,6 +14,7 @@ Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar o
 | **Launch** | Quick Launch pins (installed apps or custom) |
 | **Autostart** | XDG `~/.config/autostart` (see Autostart subsection) |
 | **Services** | systemd user/system units — filter, select, **Start / Stop / Restart** (reuses Inspector `ServicesView`) |
+| **Audio** | Sound manager: overview (summary / streams / levels), dual device columns + profiles, echo cancel; **pw-top** / **Restart audio** (reuses Inspector `AudioMonitorView`) |
 | **Keybinds** | Browse `keybindings.lua` by category; **edit key chord, category, description** (not the action) |
 | **Clock** | Clock format presets |
 
@@ -61,7 +62,7 @@ Related CLI (outside this repo, on PATH): `hypr-resolution` — rofi menu over t
 |---------|----------|-------------|
 | **Bar / UI** | UI scale auto/manual · Config menu icon on bar | `bar-layout.json` |
 | **Workspaces** | Magic pill · only-active · min pills · startup workspace · close magic on start | `bar-layout.json` |
-| **Audio** | Echo cancel AEC · show AEC in audio popup | AEC scripts; visibility → `bar-layout.json` |
+| **Audio** | Show AEC section · show Summary / device profiles / Level meters · keep Summary / Active streams expanded (AEC on/off is only in the Audio panel) | visibility/expand → `bar-layout.json` |
 | **Network** | nm-applet sticky login autostart | XDG / applet control |
 | **Bluetooth** | Blueman sticky login autostart | XDG / applet control |
 | **System stats** | Show CPU / Memory / GPU · metrics live updates | gauges → `bar-layout.json` |
@@ -117,6 +118,46 @@ Quick recovery for systemd units without opening the full Config Inspector. Embe
 - User units: `systemctl --user`. System units may prompt for polkit (same as [inspector.md](inspector.md))
 
 Full metrics/logs/config browsing remains in the Hyprland Config Inspector (`qs ipc call hyprConfigInsp toggle`).
+
+## Audio panel
+
+Sound manager without opening the full Config Inspector or the bar audio pill. Embeds `components/AudioMonitorView.qml` (same engine as the Inspector **Audio** tab), plus tools from the AudioPill.
+
+Layout (top → bottom):
+
+| Area | Controls |
+|------|----------|
+| **Tools** | **Refresh**, **pw-top** (kitty), **Restart audio** (`audio-control.sh restart-audio`) |
+| **Filter** | Text field filters devices and stream names |
+| **Overview** (one pill) | **Audio Summary** → **Active streams** → **Levels** (no inter-card dead space) |
+| **Devices** | Dual columns: sinks / sources — volume, mute, **Set Default**, **ports**; **Profile** under each column |
+| **Echo cancel** | Sticky On/Off at the **bottom** (AEC preference; same scripts as the pill) |
+
+**Overview details**
+
+- **Summary** — default output/input labels, sink/source counts (collapsible; Options: show / keep expanded)
+- **Active streams** — real app playback (▶) and recording (● REC); internal **Peak Detect** monitors are filtered out (collapsible; Options: keep expanded)
+- **Levels** — Playback + Recording VU meters via name-resolved `PwNodePeakMonitor` (Options: show Level meters)
+
+**Options → Audio** (persisted in `bar-layout.json`)
+
+| Toggle | Effect |
+|--------|--------|
+| Show echo cancel in audio menu | Show/hide AEC section on **pill popup** and **this panel** (does **not** turn AEC on/off) |
+| Show Audio Summary | Hide/show summary block in overview |
+| Show device profiles | Profile dropdowns under Output / Input columns |
+| Show Level meters | VU meters in overview |
+| Keep Audio Summary expanded | Expand summary when the panel opens |
+| Keep Active streams expanded | Expand streams when the panel opens |
+
+**Sampling / resources** (idle when closed)
+
+- `active` is true only while the Audio panel is open (and the control strip popup is visible)
+- Soft re-poll ~3s **only while open**; peak monitors, profile fetches, and poller processes stop on close (`stopAllWork`)
+- Card profiles re-fetch when the default sink/source **changes**, not on every soft-poll
+- Scripts: `scripts/audio-poller.sh`, `scripts/audio-control.sh`, `scripts/audio-osd.sh`
+
+The **AudioPill** remains the glance + wheel volume control on the bar; this panel is the multi-device manager. See [audio.md](audio.md) for pill details and the echo-cancel back-out ladder.
 
 ## Keybinds panel
 

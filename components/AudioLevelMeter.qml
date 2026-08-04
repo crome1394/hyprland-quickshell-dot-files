@@ -71,11 +71,11 @@ Item {
             peakHold = clampedLevel
     }
 
-    // Peak-hold decay timer — only runs while the meter is visible
+    // Peak-hold decay — only while visible and non-idle (no 50ms timer when level is flat/off)
     Timer {
         interval: 50
         repeat: true
-        running: root.visible
+        running: root.visible && (root.clampedLevel > 0.001 || root.peakHold > 0.001)
         onTriggered: {
             if (root.peakHold > root.clampedLevel) {
                 root.peakHold = Math.max(root.clampedLevel, root.peakHold - root.peakDecayPerTick)

@@ -193,6 +193,10 @@ function print_record() {
     if (app == "") app = "Unknown"
     if (binary == "") binary = app
     if (media == "") media = ""
+    # Hide internal peak meters (PwNodePeakMonitor → "Quickshell Peak Detect")
+    low = tolower(app " " binary " " media)
+    if (low ~ /peak detect/) return
+    if (low ~ /quickshell peak/) return
     printf "{\"index\":%s,\"app\":\"%s\",\"binary\":\"%s\",\"media\":\"%s\",\"mute\":%s,\"volume_pct\":%d,\"corked\":%s,\"device_index\":\"%s\",\"device_key\":\"%s\"}\n",
         idx, app, binary, media, mute, vol_pct, corked, device_idx, device_key
 }

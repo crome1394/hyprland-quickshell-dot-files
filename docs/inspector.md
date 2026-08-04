@@ -84,7 +84,7 @@ If you are used to one monolithic `hyprland.conf`, think of `hyprland.lua` as a 
 | **Temperature** | CPU and GPU temperature monitoring with history |
 | **Network** | Interfaces, routing, DNS, latency, firewall, active connections, per-process bandwidth, and live traffic graphs |
 | **Processes** | Process list with CPU/memory usage, PR/NI columns, sort, filter, and signal controls |
-| **Audio** | PipeWire/PulseAudio sinks, sources, ports, volumes, and default devices |
+| **Audio** | PipeWire/PulseAudio sinks, sources, ports, volumes, defaults, active apps; tools (Refresh / pw-top / Restart audio) + echo cancel. Same `AudioMonitorView` as the control-bar **Audio** panel. |
 | **Logs** | Tail Hyprland log, user/system journal, kernel, and common service logs |
 | **Services** | systemd user and system units with status filters and start/stop/restart controls |
 | **System Info** | `fastfetch` hardware/OS summary, Service Documentation links, and click-to-copy fields |
