@@ -63,57 +63,64 @@ QtObject {
     id: theme
 
     // =========================================================================
-    // BASE PALETTE (CachyOS window chrome — deep solid blacks + brand cyan)
+    // BASE PALETTE (liquid glass — cool dark-blue slate + vivid teal accent)
     // =========================================================================
-    // Crisp, near-opaque dark chrome inspired by Dolphin / CachyOS Installer
-    // window surfaces (not the pink/blue wallpaper). Prefer deep blacks over
-    // washed mid-greys so wallpaper does not tint the bar.
+    // Pulled from the CachyOS / Ventoy desktop wallpaper: deep magenta→pink field,
+    // cool blue ribbons, and the installer logo's teal→cyan gradient (pushed
+    // brighter/more saturated). Glass chrome is cool blue-slate (not purple, not
+    // washed mid-grey) so teal accents and wallpaper blues stay cohesive.
     //
-    // Solid reference: match terminal-true black (kitty default #000000), then
-    // step up only slightly for pills / hover so hierarchy stays visible.
-    //   bar #000000 · pills #0a0c0e · hover #16181c · labels #b0b0b2 · cyan #00c4f5
+    // Hierarchy:
+    //   bg/surface  → solid blue-slate fallbacks (elevated UI, tracks)
+    //   glass*      → translucent dark-blue glass (bar / pills / popups)
+    //   accent      → bright teal-cyan (active, hover border, highlights)
+    //   muted       → vivid magenta-pink (secondary accent + warnings / mute / DND)
 
-    readonly property color bg:        "#000000"   // True black (matches kitty / installer deep content)
-    readonly property color surface:   "#121416"   // Elevated panels / buttons on pure black
-    readonly property color text:      "#ececee"   // Primary readable text (high contrast on black)
-    readonly property color subtext:   "#b0b0b2"   // Secondary text (window labels)
-    readonly property color overlay:   "#5c5c60"   // Muted / placeholder / disabled
+    // Writable so the control-bar Colors panel can edit live and persist.
+    // Factory defaults live in themeFactoryDefaults() / themeReset().
+    property color bg:        "#0a0e16"   // Deep blue-charcoal (solid fallback)
+    property color surface:   "#141a24"   // Elevated blue-slate panels / tracks
+    property color text:      "#f0f4fc"   // Bright cool-white (high contrast on glass)
+    property color subtext:   "#a8b4c8"   // Cool silver-blue secondary labels
+    property color overlay:   "#6e7a90"   // Muted blue-grey (not flat mid-grey)
 
-    readonly property color accent:    "#00c4f5"   // CachyOS cyan — crisp brand highlight
-    readonly property color muted:     "#e85d6f"   // Warning / error / mute / DND
+    property color accent:    "#00F0E0"   // Vivid teal-cyan (active / hover / highlights)
+    property color muted:     "#FF3D8A"   // Magenta-pink secondary + warning / mute / DND
 
     // Semantic / status colors
-    readonly property color todayBg:   "#00d4ff"   // Calendar "today" (brighter cyan)
-    readonly property color weekday:   "#e85d6f"   // Calendar weekday headers
-    readonly property color clock:     "#ffffff"   // Clock text
+    property color todayBg:   "#00FFE8"   // Calendar "today" (extra-bright cyan)
+    property color weekday:   "#FF5C9A"   // Calendar weekday headers (pink secondary)
+    property color clock:     "#ffffff"   // Clock text (max contrast)
 
     // =========================================================================
-    // SURFACE TOKENS (fully solid — true black bar, darker pills)
+    // GLASSMORPHIC TOKENS (liquid glass — frosted dark-blue slate + teal edges)
     // =========================================================================
-    // All fills are alpha 1.0. No translucent glass. Hierarchy is pure black →
-    // slightly lifted greys only (no mid-grey that reads as "washed").
-    // Hierarchy: glassBg (true black) ≤ glassPill ≤ glassPopup ≤ glassHover
+    // Semi-transparent fills so the wallpaper tint shows through. Soft teal rim
+    // glow + white top-edge sheen sell the glossy glass look. Opacity order:
+    //   glassBg (bar) < glassPill < glassPopup  (popups most opaque for readability)
+    // Writable for Colors panel live editing.
 
-    // Main bar — true black so it matches kitty, not a lifted charcoal
-    readonly property color glassBg:          "#000000"
-    // Subtle dark-grey outline so the bar reads against a dark wallpaper
-    // (near-black, not a bright edge — just enough separation).
-    readonly property color glassBorder:      "#1e2024"
-    readonly property color glassHighlight:   "transparent"  // No white edge wash on the bar
+    // Main bar — cool dark-blue glass, wallpaper peeks through
+    property color glassBg:          Qt.rgba(0.04, 0.06, 0.10, 0.58)
+    // Soft cool rim (desaturated — not a vivid teal neon edge)
+    property color glassBorder:      Qt.rgba(0.55, 0.72, 0.82, 0.16)
+    // Top-edge light catch — transparent so the bar has no thin highlight strip
+    property color glassHighlight:   "transparent"
 
-    // Pills — one step above pure black (still deeper than old #141618)
-    readonly property color glassPillBg:      "#0a0c0e"
-    readonly property color glassHover:       "#16181c"  // Lifted hover without going mid-grey
+    // Pills — slightly denser glass so content stays sharp
+    property color glassPillBg:      Qt.rgba(0.05, 0.07, 0.12, 0.72)
+    property color glassHover:       Qt.rgba(0.0, 0.85, 0.80, 0.22)  // Teal glow on hover
 
-    // Popups — solid black chrome (same depth as bar; content needs max contrast)
-    readonly property color glassPopupBg:         "#000000"
-    readonly property color glassPopupBorder:     "#121416"  // Solid dark rim, no soft white AA
-    readonly property color glassPopupHighlight:  "transparent"
+    // Popups — more opaque for readability, still blue-slate glass
+    property color glassPopupBg:         Qt.rgba(0.04, 0.06, 0.10, 0.90)
+    property color glassPopupBorder:     Qt.rgba(0.55, 0.72, 0.82, 0.18)
+    property color glassPopupHighlight:  Qt.rgba(1, 1, 1, 0.18)
 
     // Convenience aliases used by many pills (prevents drift)
-    readonly property color pillBg:     glassPillBg
-    readonly property color pillBorder: "#0a0c0e"  // Matches pill fill; hover still uses accent
-    readonly property color pillHover:  glassHover
+    // pillBg / pillHover track glass* so one Colors control updates both.
+    property color pillBg:     glassPillBg
+    property color pillBorder: Qt.rgba(1, 1, 1, 0.10)  // Soft glass rim; hover uses accent
+    property color pillHover:  glassHover
 
     // =========================================================================
     // STATE COLORS (hover, pressed, active, focus — single source of truth)
@@ -122,17 +129,329 @@ QtObject {
     // Use these instead of ad-hoc Qt.rgba or hex values for hover/pressed states.
 
     // Pill-level hover (used by almost every bar widget)
-    readonly property color pillHoverBorder: accent   // Border color on hover for all pills
+    property color pillHoverBorder: accent   // Border color on hover for all pills
 
-    // Per-item hover chips — solid cyan-tinted dark (no soft alpha wash)
-    readonly property color iconHoverBg: "#0a3a48"
+    // Per-item hover chips — translucent teal glow (QuickLaunch, tray, workspaces, …)
+    property color iconHoverBg: Qt.rgba(0.0, 0.85, 0.82, 0.28)
 
     // General control states (used inside popups and complex widgets)
-    readonly property color controlHoverBg:   glassHover
-    readonly property color controlActiveBg:  "#16181c"
+    property color controlHoverBg:   glassHover
+    property color controlActiveBg:  Qt.rgba(0.0, 0.70, 0.75, 0.35)  // Pressed / toggled teal
 
     // Specific popup button hover
-    readonly property color popupButtonHoverBg: "#121416"
+    property color popupButtonHoverBg: Qt.rgba(0.08, 0.10, 0.16, 0.65)
+
+    // =========================================================================
+    // THEME EDITOR API (control-bar Colors panel — non-coder friendly)
+    // =========================================================================
+    // Keys exposed in the UI map 1:1 to properties above. Derived tokens
+    // (sliderFill, wsActiveBorder, …) stay bound to accent/muted/etc.
+
+    readonly property var themeEditableKeys: [
+        "glassBg", "glassPillBg", "glassPopupBg",
+        "glassBorder", "glassPopupBorder", "pillBorder",
+        "glassHighlight", "glassPopupHighlight",
+        "glassHover", "iconHoverBg",
+        "accent", "muted",
+        "text", "subtext", "overlay",
+        "bg", "surface", "clock",
+        "controlActiveBg", "popupButtonHoverBg"
+    ]
+
+    // Friendly rows shown in the Colors panel (label + property key + opacity?).
+    readonly property var themeUiRows: [
+        { key: "glassBg",     label: "Bar background",    opacity: true },
+        { key: "glassPillBg", label: "Widget background", opacity: true },
+        { key: "glassPopupBg",label: "Menu background",   opacity: true },
+        { key: "glassBorder", label: "Border",            opacity: true },
+        { key: "accent",      label: "Accent",            opacity: false },
+        { key: "muted",       label: "Warning / pink",    opacity: false },
+        { key: "text",        label: "Main text",         opacity: false },
+        { key: "subtext",     label: "Secondary text",    opacity: false },
+        { key: "glassHover",  label: "Hover glow",        opacity: true },
+        { key: "glassHighlight", label: "Top edge shine", opacity: true }
+    ]
+
+    function _clamp01(n) {
+        var x = Number(n)
+        if (!(x >= 0)) x = 0
+        if (x > 1) x = 1
+        return x
+    }
+
+    function _byteHex(n) {
+        var v = Math.round(_clamp01(n) * 255)
+        if (v < 0) v = 0
+        if (v > 255) v = 255
+        var s = v.toString(16)
+        return s.length < 2 ? ("0" + s) : s
+    }
+
+    function colorToHex(c) {
+        if (!c) return "#000000"
+        return "#" + _byteHex(c.r) + _byteHex(c.g) + _byteHex(c.b)
+    }
+
+    function parseHex(hex) {
+        if (!hex) return null
+        var s = ("" + hex).trim()
+        if (s.charAt(0) === "#") s = s.substring(1)
+        if (s.length === 3) {
+            s = s.charAt(0) + s.charAt(0) + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2)
+        }
+        if (s.length !== 6) return null
+        var r = parseInt(s.substring(0, 2), 16)
+        var g = parseInt(s.substring(2, 4), 16)
+        var b = parseInt(s.substring(4, 6), 16)
+        if (isNaN(r) || isNaN(g) || isNaN(b)) return null
+        return { r: r / 255, g: g / 255, b: b / 255 }
+    }
+
+    function colorWithAlpha(c, a) {
+        if (!c) return Qt.rgba(0, 0, 0, _clamp01(a))
+        return Qt.rgba(c.r, c.g, c.b, _clamp01(a))
+    }
+
+    function colorFromHexAlpha(hex, a) {
+        var p = parseHex(hex)
+        if (!p) return null
+        return Qt.rgba(p.r, p.g, p.b, _clamp01(a === undefined ? 1 : a))
+    }
+
+    function colorToThemeEntry(c) {
+        return { hex: colorToHex(c), alpha: c ? _clamp01(c.a) : 1 }
+    }
+
+    function themeEntryToColor(entry) {
+        if (!entry) return null
+        if (typeof entry === "string")
+            return colorFromHexAlpha(entry, 1)
+        var hex = entry.hex !== undefined ? entry.hex : entry.color
+        var a = entry.alpha !== undefined ? entry.alpha : 1
+        return colorFromHexAlpha(hex, a)
+    }
+
+    function getThemeColor(key) {
+        switch (key) {
+        case "bg": return bg
+        case "surface": return surface
+        case "text": return text
+        case "subtext": return subtext
+        case "overlay": return overlay
+        case "accent": return accent
+        case "muted": return muted
+        case "todayBg": return todayBg
+        case "weekday": return weekday
+        case "clock": return clock
+        case "glassBg": return glassBg
+        case "glassBorder": return glassBorder
+        case "glassHighlight": return glassHighlight
+        case "glassPillBg": return glassPillBg
+        case "glassHover": return glassHover
+        case "glassPopupBg": return glassPopupBg
+        case "glassPopupBorder": return glassPopupBorder
+        case "glassPopupHighlight": return glassPopupHighlight
+        case "pillBorder": return pillBorder
+        case "iconHoverBg": return iconHoverBg
+        case "controlActiveBg": return controlActiveBg
+        case "popupButtonHoverBg": return popupButtonHoverBg
+        default: return null
+        }
+    }
+
+    function setThemeColor(key, c) {
+        if (!c) return false
+        switch (key) {
+        case "bg": bg = c; break
+        case "surface": surface = c; break
+        case "text": text = c; break
+        case "subtext": subtext = c; break
+        case "overlay": overlay = c; break
+        case "accent": accent = c; pillHoverBorder = c; break
+        case "muted": muted = c; break
+        case "todayBg": todayBg = c; break
+        case "weekday": weekday = c; break
+        case "clock": clock = c; break
+        case "glassBg": glassBg = c; break
+        case "glassBorder":
+            glassBorder = c
+            // Keep popup rim in sync for the simple "Border" control
+            glassPopupBorder = colorWithAlpha(c, Math.max(c.a, 0.18))
+            break
+        case "glassHighlight": glassHighlight = c; break
+        case "glassPillBg": glassPillBg = c; pillBg = c; break
+        case "glassHover":
+            glassHover = c
+            pillHover = c
+            controlHoverBg = c
+            // Keep icon hover chips in the same family (slightly stronger)
+            iconHoverBg = colorWithAlpha(c, Math.min(1, Math.max(0.15, c.a + 0.06)))
+            break
+        case "glassPopupBg": glassPopupBg = c; break
+        case "glassPopupBorder": glassPopupBorder = c; break
+        case "glassPopupHighlight": glassPopupHighlight = c; break
+        case "pillBorder": pillBorder = c; break
+        case "iconHoverBg": iconHoverBg = c; break
+        case "controlActiveBg": controlActiveBg = c; break
+        case "popupButtonHoverBg": popupButtonHoverBg = c; break
+        default: return false
+        }
+        return true
+    }
+
+    function setThemeAlpha(key, a) {
+        var cur = getThemeColor(key)
+        if (!cur) return false
+        // Top-edge shine defaults to transparent black — use white when turning on
+        if ((key === "glassHighlight" || key === "glassPopupHighlight")
+                && cur.a < 0.01 && a > 0.01
+                && cur.r < 0.02 && cur.g < 0.02 && cur.b < 0.02) {
+            return setThemeColor(key, Qt.rgba(1, 1, 1, _clamp01(a)))
+        }
+        return setThemeColor(key, colorWithAlpha(cur, a))
+    }
+
+    function themeExport(name) {
+        var colors = {}
+        var keys = themeEditableKeys
+        for (var i = 0; i < keys.length; i++) {
+            var k = keys[i]
+            var c = getThemeColor(k)
+            if (c)
+                colors[k] = colorToThemeEntry(c)
+        }
+        return {
+            name: name && ("" + name).length ? ("" + name) : "Custom",
+            version: 1,
+            colors: colors
+        }
+    }
+
+    function themeApply(obj) {
+        if (!obj) return false
+        var colors = obj.colors !== undefined ? obj.colors : obj
+        if (!colors || typeof colors !== "object") return false
+        var keys = themeEditableKeys
+        var any = false
+        for (var i = 0; i < keys.length; i++) {
+            var k = keys[i]
+            if (colors[k] === undefined) continue
+            var c = themeEntryToColor(colors[k])
+            if (c && setThemeColor(k, c))
+                any = true
+        }
+        // Re-sync alias-style props after bulk apply
+        pillBg = glassPillBg
+        pillHover = glassHover
+        controlHoverBg = glassHover
+        pillHoverBorder = accent
+        return any
+    }
+
+    function themeFactoryDefaults() {
+        return {
+            name: "Liquid glass",
+            version: 1,
+            colors: {
+                bg: { hex: "#0a0e16", alpha: 1 },
+                surface: { hex: "#141a24", alpha: 1 },
+                text: { hex: "#f0f4fc", alpha: 1 },
+                subtext: { hex: "#a8b4c8", alpha: 1 },
+                overlay: { hex: "#6e7a90", alpha: 1 },
+                accent: { hex: "#00F0E0", alpha: 1 },
+                muted: { hex: "#FF3D8A", alpha: 1 },
+                todayBg: { hex: "#00FFE8", alpha: 1 },
+                weekday: { hex: "#FF5C9A", alpha: 1 },
+                clock: { hex: "#ffffff", alpha: 1 },
+                glassBg: { hex: "#0a0f1a", alpha: 0.58 },
+                glassBorder: { hex: "#8cb8d1", alpha: 0.16 },
+                glassHighlight: { hex: "#000000", alpha: 0 },
+                glassPillBg: { hex: "#0d121e", alpha: 0.72 },
+                glassHover: { hex: "#00d9cc", alpha: 0.22 },
+                glassPopupBg: { hex: "#0a0f1a", alpha: 0.90 },
+                glassPopupBorder: { hex: "#8cb8d1", alpha: 0.18 },
+                glassPopupHighlight: { hex: "#ffffff", alpha: 0.18 },
+                pillBorder: { hex: "#ffffff", alpha: 0.10 },
+                iconHoverBg: { hex: "#00d9d1", alpha: 0.28 },
+                controlActiveBg: { hex: "#00b3bf", alpha: 0.35 },
+                popupButtonHoverBg: { hex: "#141a29", alpha: 0.65 }
+            }
+        }
+    }
+
+    function themePresetSolidDark() {
+        return {
+            name: "Solid dark",
+            version: 1,
+            colors: {
+                bg: { hex: "#000000", alpha: 1 },
+                surface: { hex: "#121416", alpha: 1 },
+                text: { hex: "#ececee", alpha: 1 },
+                subtext: { hex: "#b0b0b2", alpha: 1 },
+                overlay: { hex: "#5c5c60", alpha: 1 },
+                accent: { hex: "#00c4f5", alpha: 1 },
+                muted: { hex: "#e85d6f", alpha: 1 },
+                todayBg: { hex: "#00d4ff", alpha: 1 },
+                weekday: { hex: "#e85d6f", alpha: 1 },
+                clock: { hex: "#ffffff", alpha: 1 },
+                glassBg: { hex: "#000000", alpha: 1 },
+                glassBorder: { hex: "#1e2024", alpha: 1 },
+                glassHighlight: { hex: "#000000", alpha: 0 },
+                glassPillBg: { hex: "#0a0c0e", alpha: 1 },
+                glassHover: { hex: "#16181c", alpha: 1 },
+                glassPopupBg: { hex: "#000000", alpha: 1 },
+                glassPopupBorder: { hex: "#121416", alpha: 1 },
+                glassPopupHighlight: { hex: "#000000", alpha: 0 },
+                pillBorder: { hex: "#0a0c0e", alpha: 1 },
+                iconHoverBg: { hex: "#0a3a48", alpha: 1 },
+                controlActiveBg: { hex: "#16181c", alpha: 1 },
+                popupButtonHoverBg: { hex: "#121416", alpha: 1 }
+            }
+        }
+    }
+
+    function themePresetSoftGrey() {
+        return {
+            name: "Soft grey",
+            version: 1,
+            colors: {
+                bg: { hex: "#1a1b1e", alpha: 1 },
+                surface: { hex: "#25262b", alpha: 1 },
+                text: { hex: "#e8e8ec", alpha: 1 },
+                subtext: { hex: "#a0a4b0", alpha: 1 },
+                overlay: { hex: "#6c7080", alpha: 1 },
+                accent: { hex: "#7ec8e3", alpha: 1 },
+                muted: { hex: "#e88a9a", alpha: 1 },
+                todayBg: { hex: "#8ad4f0", alpha: 1 },
+                weekday: { hex: "#e88a9a", alpha: 1 },
+                clock: { hex: "#ffffff", alpha: 1 },
+                glassBg: { hex: "#1a1b1e", alpha: 0.72 },
+                glassBorder: { hex: "#ffffff", alpha: 0.10 },
+                glassHighlight: { hex: "#ffffff", alpha: 0.12 },
+                glassPillBg: { hex: "#22242a", alpha: 0.80 },
+                glassHover: { hex: "#7ec8e3", alpha: 0.18 },
+                glassPopupBg: { hex: "#1a1b1e", alpha: 0.92 },
+                glassPopupBorder: { hex: "#ffffff", alpha: 0.12 },
+                glassPopupHighlight: { hex: "#ffffff", alpha: 0.14 },
+                pillBorder: { hex: "#ffffff", alpha: 0.08 },
+                iconHoverBg: { hex: "#7ec8e3", alpha: 0.22 },
+                controlActiveBg: { hex: "#7ec8e3", alpha: 0.28 },
+                popupButtonHoverBg: { hex: "#2a2c32", alpha: 0.70 }
+            }
+        }
+    }
+
+    function themeReset() {
+        return themeApply(themeFactoryDefaults())
+    }
+
+    function themeBuiltinPresets() {
+        return [
+            themeFactoryDefaults(),
+            themePresetSolidDark(),
+            themePresetSoftGrey()
+        ]
+    }
 
     // =========================================================================
     // UI SCALE (auto from screen width + optional manual override)
@@ -756,9 +1075,9 @@ QtObject {
     readonly property int  sliderMiniHeight: sp(5)
 
     // Volume bar fallback fill (AudioPill overrides per-level via audioSpeaker/MicUtilColor)
-    readonly property color sliderFill:       accent   // CachyOS cyan (#00c4f5)
-    readonly property color sliderFillMuted:  muted     // Fill when device is muted
-    readonly property color sliderTrack:      surface  // Background track (titlebar chrome)
+    readonly property color sliderFill:       accent   // Vivid teal-cyan (#00F0E0)
+    readonly property color sliderFillMuted:  muted     // Fill when device is muted (magenta)
+    readonly property color sliderTrack:      surface  // Background track (blue-slate)
 
     // AudioPill volume color ramps (25% tiers — speaker and mic tuned independently)
     readonly property int audioUtilThreshold1: 25
@@ -821,14 +1140,14 @@ QtObject {
     readonly property bool wsStartupCloseMagic: false  // Close magic on qs start (only if wsStartupWorkspace > 0). IPC: setWsStartupCloseMagic
 
     // Legacy workspace hover (unused by WorkspacesPill — uses iconHoverBg now).
-    readonly property color wsHoverYellow: "#b8f4ff"           // Soft cyan hover reference
-    readonly property color wsActiveBg:    "#0a3a48"   // Active workspace — solid cyan-tinted dark
-    readonly property color wsActiveBorder: accent     // CachyOS cyan
-    readonly property color wsActiveText:  "#e6f9ff"
+    readonly property color wsHoverYellow: "#b8fff8"           // Soft teal hover reference
+    readonly property color wsActiveBg:    Qt.rgba(0.0, 0.85, 0.80, 0.28)  // Active workspace — teal glass
+    readonly property color wsActiveBorder: accent     // Vivid teal-cyan
+    readonly property color wsActiveText:  "#e6fffc"
     readonly property color wsInactiveText: clock   // Falls back to bar.clock in delegate
 
     // Legacy names some older code paths may still reference
-    readonly property color wsText:        "#7a7a80"
+    readonly property color wsText:        "#8a92b0"
     readonly property color wsActiveTextLegacy: wsActiveText   // (the alias in shell.qml maps wsActiveText → this)
 
     readonly property int  wsButtonWidth:   sp(42)   // Width of each workspace pill button
@@ -919,9 +1238,9 @@ QtObject {
     readonly property int  statGaugeWidth:   sp(56)
     readonly property int  statGaugeHeight:   sp(7)
     readonly property int  statGaugeRadius:   sp(3)
-    readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.07)  // Bar background track on deep black
+    readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.10)  // Bar background track on glass
 
-    // Utilization % bar and text color by load level (green → yellow → orange → red).
+    // Utilization % bar and text color by load level (green → yellow → orange → magenta).
     readonly property color statUtilTier1: "#10B981"   // Low load (0% up to first threshold)
     readonly property color statUtilTier2: "#F59E0B"
     readonly property color statUtilTier3: "#F97316"
@@ -934,8 +1253,8 @@ QtObject {
 
     // CPU/GPU temperature text colors (Memory shows used GiB instead — uses subtext color).
     readonly property color statTempCool: text        // Normal temperature (primary text)
-    readonly property color statTempWarm: "#e8c56a"   // Getting warm
-    readonly property color statTempHot:  muted       // Hot
+    readonly property color statTempWarm: "#f0d060"   // Getting warm (bright gold)
+    readonly property color statTempHot:  muted       // Hot (magenta-pink)
 
     // Temperatures in °C where the label switches cool → warm → hot.
     readonly property int statTempWarmAt: 70
@@ -965,8 +1284,8 @@ QtObject {
     // Animated bars behind the media pill when music is playing.
     readonly property int  cavaBarCount:     40   // Number of vertical bars
     readonly property int  cavaBarGap:        1   // Pixels between bars
-    readonly property color cavaInactive:    Qt.rgba(1, 1, 1, 0.16)  // Bar color when silent
-    readonly property color cavaActive:      Qt.rgba(0.0, 0.77, 0.96, 0.38)  // CachyOS cyan when audio plays
+    readonly property color cavaInactive:    Qt.rgba(1, 1, 1, 0.18)  // Bar color when silent
+    readonly property color cavaActive:      Qt.rgba(0.0, 0.94, 0.88, 0.42)  // Vivid teal when audio plays
     readonly property int  cavaAnimFast:     95   // Animation speed (ms) when media is playing
     readonly property int  cavaAnimSlow:    420   // Animation speed (ms) when idle (saves CPU)
 
@@ -990,12 +1309,12 @@ QtObject {
     readonly property int sysmonDefaultPollInterval: 1500
 
     // Shared active-tab chip style (HyprConfigInsp tab bar)
-    readonly property color panelTabActiveBg:   "#0a3a48"  // solid cyan-tinted dark
+    readonly property color panelTabActiveBg:   Qt.rgba(0.0, 0.85, 0.80, 0.25)  // teal glass chip
     readonly property color panelTabActiveBorder: accent
 
     // Gauge color ramp for CircularGauge (CPU/GPU/memory/temp). <65% / 65–85% / >85%
-    readonly property color gaugeLow:  "#3ecf8e"
-    readonly property color gaugeMid:  "#e8c56a"
+    readonly property color gaugeLow:  "#2ee59a"
+    readonly property color gaugeMid:  "#f0d060"
     readonly property color gaugeHigh: muted
 
     // =========================================================================
@@ -1038,7 +1357,7 @@ QtObject {
     readonly property color inspWindowHighlight:  glassPopupHighlight
     readonly property bool  inspUseGradient:      false
     readonly property color inspGradientTop:      glassPopupBg
-    readonly property color inspGradientBottom:   "#000000"  // solid true black
+    readonly property color inspGradientBottom:   Qt.rgba(0.03, 0.04, 0.08, 0.96)  // deep blue-slate glass fade
 
     // --- Tab bar (wrapping Flow of chips + vertical scrollbar when many tabs)
     readonly property int inspTabBarMaxHeight:       sp(102)
@@ -1058,7 +1377,7 @@ QtObject {
     readonly property int inspSearchRadius:       sp(6)
     readonly property int inspSearchPadding:       sp(4)
     readonly property int inspSearchFontSize:     Math.max(9, sp(12))          //14
-    readonly property color inspSearchSelectionBg: "#0a4a5c"  // solid cyan selection
+    readonly property color inspSearchSelectionBg: Qt.rgba(0.0, 0.90, 0.85, 0.35)  // teal glass selection
 
     // --- Header (title row, version/distro, keyboard hints)
     readonly property int inspTitleFontSize:     Math.max(9, sp(18))
@@ -1098,11 +1417,11 @@ QtObject {
     readonly property real inspEnvValueColRatio:   0.28   // fraction of usable width for Value column
     readonly property int inspEnvDescColMinWidth:       sp(320)    // minimum width for Description column
 
-    // --- Key binding modifier pills (Catppuccin semantic colors)
-    readonly property color inspKeyPillSuper:   "#00c4f5"  // CachyOS cyan
-    readonly property color inspKeyPillShift:   "#e8a06a"
-    readonly property color inspKeyPillCtrl:    "#8b7cf0"
-    readonly property color inspKeyPillAlt:     "#2dd4bf"  // teal sibling of brand cyan
+    // --- Key binding modifier pills (liquid glass semantic colors)
+    readonly property color inspKeyPillSuper:   "#00F0E0"  // Vivid teal-cyan
+    readonly property color inspKeyPillShift:   "#f0a86a"
+    readonly property color inspKeyPillCtrl:    "#c084fc"  // Soft violet (contrast against teal)
+    readonly property color inspKeyPillAlt:     "#00D4C8"  // Teal sibling of brand accent
     readonly property color inspKeyPillDefault: overlay
     readonly property color inspKeyPillTextOnDark:  "#ffffff"
     readonly property color inspKeyPillTextOnLight: "#000000"
@@ -1112,13 +1431,13 @@ QtObject {
     readonly property int inspKeyPillFontSize:     Math.max(9, sp(11))
 
     // --- Environment variable semantic colors (keys + values)
-    readonly property color inspEnvKeyHighlight: "#2dd4bf"   // graphics/wayland-related keys
-    readonly property color inspEnvValueTrue:      "#3ecf8e"   // 1, true, enabled
-    readonly property color inspEnvValueFalse:     "#e8a06a"   // 0, false, disabled
-    readonly property color inspEnvValueTech:      "#00c4f5"   // nvidia, wayland, opengl, direct
+    readonly property color inspEnvKeyHighlight: "#00E8D0"   // graphics/wayland-related keys
+    readonly property color inspEnvValueTrue:      "#2ee59a"   // 1, true, enabled
+    readonly property color inspEnvValueFalse:     "#f0a86a"   // 0, false, disabled
+    readonly property color inspEnvValueTech:      "#00F0E0"   // nvidia, wayland, opengl, direct
     readonly property color inspEnvValuePath:      subtext      // filesystem paths
-    readonly property color inspEnvValueTheme:     "#8b7cf0"   // theme/platform strings
-    readonly property color inspEnvValueTerminal:  "#5ecbff"   // TERMINAL, hyprland refs
+    readonly property color inspEnvValueTheme:     "#c084fc"   // theme/platform strings (violet)
+    readonly property color inspEnvValueTerminal:  "#60D0FF"   // TERMINAL, hyprland refs
 
     // Prefixes that mark an env *key* as graphics/wayland-related (highlighted in Variable column)
     readonly property var inspEnvHighlightPrefixes: [
@@ -1183,9 +1502,9 @@ QtObject {
     // =========================================================================
     // DIVIDERS & SUBTLE LINES
     // =========================================================================
-    readonly property color divider:         "#1a1c1e"   // Solid divider on pure black (no soft white AA)
-    readonly property color dividerSubtle:   "#121416"   // Fainter solid divider
-    readonly property color dividerStrong:   "#2a2c30"   // Section lines
+    readonly property color divider:         Qt.rgba(1, 1, 1, 0.12)   // Soft glass divider
+    readonly property color dividerSubtle:   Qt.rgba(1, 1, 1, 0.07)   // Fainter glass hairline
+    readonly property color dividerStrong:   Qt.rgba(0.55, 0.72, 0.82, 0.14)  // Soft cool section lines
     readonly property int  dividerThickness: 1
 
     // =========================================================================
@@ -1193,7 +1512,7 @@ QtObject {
     // =========================================================================
     readonly property color menuCheckMark:     text    // ✓ / ● glyphs (not accent — avoids purple GTK clash)
     readonly property color menuUncheckedMark: overlay // ○ / empty radio ring
-    readonly property color menuCheckedRow:  "#0a3a48"  // solid cyan-tinted dark on checked items
+    readonly property color menuCheckedRow:  Qt.rgba(0.0, 0.90, 0.85, 0.18)  // teal glass highlight on checked items
 
     // =========================================================================
     // TRAY MENU BUTTON TYPE ENUMS (mirror of QsMenuButtonType for safety)

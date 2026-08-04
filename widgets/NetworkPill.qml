@@ -306,10 +306,10 @@ Rectangle {
         }
 
         readonly property color pillGlyphColor: {
-            if (!networkingEnabled) return bar ? bar.muted : "#5c5c60"
+            if (!networkingEnabled) return bar ? bar.muted : "#6e7a90"
             if (isPortal) return "#F59E0B"
-            if (anyConnected) return bar ? bar.accent : "#00c4f5"
-            return bar ? bar.subtext : "#b0b0b2"
+            if (anyConnected) return bar ? bar.accent : "#00F0E0"
+            return bar ? bar.subtext : "#a8b4c8"
         }
 
         function hasWifiDevice() {
@@ -970,7 +970,7 @@ Rectangle {
                     if (parts.length === 4) return parts[3]
                     return ""
                 }
-                color: bar ? bar.subtext : "#b0b0b2"
+                color: bar ? bar.subtext : "#a8b4c8"
                 font.pixelSize: Math.max(9, Math.round((bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12) * root._s))
                 font.bold: true
                 font.family: bar.fontFamily
@@ -1199,14 +1199,14 @@ Rectangle {
                             spacing: 8
                             Text {
                                 text: "↓ " + root.formatRate(root.lastRxRate)
-                                color: "#00c4f5"
+                                color: "#00F0E0"
                                 font.pixelSize: 11
                                 font.bold: true
                                 font.family: bar.fontFamily
                             }
                             Text {
                                 text: "↑ " + root.formatRate(root.lastTxRate)
-                                color: "#3ecf8e"
+                                color: "#2ee59a"
                                 font.pixelSize: 11
                                 font.bold: true
                                 font.family: bar.fontFamily
@@ -1244,7 +1244,7 @@ Rectangle {
                                 minValue: 0
                                 maxValue: parent.rateMax
                                 leftPadding: 0
-                                lineColor: "#00c4f5"
+                                lineColor: "#00F0E0"
                                 fillColor: Qt.rgba(0.53, 0.71, 0.98, 0.20)
                                 lineWidth: 1.5
                             }
@@ -1258,7 +1258,7 @@ Rectangle {
                                 minValue: 0
                                 maxValue: parent.rateMax
                                 leftPadding: 0
-                                lineColor: "#3ecf8e"
+                                lineColor: "#2ee59a"
                                 fillColor: Qt.rgba(0.65, 0.89, 0.63, 0.12)
                                 lineWidth: 1.5
                             }

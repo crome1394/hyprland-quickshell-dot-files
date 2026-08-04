@@ -8,11 +8,11 @@ Item {
 
     required property var service
 
-    property color textColor: "#ececee"
-    property color subtextColor: "#b0b0b2"
-    property color accentColor: "#00c4f5"
-    property color surfaceColor: "#1a1c1f"
-    property color overlayColor: "#5c5c60"
+    property color textColor: "#f0f4fc"
+    property color subtextColor: "#a8b4c8"
+    property color accentColor: "#00F0E0"
+    property color surfaceColor: "#141a24"
+    property color overlayColor: "#6e7a90"
 
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10

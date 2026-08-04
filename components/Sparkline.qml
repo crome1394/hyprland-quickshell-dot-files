@@ -33,7 +33,7 @@ Item {
     // === Public API ===
     property var history: []
     property int maxPoints: 42
-    property color lineColor: "#00c4f5"
+    property color lineColor: "#00F0E0"
     property color fillColor: Qt.rgba(0.53, 0.71, 0.98, 0.18)
     property real lineWidth: 1.5
 
@@ -46,7 +46,7 @@ Item {
     property string chartTitle: ""
     property color titleColor: "white"
     property color gridColor: Qt.rgba(1, 1, 1, 0.15)
-    property color labelColor: "#b0b0b2"
+    property color labelColor: "#a8b4c8"
     property int leftPadding: 28   // space for Y labels
 
     // Theme fallback (for future centralization of sparkline colors)

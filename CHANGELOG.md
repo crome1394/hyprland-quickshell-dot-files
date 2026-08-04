@@ -4,6 +4,12 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
 
 ## 2026-08 — Control bar & FreshRSS
 
+- **Colors panel** (control strip → **Colors**):
+  - Live theme editor for bar/widgets: Colors column + **Opacity & Text** column; picker opens on the **opposite** side.
+  - Mouse SV square + hue strip, hex / RGB fields, opacity sliders; compact layout so the panel Flickable does not steal drag.
+  - Built-in presets (Liquid glass, Solid dark, Soft grey — not removable); **Save as preset** / remove for user themes in `themes/`.
+  - Active look in `state/theme-colors.json`; helper `scripts/theme-io.sh` (list / export / import / delete).
+  - Liquid-glass default palette (cool blue-slate glass, vivid teal accent, magenta secondary).
 - **Audio panel** (control strip → **Audio**):
   - Multi-device manager via Inspector `AudioMonitorView` (ports, set-default, volume/mute, profiles under Output/Input).
   - Overview pill: **Summary → Active streams → Levels**; tools (**Refresh**, **pw-top**, **Restart audio**); sticky **echo cancel** at bottom.
@@ -17,7 +23,7 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
   - Resolution block slider + refresh dropdown + bit-depth dropdown; linked by hyprctl modes / Hz families.
   - **Apply** at scale 1.0 via `scripts/monitor-mode.sh` (pending until Apply).
 - **SysStats pill layout:** center CPU/Memory/GPU; sections hug content (Memory no longer clips); snug fit with no empty side ballast; single separator slots between visible gauges.
-- Control strip: Position, **Display**, Wallpaper, Widgets, Options, Launch, Autostart, **Services**, **Audio**, **Keybinds**, Clock (toolbar on bottom).
+- Control strip: Position, **Display**, Wallpaper, Widgets, Options, **Colors**, Launch, Autostart, **Services**, **Audio**, **Keybinds**, Clock (toolbar on bottom).
 - **Keybinds** panel: browse `keybindings.lua` by category; edit key chord / category / description (in-place write + backup; Reload Hypr separate).
 - **Services** panel: systemd user/system units with filter + Start/Stop/Restart (reuses Inspector `ServicesView`).
 - Widgets panel: A–Z list; row layout ✓/name · L/C/R · ↑↓; horizontal width scale.

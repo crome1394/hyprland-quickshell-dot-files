@@ -45,9 +45,9 @@ Item {
     // Color ramp (override to customize per gauge, e.g. GPU uses same ramp).
     // Defaults pulled from Theme so a single edit in Theme.qml retunes all gauges.
     property color bgColor: Qt.rgba(1, 1, 1, 0.07)
-    property color lowColor:  (t && t.gaugeLow)  ? t.gaugeLow  : "#3ecf8e"
-    property color midColor:  (t && t.gaugeMid)  ? t.gaugeMid  : "#e8c56a"
-    property color highColor: (t && t.gaugeHigh) ? t.gaugeHigh : "#e85d6f"
+    property color lowColor:  (t && t.gaugeLow)  ? t.gaugeLow  : "#2ee59a"
+    property color midColor:  (t && t.gaugeMid)  ? t.gaugeMid  : "#f0d060"
+    property color highColor: (t && t.gaugeHigh) ? t.gaugeHigh : "#FF3D8A"
 
     // === Derived state (clamped + color selection) ===
     readonly property real clamped: Math.max(0, Math.min(100, value))
@@ -123,7 +123,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.label
             font.pixelSize: root.size * 0.14
-            color: "#ececee"
+            color: "#f0f4fc"
             opacity: 0.9
         }
 
@@ -132,7 +132,7 @@ Item {
             visible: root.subValue !== ""
             text: root.subValue
             font.pixelSize: root.size * 0.12
-            color: "#b0b0b2"
+            color: "#a8b4c8"
         }
     }
 

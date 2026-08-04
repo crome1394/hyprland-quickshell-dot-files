@@ -9,11 +9,11 @@ Item {
     id: root
 
     property string globalFilter: ""
-    property color textColor: "#ececee"
-    property color subtextColor: "#b0b0b2"
-    property color accentColor: "#00c4f5"
-    property color surfaceColor: "#1a1c1f"
-    property color overlayColor: "#5c5c60"
+    property color textColor: "#f0f4fc"
+    property color subtextColor: "#a8b4c8"
+    property color accentColor: "#00F0E0"
+    property color surfaceColor: "#141a24"
+    property color overlayColor: "#6e7a90"
 
     readonly property string stubPath: "/usr/share/hypr/stubs/hl.meta.lua"
     readonly property string configDir: "/home/crome/.config/hypr/config"
@@ -495,7 +495,7 @@ Item {
     function valueTextColor(entry) {
         if (!entry) return textColor
         if (entry.type === "bool") {
-            return entry.value === "true" ? "#3ecf8e" : "#e8a06a"
+            return entry.value === "true" ? "#2ee59a" : "#e8a06a"
         }
         if (entry.set) return accentColor
         return textColor

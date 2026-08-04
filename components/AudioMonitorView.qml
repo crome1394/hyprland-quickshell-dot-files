@@ -32,20 +32,20 @@ Item {
     property bool summaryExpanded: true
     property bool defaultsExpanded: true
 
-    property color textColor: "#ececee"
-    property color subtextColor: "#b0b0b2"
-    property color accentColor: "#00c4f5"
-    property color surfaceColor: "#1a1c1f"
-    property color overlayColor: "#5c5c60"
-    property color okColor: "#3ecf8e"
-    property color warnColor: "#e8c56a"
-    property color errorColor: "#e85d6f"
+    property color textColor: "#f0f4fc"
+    property color subtextColor: "#a8b4c8"
+    property color accentColor: "#00F0E0"
+    property color surfaceColor: "#141a24"
+    property color overlayColor: "#6e7a90"
+    property color okColor: "#2ee59a"
+    property color warnColor: "#f0d060"
+    property color errorColor: "#FF3D8A"
 
     readonly property string pollerScript: "/home/crome/.config/quickshell/scripts/audio-poller.sh"
     readonly property string controlScript: "/home/crome/.config/quickshell/scripts/audio-control.sh"
     readonly property string osdScript: "/home/crome/.config/quickshell/scripts/audio-osd.sh"
 
-    readonly property color defaultBadgeText: "#3ecf8e"
+    readonly property color defaultBadgeText: "#2ee59a"
     readonly property color defaultBadgeBg: Qt.rgba(0.13, 0.77, 0.37, 0.32)
     readonly property color defaultBadgeBorder: Qt.rgba(0.13, 0.77, 0.37, 0.75)
 
@@ -1248,7 +1248,7 @@ Item {
 
                                         Text {
                                             text: "●"
-                                            color: modelData.mute ? root.overlayColor : "#00c4f5"
+                                            color: modelData.mute ? root.overlayColor : "#00F0E0"
                                             font.pixelSize: 11
                                             font.bold: true
                                             Layout.preferredWidth: 14

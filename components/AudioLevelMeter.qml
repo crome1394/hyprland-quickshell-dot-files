@@ -38,9 +38,9 @@ Item {
     readonly property QtObject t: ConfigModule.Config
 
     property color track: (bar && bar.sliderTrack) ? bar.sliderTrack
-                        : (t ? t.sliderTrack : "#1a1c1f")
+                        : (t ? t.sliderTrack : "#141a24")
     property color mutedColor: (bar && bar.muted) ? bar.muted
-                             : (t ? t.muted : "#5c5c60")
+                             : (t ? t.muted : "#6e7a90")
 
     // Local peak-hold (UI only)
     property real peakHold: 0.0

@@ -13,8 +13,8 @@ Personal [Hyprland](https://hyprland.org) status bar and floating **Config Inspe
 
 ## Features
 
-- Glassmorphic bar (top or bottom) with left / center / right zones
-- **Control strip** — right-click empty chrome or **Config menu** gear: layout, Display (resolution / refresh / bit depth), wallpaper, Options, Quick Launch, XDG Autostart, systemd Services, **Audio** (devices/ports/AEC), Keybinds editor, clock formats
+- Liquid-glass bar (top or bottom) with left / center / right zones
+- **Control strip** — right-click empty chrome or **Config menu** gear: layout, Display (resolution / refresh / bit depth), wallpaper, Options, **Colors** (live theme editor), Quick Launch, XDG Autostart, systemd Services, **Audio** (devices/ports/AEC), Keybinds editor, clock formats
 - Network, Bluetooth, Audio (optional combined pill), workspaces (incl. magic space), sys stats, tray, notifications, power
 - FreshRSS reader pill (external secrets file)
 - Floating Hyprland Config Inspector (metrics, logs, services, split Lua configs)
@@ -42,7 +42,7 @@ chmod 600 ~/.config/freshrss-quickshell/freshrss.env
 qs --daemonize -n
 ```
 
-Layout and many prefs persist under `state/bar-layout.json` (created at runtime).
+Layout and many prefs persist under `state/bar-layout.json` (created at runtime). Active color theme: `state/theme-colors.json`; named presets: `themes/*.json` (via control strip → **Colors**).
 
 ## Default bar layout
 
@@ -63,6 +63,7 @@ Reorder / show-hide at runtime: **Config menu → Widgets**. Defaults and catalo
 | **Wallpaper** | hyprpaper apply / folder |
 | **Widgets** | A–Z list: ✓ · name · L/C/R · ↑↓ · width % |
 | **Options** | Behavior prefs (scale, workspaces, applets, stats gauges, Audio panel sections, FreshRSS server) |
+| **Colors** | Live bar/widget theme: swatches, opposite-side picker (mouse / hex / RGB), opacity, built-in + saved presets |
 | **Launch** | Quick Launch pins |
 | **Autostart** | XDG `~/.config/autostart` |
 | **Services** | systemd units Start / Stop / Restart |

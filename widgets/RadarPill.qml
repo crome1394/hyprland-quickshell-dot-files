@@ -815,7 +815,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     radius: 8
-                    color: "#141618"
+                    color: "#141a24"
                     border.width: 1
                     border.color: bar.pillBorder || bar.divider
                     clip: true

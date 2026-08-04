@@ -11,14 +11,14 @@ Item {
     property string globalFilter: ""
     property bool active: false
 
-    property color textColor: "#ececee"
-    property color subtextColor: "#b0b0b2"
-    property color accentColor: "#00c4f5"
-    property color surfaceColor: "#1a1c1f"
-    property color overlayColor: "#5c5c60"
-    property color okColor: "#3ecf8e"
-    property color warnColor: "#e8c56a"
-    property color errorColor: "#e85d6f"
+    property color textColor: "#f0f4fc"
+    property color subtextColor: "#a8b4c8"
+    property color accentColor: "#00F0E0"
+    property color surfaceColor: "#141a24"
+    property color overlayColor: "#6e7a90"
+    property color okColor: "#2ee59a"
+    property color warnColor: "#f0d060"
+    property color errorColor: "#FF3D8A"
 
     readonly property string pollerScript: "/home/crome/.config/quickshell/scripts/services-poller.sh"
     readonly property string controlScript: "/home/crome/.config/quickshell/scripts/services-control.sh"

@@ -7,9 +7,10 @@
 //
 // Single PopupWindow (grabFocus). Expandable panel on top; toolbar buttons
 // along the bottom: Position · Display · Wallpaper · Widgets · Options ·
-// Launch · Autostart · Services · Audio · Keybinds · Clock
-// Widgets = layout; Options = behavior prefs; Services = systemd;
-// Audio = devices/ports/AEC (AudioMonitorView); Keybinds = chord/category/desc.
+// Colors · Launch · Autostart · Services · Audio · Keybinds · Clock
+// Widgets = layout; Options = behavior prefs; Colors = bar/widget theme;
+// Services = systemd; Audio = devices/ports/AEC (AudioMonitorView);
+// Keybinds = chord/category/desc.
 // Display = monitor resolution / refresh / bit depth (Apply to switch).
 // Window height follows content; tall menus scroll only when needed.
 //
@@ -35,23 +36,29 @@ Item {
     readonly property bool open: controlPopup.visible
 
     // "" | "position" | "display" | "wallpaper" | "widgets" | "options" |
-    // "launch" | "autostart" | "services" | "audio" | "keybinds" | "clock"
+    // "colors" | "launch" | "autostart" | "services" | "audio" | "keybinds" | "clock"
     // ("sizes" accepted as alias of "widgets" for any leftover callers)
     property string activeMenu: ""
     property int menuTick: 0
     // Options panel live reads (refreshed on open / toggle)
     property int optionsTick: 0
+    // Colors panel state
+    property int colorsTick: 0
+    property string colorsPickerKey: ""
+    property string colorsExportName: ""
+    property string colorsImportPath: ""
+    property bool colorsShowImport: false
     // Options panel: fixed right slot — toggles & fields share the same vertical center line
     readonly property int optControlColW: 40
     readonly property int optToggleW: 28
     readonly property int optToggleH: 26
     readonly property int optFieldW: 40
-    // Slightly lifted fill so TextFields read as editable (not flat chrome)
-    readonly property color optFieldBg: Qt.rgba(0.18, 0.19, 0.23, 0.92)
-    readonly property color optFieldBgFocus: Qt.rgba(0.22, 0.24, 0.30, 0.95)
+    // Slightly lifted blue-slate glass so TextFields read as editable (not flat chrome)
+    readonly property color optFieldBg: Qt.rgba(0.10, 0.12, 0.18, 0.92)
+    readonly property color optFieldBgFocus: Qt.rgba(0.14, 0.16, 0.24, 0.95)
 
-    readonly property color onGreen: "#4ade80"
-    readonly property color offRed:  "#f87171"
+    readonly property color onGreen: "#2ee59a"
+    readonly property color offRed:  "#FF3D8A"
 
     // Desktop app picker (Launch panel)
     property var desktopApps: []
@@ -149,7 +156,154 @@ Item {
     readonly property bool panelScrollableMenu: {
         const m = root.activeMenu
         return m === "wallpaper" || m === "widgets" || m === "options"
-               || m === "autostart" || m === "launch" || m === "display"
+               || m === "colors" || m === "autostart" || m === "launch" || m === "display"
+    }
+
+    function themeRows() {
+        if (bar && bar.themeUiRows)
+            return bar.themeUiRows
+        return []
+    }
+
+    function _themeIsTextKey(key) {
+        return key === "text" || key === "subtext" || key === "overlay" || key === "clock"
+    }
+
+    // Color swatches column (excludes text-family keys — those live under Text)
+    function themeColorRows() {
+        const rows = root.themeRows()
+        const out = []
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i] && !root._themeIsTextKey(rows[i].key))
+                out.push(rows[i])
+        }
+        return out
+    }
+
+    // Opacity sliders column (glass / border / hover only)
+    function themeOpacityRows() {
+        const rows = root.themeRows()
+        const out = []
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i] && rows[i].opacity)
+                out.push(rows[i])
+        }
+        return out
+    }
+
+    // Text rows (shown under opacity in the combined "Opacity & Text" column)
+    function themeTextRows() {
+        const rows = root.themeRows()
+        const out = []
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i] && root._themeIsTextKey(rows[i].key))
+                out.push(rows[i])
+        }
+        return out
+    }
+
+    // "left"  = key is in the Colors column → picker opens on the right
+    // "right" = key is in Opacity & Text (text swatches) → picker opens on the left
+    function themePickerSide(key) {
+        if (!key || !key.length)
+            return ""
+        if (root._themeIsTextKey(key))
+            return "right"
+        return "left"
+    }
+
+    function themePickerOpenOnRight() {
+        return root.colorsPickerKey.length > 0 && root.themePickerSide(root.colorsPickerKey) === "left"
+    }
+
+    function themePickerOpenOnLeft() {
+        return root.colorsPickerKey.length > 0 && root.themePickerSide(root.colorsPickerKey) === "right"
+    }
+
+    function themeLabelForKey(key) {
+        const rows = root.themeRows()
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].key === key)
+                return rows[i].label
+        }
+        return "Pick a color"
+    }
+
+    function themeKeyHasOpacity(key) {
+        const rows = root.themeRows()
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].key === key)
+                return !!rows[i].opacity
+        }
+        return false
+    }
+
+    function themeColorFor(key) {
+        if (bar && typeof bar.getThemeColor === "function")
+            return bar.getThemeColor(key)
+        return Qt.rgba(0.5, 0.5, 0.5, 1)
+    }
+
+    function themeHexFor(key) {
+        const c = root.themeColorFor(key)
+        if (bar && typeof bar.colorToHex === "function")
+            return bar.colorToHex(c)
+        return "#888888"
+    }
+
+    function themeAlphaPct(key) {
+        const c = root.themeColorFor(key)
+        return Math.round((c && c.a !== undefined ? c.a : 1) * 100)
+    }
+
+    function openColorPicker(key) {
+        root.colorsPickerKey = key || ""
+        root.colorsTick++
+        // Keep picker fully on-screen and avoid Flickable fighting the drag
+        if (typeof panelFlick !== "undefined" && panelFlick) {
+            panelFlick.contentY = 0
+            if (panelFlick.returnToBounds)
+                panelFlick.returnToBounds()
+        }
+    }
+
+    function closeColorPicker() {
+        root.colorsPickerKey = ""
+        root.colorsTick++
+    }
+
+    function applyPickedColor(c) {
+        if (!root.colorsPickerKey || !bar || typeof bar.setThemeColor !== "function")
+            return
+        bar.setThemeColor(root.colorsPickerKey, c)
+        // Bump tick so swatches / opacity labels refresh; picker keeps its own HSV state.
+        root.colorsTick++
+    }
+
+    function setThemeAlphaPct(key, pct) {
+        if (!bar || typeof bar.setThemeAlpha !== "function")
+            return
+        bar.setThemeAlpha(key, Math.max(0, Math.min(100, pct)) / 100)
+        root.colorsTick++
+    }
+
+    function colorsPresetModel() {
+        const out = []
+        if (bar && typeof bar.themeBuiltinList === "function") {
+            const b = bar.themeBuiltinList()
+            for (let i = 0; i < b.length; i++)
+                out.push(b[i])
+        }
+        const saved = (bar && bar.themeSavedList) ? bar.themeSavedList : []
+        for (let j = 0; j < saved.length; j++) {
+            out.push({
+                id: saved[j].path || saved[j].id,
+                name: saved[j].name || saved[j].id,
+                builtin: false,
+                path: saved[j].path || ""
+            })
+        }
+        return out
     }
 
     readonly property bool panelNeedsScroll: {
@@ -258,6 +412,13 @@ Item {
             root.activeMenu = name
         if (root.activeMenu === "options")
             root.refreshOptions()
+        if (root.activeMenu === "colors") {
+            root.colorsPickerKey = ""
+            root.colorsShowImport = false
+            root.colorsTick++
+            if (bar && typeof bar.refreshThemeSavedList === "function")
+                bar.refreshThemeSavedList()
+        }
         root.menuTick++
         root.resetPanelScroll()
         // After layout height settles (tall Widgets → short Clock): remeasure + scroll top
@@ -1875,6 +2036,7 @@ Item {
             implicitWidth: Math.max(mainCol.implicitWidth + root.pad * 2,
                                     (root.activeMenu === "wallpaper"
                                      || root.activeMenu === "options"
+                                     || root.activeMenu === "colors"
                                      || root.activeMenu === "widgets"
                                      || root.activeMenu === "display"
                                      || root.activeMenu === "services"
@@ -1882,7 +2044,8 @@ Item {
                                      || root.activeMenu === "keybinds")
                                         ? ((root.activeMenu === "services"
                                             || root.activeMenu === "audio"
-                                            || root.activeMenu === "keybinds") ? 620 : 520)
+                                            || root.activeMenu === "keybinds") ? 620
+                                           : (root.activeMenu === "colors" ? 560 : 520))
                                         : 420)
             implicitHeight: mainCol.implicitHeight + root.pad * 2
             radius: bar.popupRadius !== undefined ? bar.popupRadius : bar.barRadius
@@ -1966,7 +2129,11 @@ Item {
                         boundsBehavior: Flickable.StopAtBounds
                         flickableDirection: Flickable.VerticalFlick
                         // Scroll only when content exceeds the panel (Wallpaper/Widgets/Autostart/Launch)
-                        interactive: root.panelNeedsScroll && (contentHeight > height + 4)
+                        // Disable scrolling while the color picker is open — Flickable
+                        // otherwise steals vertical drag from the SV square / hue strip.
+                        interactive: root.panelNeedsScroll
+                                     && (contentHeight > height + 4)
+                                     && !(root.activeMenu === "colors" && root.colorsPickerKey.length > 0)
 
                         onContentHeightChanged: {
                             if (contentHeight <= height + 4)
@@ -2274,7 +2441,7 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: dispGpuCol.implicitHeight + 16
                                     radius: root.chipR
-                                    color: Qt.rgba(0.08, 0.10, 0.12, 0.70)
+                                    color: Qt.rgba(0.05, 0.07, 0.12, 0.70)
                                     border.width: 1
                                     border.color: bar.dividerStrong
                                     ColumnLayout {
@@ -2895,7 +3062,7 @@ Item {
                                             width: 148
                                             height: 108
                                             radius: root.chipR
-                                            color: Qt.rgba(0.08, 0.08, 0.10, 0.9)
+                                            color: Qt.rgba(0.05, 0.07, 0.12, 0.88)
                                             border.width: isCurrent || thumbMa.containsMouse ? 2 : 1
                                             border.color: isCurrent ? root.onGreen
                                                           : (thumbMa.containsMouse ? bar.accent : bar.dividerStrong)
@@ -5933,10 +6100,10 @@ Item {
                                     textColor: bar.text
                                     subtextColor: bar.subtext
                                     accentColor: bar.accent
-                                    surfaceColor: Qt.rgba(0.08, 0.08, 0.10, 0.95)
+                                    surfaceColor: Qt.rgba(0.05, 0.07, 0.12, 0.90)
                                     overlayColor: bar.overlay
                                     okColor: root.onGreen
-                                    warnColor: "#e8c56a"
+                                    warnColor: "#f0d060"
                                     errorColor: root.offRed
                                 }
                             }
@@ -6024,10 +6191,10 @@ Item {
                                     textColor: bar.text
                                     subtextColor: bar.subtext
                                     accentColor: bar.accent
-                                    surfaceColor: Qt.rgba(0.08, 0.08, 0.10, 0.95)
+                                    surfaceColor: Qt.rgba(0.05, 0.07, 0.12, 0.90)
                                     overlayColor: bar.overlay
                                     okColor: root.onGreen
-                                    warnColor: "#e8c56a"
+                                    warnColor: "#f0d060"
                                     errorColor: root.offRed
                                 }
                             }
@@ -6083,16 +6250,661 @@ Item {
                                     textColor: bar.text
                                     subtextColor: bar.subtext
                                     accentColor: bar.accent
-                                    surfaceColor: Qt.rgba(0.08, 0.08, 0.10, 0.95)
+                                    surfaceColor: Qt.rgba(0.05, 0.07, 0.12, 0.90)
                                     overlayColor: bar.overlay
                                     okColor: root.onGreen
-                                    warnColor: "#e8c56a"
+                                    warnColor: "#f0d060"
                                     errorColor: root.offRed
                                     fieldBg: root.optFieldBg
                                     fieldBgFocus: root.optFieldBgFocus
                                     pillBorder: bar.pillBorder
                                     fontFamily: bar.fontFamily
                                     fontMono: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                }
+                            }
+
+                            // ===== COLORS (bar / widget theme) =====
+                            ColumnLayout {
+                                visible: root.activeMenu === "colors"
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Colors"
+                                        color: bar.text
+                                        font.pixelSize: bar.popupTitleSize
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 24
+                                        Layout.preferredWidth: resetThemeLbl.implicitWidth + 12
+                                        radius: root.chipR
+                                        color: resetThemeMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: bar.pillBorder
+                                        Text {
+                                            id: resetThemeLbl
+                                            anchors.centerIn: parent
+                                            text: "Reset"
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: resetThemeMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (bar && typeof bar.resetThemeColors === "function")
+                                                    bar.resetThemeColors()
+                                                root.colorsPickerKey = ""
+                                                root.colorsTick++
+                                            }
+                                        }
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "Change how the bar and widgets look. Click a color square to open the picker (mouse, hex, or RGB). Changes apply immediately and are saved."
+                                    color: bar.overlay
+                                    font.pixelSize: bar.popupHintSize
+                                    font.family: bar.fontFamily
+                                }
+
+                                // Built-in presets (cannot be removed)
+                                Text {
+                                    text: "Built-in presets"
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    font.family: bar.fontFamily
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "Always available — these cannot be removed."
+                                    color: bar.overlay
+                                    font.pixelSize: 11
+                                    font.family: bar.fontFamily
+                                }
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Repeater {
+                                        model: {
+                                            void root.colorsTick
+                                            if (bar && typeof bar.themeBuiltinList === "function")
+                                                return bar.themeBuiltinList()
+                                            return []
+                                        }
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            width: Math.max(88, presetLbl.implicitWidth + 14)
+                                            height: 26
+                                            radius: root.chipR
+                                            color: presetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                            border.width: 1
+                                            border.color: bar.pillBorder
+                                            Text {
+                                                id: presetLbl
+                                                anchors.centerIn: parent
+                                                text: modelData.name || modelData.id
+                                                color: bar.subtext
+                                                font.pixelSize: 11
+                                                font.family: bar.fontFamily
+                                            }
+                                            MouseArea {
+                                                id: presetMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (bar && typeof bar.applyThemePreset === "function")
+                                                        bar.applyThemePreset(modelData.id)
+                                                    root.colorsPickerKey = ""
+                                                    root.colorsTick++
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // User presets — save / apply / remove
+                                Text {
+                                    text: "Your presets"
+                                    color: bar.text
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    font.family: bar.fontFamily
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    TextField {
+                                        id: exportNameField
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 28
+                                        placeholderText: "Name for new preset…"
+                                        text: root.colorsExportName
+                                        font.pixelSize: 12
+                                        font.family: bar.fontFamily
+                                        color: bar.text
+                                        placeholderTextColor: bar.overlay
+                                        selectedTextColor: "#000000"
+                                        selectionColor: bar.accent
+                                        background: Rectangle {
+                                            radius: 5
+                                            color: root.optFieldBg
+                                            border.width: 1
+                                            border.color: exportNameField.activeFocus ? bar.accent : bar.pillBorder
+                                        }
+                                        onTextChanged: root.colorsExportName = text
+                                        Keys.onReturnPressed: {
+                                            if (bar && typeof bar.saveThemePreset === "function")
+                                                bar.saveThemePreset(root.colorsExportName)
+                                            else if (bar && typeof bar.exportTheme === "function")
+                                                bar.exportTheme(root.colorsExportName)
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 28
+                                        Layout.preferredWidth: savePresetLbl.implicitWidth + 14
+                                        radius: root.chipR
+                                        color: savePresetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: bar.pillBorder
+                                        Text {
+                                            id: savePresetLbl
+                                            anchors.centerIn: parent
+                                            text: "Save as preset"
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: savePresetMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (bar && typeof bar.saveThemePreset === "function")
+                                                    bar.saveThemePreset(root.colorsExportName)
+                                                else if (bar && typeof bar.exportTheme === "function")
+                                                    bar.exportTheme(root.colorsExportName)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    visible: {
+                                        void root.colorsTick
+                                        void bar.themeSavedList
+                                        const list = (bar && bar.themeSavedList) ? bar.themeSavedList : []
+                                        return list.length > 0
+                                    }
+                                    Repeater {
+                                        model: {
+                                            void root.colorsTick
+                                            void bar.themeSavedList
+                                            return (bar && bar.themeSavedList) ? bar.themeSavedList : []
+                                        }
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            readonly property string presetTarget: modelData.path || modelData.id || ""
+                                            width: userPresetRow.implicitWidth + 12
+                                            height: 28
+                                            radius: root.chipR
+                                            color: userPresetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                            border.width: 1
+                                            border.color: bar.pillBorder
+
+                                            Row {
+                                                id: userPresetRow
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                Text {
+                                                    text: modelData.name || modelData.id
+                                                    color: bar.subtext
+                                                    font.pixelSize: 11
+                                                    font.family: bar.fontFamily
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                }
+                                                // Remove (user presets only — builtins never appear here)
+                                                Rectangle {
+                                                    width: 18
+                                                    height: 18
+                                                    radius: 4
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    color: removePresetMa.containsMouse ? Qt.rgba(1, 0.24, 0.54, 0.35) : Qt.rgba(1, 1, 1, 0.08)
+                                                    border.width: 1
+                                                    border.color: Qt.rgba(1, 1, 1, 0.15)
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "×"
+                                                        color: bar.text
+                                                        font.pixelSize: 12
+                                                        font.bold: true
+                                                    }
+                                                    MouseArea {
+                                                        id: removePresetMa
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            if (bar && typeof bar.deleteThemePreset === "function")
+                                                                bar.deleteThemePreset(presetTarget)
+                                                            root.colorsTick++
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            MouseArea {
+                                                id: userPresetMa
+                                                anchors.fill: parent
+                                                anchors.rightMargin: 24
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (bar && typeof bar.importTheme === "function")
+                                                        bar.importTheme(presetTarget)
+                                                    root.colorsPickerKey = ""
+                                                    root.colorsTick++
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: {
+                                        void root.colorsTick
+                                        void bar.themeSavedList
+                                        const list = (bar && bar.themeSavedList) ? bar.themeSavedList : []
+                                        return list.length === 0
+                                    }
+                                    text: "No custom presets yet — save the current look with a name above."
+                                    color: bar.overlay
+                                    font.pixelSize: 11
+                                    font.family: bar.fontFamily
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                // Optional load-from-file (collapsed)
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Text {
+                                        text: "Load file"
+                                        color: bar.overlay
+                                        font.pixelSize: 11
+                                        font.family: bar.fontFamily
+                                    }
+                                    TextField {
+                                        id: importPathField
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 26
+                                        placeholderText: "/path/to/theme.json"
+                                        text: root.colorsImportPath
+                                        font.pixelSize: 11
+                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                        color: bar.text
+                                        placeholderTextColor: bar.overlay
+                                        selectedTextColor: "#000000"
+                                        selectionColor: bar.accent
+                                        background: Rectangle {
+                                            radius: 5
+                                            color: root.optFieldBg
+                                            border.width: 1
+                                            border.color: importPathField.activeFocus ? bar.accent : bar.pillBorder
+                                        }
+                                        onTextChanged: root.colorsImportPath = text
+                                        Keys.onReturnPressed: {
+                                            if (bar && typeof bar.importTheme === "function")
+                                                bar.importTheme(root.colorsImportPath)
+                                            root.colorsTick++
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 26
+                                        Layout.preferredWidth: loadPathLbl.implicitWidth + 12
+                                        radius: root.chipR
+                                        color: loadPathMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        border.width: 1
+                                        border.color: bar.pillBorder
+                                        Text {
+                                            id: loadPathLbl
+                                            anchors.centerIn: parent
+                                            text: "Load"
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: loadPathMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (bar && typeof bar.importTheme === "function")
+                                                    bar.importTheme(root.colorsImportPath)
+                                                root.colorsTick++
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: !!(bar && bar.themeStatus && bar.themeStatus.length)
+                                    text: bar ? (bar.themeStatus || "") : ""
+                                    color: bar.accent
+                                    font.pixelSize: 11
+                                    font.family: bar.fontFamily
+                                    wrapMode: Text.WordWrap
+                                }
+
+                                // ── Two columns; picker opens on the opposite side ──
+                                // Left:  Colors  (or picker when editing a right-side text color)
+                                // Right: Opacity & Text  (or picker when editing a left-side color)
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignTop
+                                    spacing: 10
+
+                                    // ════ LEFT ════
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 1
+                                        Layout.alignment: Qt.AlignTop
+                                        spacing: 6
+
+                                        Text {
+                                            text: root.themePickerOpenOnLeft()
+                                                  ? ("Picker · " + root.themeLabelForKey(root.colorsPickerKey))
+                                                  : "Colors"
+                                            color: bar.text
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            font.family: bar.fontFamily
+                                        }
+
+                                        // Normal colors list (hidden while picker is parked here)
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+                                            visible: !root.themePickerOpenOnLeft()
+
+                                            Repeater {
+                                                model: {
+                                                    void root.colorsTick
+                                                    return root.themeColorRows()
+                                                }
+                                                delegate: Rectangle {
+                                                    required property var modelData
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 36
+                                                    radius: root.chipR
+                                                    color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                    border.width: 1
+                                                    border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 8
+                                                        anchors.rightMargin: 8
+                                                        spacing: 6
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: modelData.label
+                                                            color: bar.text
+                                                            font.pixelSize: 11
+                                                            font.family: bar.fontFamily
+                                                            elide: Text.ElideRight
+                                                        }
+                                                        Rectangle {
+                                                            Layout.preferredWidth: 24
+                                                            Layout.preferredHeight: 18
+                                                            radius: 4
+                                                            color: {
+                                                                void root.colorsTick
+                                                                return root.themeColorFor(modelData.key)
+                                                            }
+                                                            border.width: 1
+                                                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    if (root.colorsPickerKey === modelData.key)
+                                                                        root.closeColorPicker()
+                                                                    else
+                                                                        root.openColorPicker(modelData.key)
+                                                                }
+                                                            }
+                                                        }
+                                                        Text {
+                                                            text: {
+                                                                void root.colorsTick
+                                                                return root.themeHexFor(modelData.key)
+                                                            }
+                                                            color: bar.subtext
+                                                            font.pixelSize: 10
+                                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                            Layout.preferredWidth: 56
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Picker when a right-side (text) swatch is active
+                                        ColorPickerPanel {
+                                            id: colorsPickerLeft
+                                            Layout.fillWidth: true
+                                            visible: root.themePickerOpenOnLeft()
+                                            title: root.themeLabelForKey(root.colorsPickerKey)
+                                            showOpacity: root.themeKeyHasOpacity(root.colorsPickerKey)
+                                            panelBg: bar.glassPopupBg
+                                            panelBorder: bar.glassPopupBorder
+                                            labelColor: bar.text
+                                            fieldBg: root.optFieldBg
+                                            accentColor: bar.accent
+                                            fontFamily: bar.fontFamily
+                                            onVisibleChanged: {
+                                                if (visible && root.colorsPickerKey.length)
+                                                    colorsPickerLeft.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                            }
+                                            Connections {
+                                                target: root
+                                                function onColorsPickerKeyChanged() {
+                                                    if (root.themePickerOpenOnLeft())
+                                                        colorsPickerLeft.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                                }
+                                            }
+                                            onColorEdited: (c) => root.applyPickedColor(c)
+                                            onAccepted: root.closeColorPicker()
+                                        }
+                                    }
+
+                                    // ════ RIGHT ════
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 1
+                                        Layout.alignment: Qt.AlignTop
+                                        spacing: 6
+
+                                        Text {
+                                            text: root.themePickerOpenOnRight()
+                                                  ? ("Picker · " + root.themeLabelForKey(root.colorsPickerKey))
+                                                  : "Opacity & Text"
+                                            color: bar.text
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            font.family: bar.fontFamily
+                                        }
+
+                                        // Opacity + Text (hidden while picker is parked here)
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+                                            visible: !root.themePickerOpenOnRight()
+
+                                            Repeater {
+                                                model: {
+                                                    void root.colorsTick
+                                                    return root.themeOpacityRows()
+                                                }
+                                                delegate: Rectangle {
+                                                    required property var modelData
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 36
+                                                    radius: root.chipR
+                                                    color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                    border.width: 1
+                                                    border.color: bar.dividerStrong
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 8
+                                                        anchors.rightMargin: 8
+                                                        spacing: 6
+                                                        Text {
+                                                            text: modelData.label
+                                                            color: bar.text
+                                                            font.pixelSize: 11
+                                                            font.family: bar.fontFamily
+                                                            elide: Text.ElideRight
+                                                            Layout.preferredWidth: 88
+                                                            Layout.maximumWidth: 110
+                                                        }
+                                                        Slider {
+                                                            Layout.fillWidth: true
+                                                            from: 0
+                                                            to: 100
+                                                            stepSize: 1
+                                                            value: {
+                                                                void root.colorsTick
+                                                                return root.themeAlphaPct(modelData.key)
+                                                            }
+                                                            onMoved: root.setThemeAlphaPct(modelData.key, value)
+                                                        }
+                                                        Text {
+                                                            text: {
+                                                                void root.colorsTick
+                                                                return root.themeAlphaPct(modelData.key) + "%"
+                                                            }
+                                                            color: bar.subtext
+                                                            font.pixelSize: 11
+                                                            font.family: bar.fontFamily
+                                                            Layout.preferredWidth: 36
+                                                            horizontalAlignment: Text.AlignRight
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            Repeater {
+                                                model: {
+                                                    void root.colorsTick
+                                                    return root.themeTextRows()
+                                                }
+                                                delegate: Rectangle {
+                                                    required property var modelData
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 36
+                                                    radius: root.chipR
+                                                    color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                    border.width: 1
+                                                    border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 8
+                                                        anchors.rightMargin: 8
+                                                        spacing: 6
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: modelData.label
+                                                            color: bar.text
+                                                            font.pixelSize: 11
+                                                            font.family: bar.fontFamily
+                                                            elide: Text.ElideRight
+                                                        }
+                                                        Rectangle {
+                                                            Layout.preferredWidth: 24
+                                                            Layout.preferredHeight: 18
+                                                            radius: 4
+                                                            color: {
+                                                                void root.colorsTick
+                                                                return root.themeColorFor(modelData.key)
+                                                            }
+                                                            border.width: 1
+                                                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    if (root.colorsPickerKey === modelData.key)
+                                                                        root.closeColorPicker()
+                                                                    else
+                                                                        root.openColorPicker(modelData.key)
+                                                                }
+                                                            }
+                                                        }
+                                                        Text {
+                                                            text: {
+                                                                void root.colorsTick
+                                                                return root.themeHexFor(modelData.key)
+                                                            }
+                                                            color: bar.subtext
+                                                            font.pixelSize: 10
+                                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                            Layout.preferredWidth: 56
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Picker when a left-side Colors swatch is active
+                                        ColorPickerPanel {
+                                            id: colorsPickerRight
+                                            Layout.fillWidth: true
+                                            visible: root.themePickerOpenOnRight()
+                                            title: root.themeLabelForKey(root.colorsPickerKey)
+                                            showOpacity: root.themeKeyHasOpacity(root.colorsPickerKey)
+                                            panelBg: bar.glassPopupBg
+                                            panelBorder: bar.glassPopupBorder
+                                            labelColor: bar.text
+                                            fieldBg: root.optFieldBg
+                                            accentColor: bar.accent
+                                            fontFamily: bar.fontFamily
+                                            onVisibleChanged: {
+                                                if (visible && root.colorsPickerKey.length)
+                                                    colorsPickerRight.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                            }
+                                            Connections {
+                                                target: root
+                                                function onColorsPickerKeyChanged() {
+                                                    if (root.themePickerOpenOnRight())
+                                                        colorsPickerRight.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                                }
+                                            }
+                                            onColorEdited: (c) => root.applyPickedColor(c)
+                                            onAccepted: root.closeColorPicker()
+                                        }
+                                    }
                                 }
                             }
 
@@ -6196,6 +7008,7 @@ Item {
                             { id: "wallpaper", label: "Wallpaper" },
                             { id: "widgets",   label: "Widgets" },
                             { id: "options",   label: "Options" },
+                            { id: "colors",    label: "Colors" },
                             { id: "launch",    label: "Launch" },
                             { id: "autostart", label: "Autostart" },
                             { id: "services",  label: "Services" },

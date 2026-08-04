@@ -2,7 +2,7 @@
 
 # Bar control strip (`BarControlBar.qml`)
 
-Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar on the **bottom**; content expands above and resizes to fit (scroll only for tall panels: Display, Wallpaper, Widgets, Options, Launch, Autostart).
+Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar on the **bottom**; content expands above and resizes to fit (scroll only for tall panels: Display, Wallpaper, Widgets, Options, Colors, Launch, Autostart).
 
 | Panel | What it does |
 |-------|----------------|
@@ -11,6 +11,7 @@ Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar o
 | **Wallpaper** | hyprpaper thumbs, apply, pick folder, add images |
 | **Widgets** | **A–Z list**; each row is three columns: **✓/✕ + full name** · **L C R** · **↑ ↓**; width slider 80–180%. Names use flexible width (Notifications, Hypr Inspector, etc. not clipped). Net·BT·Audio is one pill. **Reset layout** / **Reset sizes** |
 | **Options** | Behavior prefs (not layout) — table below |
+| **Colors** | Bar / widget look — color picker, opacity, presets, export/import (see Colors subsection) |
 | **Launch** | Quick Launch pins (installed apps or custom) |
 | **Autostart** | XDG `~/.config/autostart` (see Autostart subsection) |
 | **Services** | systemd user/system units — filter, select, **Start / Stop / Restart** (reuses Inspector `ServicesView`) |
@@ -69,6 +70,38 @@ Related CLI (outside this repo, on PATH): `hypr-resolution` — rofi menu over t
 | **FreshRSS** | Filters expanded on open · HTTPS/HTTP · host · user · API password · **Test** / **Save server** | filters → `bar-layout.json`; credentials → `~/.config/freshrss-quickshell/freshrss.env` (never git) |
 
 Editable text fields use a slightly lifted background so they read as inputs. Toggle/number columns share a fixed right-hand control slot for alignment.
+
+## Colors panel
+
+Non-coder theme editor for the bar and all widgets. Open **Colors** on the control-bar toolbar.
+
+| Control | What it does |
+|---------|----------------|
+| **Built-in presets** | **Liquid glass**, **Solid dark**, **Soft grey** — always available, **cannot be removed** |
+| **Your presets** | Click to apply; **×** removes a custom preset only |
+| **Save as preset** | Stores the current look under a name in `~/.config/quickshell/themes/` |
+| **Load file** | Optional path to any theme `.json` |
+| **Colors** (left) | Swatches for bar / widgets / accent / etc. |
+| **Opacity & Text** (right) | Glass opacity sliders + main / secondary text swatches (one combined section) |
+| **Color square** | Opens the picker on the **opposite** column (left click → picker on right, hiding Opacity & Text; text swatch → picker on left) |
+| **Reset** | Restores factory Liquid glass defaults |
+
+Changes apply **live** across the bar and widgets, and the active look is stored in `state/theme-colors.json` (survives `qs` restart). Layout prefs stay in `bar-layout.json` — resetting colors does not move widgets.
+
+Theme JSON shape:
+
+```json
+{
+  "name": "My teal glass",
+  "version": 1,
+  "colors": {
+    "glassBg": { "hex": "#0A0F1A", "alpha": 0.58 },
+    "accent": { "hex": "#00F0E0", "alpha": 1.0 }
+  }
+}
+```
+
+Script helper: `scripts/theme-io.sh` (`list` / `export` / `import`). Advanced tokens (volume tiers, inspector semantics) stay in `Config.qml`.
 
 ## XDG Autostart panel
 

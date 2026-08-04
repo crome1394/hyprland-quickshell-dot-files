@@ -292,7 +292,7 @@ Rectangle {
         }
 
         function batteryColor(pct) {
-            if (pct < 0) return bar ? bar.subtext : "#b0b0b2"
+            if (pct < 0) return bar ? bar.subtext : "#a8b4c8"
             if (pct <= 15) return "#EF4444"
             if (pct <= 30) return "#F59E0B"
             return "#10B981"
@@ -472,10 +472,10 @@ Rectangle {
         }
 
         readonly property color pillGlyphColor: {
-            if (!hasAdapter || !powered) return bar ? bar.muted : "#5c5c60"
-            if (discovering) return bar ? bar.accent : "#00c4f5"
-            if (connectedCount > 0) return bar ? bar.accent : "#00c4f5"
-            return bar ? bar.subtext : "#b0b0b2"
+            if (!hasAdapter || !powered) return bar ? bar.muted : "#6e7a90"
+            if (discovering) return bar ? bar.accent : "#00F0E0"
+            if (connectedCount > 0) return bar ? bar.accent : "#00F0E0"
+            return bar ? bar.subtext : "#a8b4c8"
         }
     }
 
@@ -749,7 +749,7 @@ Rectangle {
                 }
                 color: bt.primaryBattery >= 0
                        ? bt.batteryColor(bt.primaryBattery)
-                       : (bar ? bar.subtext : "#b0b0b2")
+                       : (bar ? bar.subtext : "#a8b4c8")
                 font.pixelSize: bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12
                 font.bold: true
                 font.family: bar.fontFamily

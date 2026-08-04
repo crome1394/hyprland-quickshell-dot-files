@@ -318,8 +318,10 @@ ShellRoot {
             // Bar edge: Config default, then optional persisted override from state file.
             bar.barPosition = (cfg.barPosition === "bottom") ? "bottom" : "top"
             barLayoutFile.reload()
+            themeColorsFile.reload()
             bar.applyUiScale()
             Qt.callLater(function() { bar.applyWidgetLayout() })
+            Qt.callLater(function() { bar.refreshThemeSavedList() })
 
             // Start optional startup focus only after config is applied (avoids
             // racing the property default before cfg loads). No-op when 0.
@@ -546,6 +548,344 @@ ShellRoot {
                 property bool hasFreshRssPrefs: false
                 property bool freshRssFiltersExpanded: true
             }
+        }
+
+        // =====================================================================
+        // Theme colors (Colors panel) — active look in state/theme-colors.json
+        // Named exports in ~/.config/quickshell/themes/ via theme-io.sh
+        // =====================================================================
+        Io.FileView {
+            id: themeColorsFile
+            path: "/home/crome/.config/quickshell/state/theme-colors.json"
+            watchChanges: true
+            onFileChanged: {
+                if (bar._themeWriteGuard)
+                    return
+                reload()
+            }
+            onLoaded: {
+                if (bar._themeWriteGuard)
+                    return
+                if (themeColorsAdapter.themeJson && themeColorsAdapter.themeJson.length > 2) {
+                    try {
+                        const obj = JSON.parse(themeColorsAdapter.themeJson)
+                        if (obj)
+                            cfg.themeApply(obj)
+                    } catch (e) {}
+                }
+            }
+            onLoadFailed: {
+                // No saved theme yet — keep Config defaults.
+            }
+            Io.JsonAdapter {
+                id: themeColorsAdapter
+                property string themeJson: ""
+            }
+        }
+
+        function persistThemeColors() {
+            bar._themeWriteGuard = true
+            try {
+                const obj = cfg.themeExport("Active")
+                themeColorsAdapter.themeJson = JSON.stringify(obj)
+            } catch (e) {
+                themeColorsAdapter.themeJson = "{}"
+            }
+            themeColorsFile.writeAdapter()
+            Qt.callLater(function() {
+                Qt.callLater(function() {
+                    bar._themeWriteGuard = false
+                })
+            })
+        }
+
+        function schedulePersistThemeColors() {
+            if (bar._themePersistScheduled)
+                return
+            bar._themePersistScheduled = true
+            Qt.callLater(function() {
+                bar._themePersistScheduled = false
+                bar.persistThemeColors()
+            })
+        }
+
+        function setThemeColor(key, color) {
+            if (!cfg.setThemeColor(key, color))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
+
+        function setThemeAlpha(key, alpha) {
+            if (!cfg.setThemeAlpha(key, alpha))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
+
+        function resetThemeColors() {
+            cfg.themeReset()
+            bar.persistThemeColors()
+            bar.themeStatus = "Reset to Liquid glass defaults"
+            return true
+        }
+
+        function applyThemeObject(obj) {
+            if (!obj)
+                return false
+            const ok = cfg.themeApply(obj)
+            if (ok) {
+                bar.persistThemeColors()
+                bar.themeStatus = "Theme applied"
+            } else {
+                bar.themeStatus = "Could not apply theme"
+            }
+            return ok
+        }
+
+        function applyThemePreset(id) {
+            const builtins = cfg.themeBuiltinPresets()
+            for (let i = 0; i < builtins.length; i++) {
+                const p = builtins[i]
+                const slug = (p.name || "").toLowerCase().replace(/\s+/g, "-")
+                if (p.name === id || slug === id || ("builtin:" + slug) === id) {
+                    bar.applyThemeObject(p)
+                    bar.themeStatus = "Applied " + (p.name || id)
+                    return true
+                }
+            }
+            // Saved file id
+            return bar.importTheme(id)
+        }
+
+        function themeBuiltinList() {
+            const builtins = cfg.themeBuiltinPresets()
+            const out = []
+            for (let i = 0; i < builtins.length; i++) {
+                const p = builtins[i]
+                const slug = (p.name || "preset").toLowerCase().replace(/\s+/g, "-")
+                out.push({
+                    id: "builtin:" + slug,
+                    name: p.name || slug,
+                    builtin: true,
+                    path: ""
+                })
+            }
+            return out
+        }
+
+        function refreshThemeSavedList() {
+            themeListProc.running = false
+            themeListProc.command = [bar.themeIoScript, "list"]
+            themeListProc.running = true
+        }
+
+        Io.Process {
+            id: themeListProc
+            running: false
+            stdout: Io.StdioCollector {
+                id: themeListStdout
+                onStreamFinished: {
+                    try {
+                        const raw = (themeListStdout.text || "").trim()
+                        if (!raw.length) {
+                            bar.themeSavedList = []
+                            return
+                        }
+                        const arr = JSON.parse(raw)
+                        bar.themeSavedList = Array.isArray(arr) ? arr : []
+                    } catch (e) {
+                        bar.themeSavedList = []
+                    }
+                }
+            }
+        }
+
+        property string _themeExportName: ""
+        property string _themeImportTarget: ""
+
+        function exportTheme(name) {
+            const n = (name || "").trim()
+            if (!n.length) {
+                bar.themeStatus = "Enter a name to export"
+                return false
+            }
+            bar._themeExportName = n
+            let json = ""
+            try {
+                json = JSON.stringify(cfg.themeExport(n))
+            } catch (e) {
+                bar.themeStatus = "Export failed"
+                return false
+            }
+            themeExportProc.running = false
+            // Python avoids shell-quoting issues with JSON payloads
+            themeExportProc.command = [
+                "python3", "-c",
+                "import json,os,re,sys\n"
+                + "name=sys.argv[1]\n"
+                + "data=json.loads(sys.argv[2])\n"
+                + "root=os.path.expanduser('~/.config/quickshell/themes')\n"
+                + "os.makedirs(root, exist_ok=True)\n"
+                + "safe=re.sub(r'[^A-Za-z0-9._-]+','_', name).strip('_') or 'theme'\n"
+                + "path=os.path.join(root, safe + '.json')\n"
+                + "if not data.get('name'): data['name']=name\n"
+                + "data['version']=int(data.get('version') or 1)\n"
+                + "open(path,'w',encoding='utf-8').write(json.dumps(data, indent=2) + chr(10))\n"
+                + "print(path)\n",
+                n,
+                json
+            ]
+            themeExportProc.running = true
+            return true
+        }
+
+        Io.Process {
+            id: themeExportProc
+            running: false
+            stdout: Io.StdioCollector {
+                id: themeExportStdout
+                onStreamFinished: {
+                    const path = (themeExportStdout.text || "").trim()
+                    if (path.length)
+                        bar.themeStatus = "Saved preset: " + (bar._themeExportName || path)
+                    else
+                        bar.themeStatus = "Preset saved"
+                    bar.refreshThemeSavedList()
+                }
+            }
+            stderr: Io.StdioCollector {
+                id: themeExportStderr
+                onStreamFinished: {
+                    const err = (themeExportStderr.text || "").trim()
+                    if (err.length)
+                        bar.themeStatus = err
+                }
+            }
+        }
+
+        function importTheme(nameOrPath) {
+            const t = (nameOrPath || "").trim()
+            if (!t.length) {
+                bar.themeStatus = "Pick a theme to import"
+                return false
+            }
+            // Built-in presets are not files — apply from code
+            if (("" + t).indexOf("builtin:") === 0) {
+                return bar.applyThemePreset(t)
+            }
+            bar._themeImportTarget = t
+            themeImportProc.running = false
+            themeImportProc.command = [bar.themeIoScript, "import", t]
+            themeImportProc.running = true
+            return true
+        }
+
+        Io.Process {
+            id: themeImportProc
+            running: false
+            stdout: Io.StdioCollector {
+                id: themeImportStdout
+                onStreamFinished: {
+                    const raw = (themeImportStdout.text || "").trim()
+                    if (!raw.length) {
+                        bar.themeStatus = "Import failed (empty)"
+                        return
+                    }
+                    try {
+                        const obj = JSON.parse(raw)
+                        if (bar.applyThemeObject(obj))
+                            bar.themeStatus = "Loaded " + (obj.name || bar._themeImportTarget)
+                    } catch (e) {
+                        bar.themeStatus = "Import failed (bad JSON)"
+                    }
+                }
+            }
+            stderr: Io.StdioCollector {
+                id: themeImportStderr
+                onStreamFinished: {
+                    const err = (themeImportStderr.text || "").trim()
+                    if (err.length)
+                        bar.themeStatus = err
+                }
+            }
+        }
+
+        // Save current colors as a named user preset (same as export)
+        function saveThemePreset(name) {
+            const n = (name || "").trim()
+            if (!n.length) {
+                bar.themeStatus = "Enter a name for the preset"
+                return false
+            }
+            // Never overwrite built-in names as "removable" confusion — still allow save
+            // with that display name; file lives in themes/ and is user-owned.
+            const ok = bar.exportTheme(n)
+            if (ok)
+                bar.themeStatus = "Saving preset…"
+            return ok
+        }
+
+        function deleteThemePreset(nameOrPath) {
+            const t = (nameOrPath || "").trim()
+            if (!t.length) {
+                bar.themeStatus = "Nothing to remove"
+                return false
+            }
+            // Built-ins are code-defined and cannot be removed
+            if (("" + t).indexOf("builtin:") === 0) {
+                bar.themeStatus = "Built-in presets cannot be removed"
+                return false
+            }
+            const builtins = cfg.themeBuiltinPresets()
+            for (let i = 0; i < builtins.length; i++) {
+                const p = builtins[i]
+                const slug = (p.name || "").toLowerCase().replace(/\s+/g, "-")
+                if (p.name === t || slug === t) {
+                    bar.themeStatus = "Built-in presets cannot be removed"
+                    return false
+                }
+            }
+            bar._themeDeleteTarget = t
+            themeDeleteProc.running = false
+            themeDeleteProc.command = [bar.themeIoScript, "delete", t]
+            themeDeleteProc.running = true
+            return true
+        }
+
+        property string _themeDeleteTarget: ""
+
+        Io.Process {
+            id: themeDeleteProc
+            running: false
+            stdout: Io.StdioCollector {
+                id: themeDeleteStdout
+                onStreamFinished: {
+                    const msg = (themeDeleteStdout.text || "").trim()
+                    bar.themeStatus = msg.length ? msg.replace(/^deleted /, "Removed ") : "Preset removed"
+                    bar.refreshThemeSavedList()
+                }
+            }
+            stderr: Io.StdioCollector {
+                id: themeDeleteStderr
+                onStreamFinished: {
+                    const err = (themeDeleteStderr.text || "").trim()
+                    if (err.length)
+                        bar.themeStatus = err
+                }
+            }
+        }
+
+        function getThemeColor(key) {
+            return cfg.getThemeColor(key)
+        }
+
+        function colorToHex(c) {
+            return cfg.colorToHex(c)
+        }
+
+        function colorWithAlpha(c, a) {
+            return cfg.colorWithAlpha(c, a)
         }
 
         function persistBarLayout() {
@@ -1239,25 +1579,33 @@ ShellRoot {
         readonly property alias statTempHot: cfg.statTempHot
         readonly property alias statValueSeparator: cfg.statValueSeparator
 
-        // --- Glassmorphic tokens
-        readonly property alias glassBg: cfg.glassBg
-        readonly property alias glassBorder: cfg.glassBorder
-        readonly property alias glassHighlight: cfg.glassHighlight
-        readonly property alias glassPillBg: cfg.glassPillBg
-        readonly property alias glassHover: cfg.glassHover
-        readonly property alias glassPopupBg: cfg.glassPopupBg
-        readonly property alias glassPopupBorder: cfg.glassPopupBorder
-        readonly property alias glassPopupHighlight: cfg.glassPopupHighlight
-        readonly property alias pillBg: cfg.pillBg
-        readonly property alias pillBorder: cfg.pillBorder
-        readonly property alias pillHover: cfg.pillHover
+        // --- Glassmorphic tokens (writable for Colors panel live editing)
+        property alias glassBg: cfg.glassBg
+        property alias glassBorder: cfg.glassBorder
+        property alias glassHighlight: cfg.glassHighlight
+        property alias glassPillBg: cfg.glassPillBg
+        property alias glassHover: cfg.glassHover
+        property alias glassPopupBg: cfg.glassPopupBg
+        property alias glassPopupBorder: cfg.glassPopupBorder
+        property alias glassPopupHighlight: cfg.glassPopupHighlight
+        property alias pillBg: cfg.pillBg
+        property alias pillBorder: cfg.pillBorder
+        property alias pillHover: cfg.pillHover
 
-        // --- State colors
-        readonly property alias pillHoverBorder: cfg.pillHoverBorder
-        readonly property alias iconHoverBg: cfg.iconHoverBg
-        readonly property alias controlHoverBg: cfg.controlHoverBg
-        readonly property alias controlActiveBg: cfg.controlActiveBg
-        readonly property alias popupButtonHoverBg: cfg.popupButtonHoverBg
+        // --- State colors (writable for Colors panel)
+        property alias pillHoverBorder: cfg.pillHoverBorder
+        property alias iconHoverBg: cfg.iconHoverBg
+        property alias controlHoverBg: cfg.controlHoverBg
+        property alias controlActiveBg: cfg.controlActiveBg
+        property alias popupButtonHoverBg: cfg.popupButtonHoverBg
+
+        // --- Theme editor (Colors panel)
+        readonly property alias themeUiRows: cfg.themeUiRows
+        readonly property string themeIoScript: "/home/crome/.config/quickshell/scripts/theme-io.sh"
+        property string themeStatus: ""
+        property var themeSavedList: []
+        property bool _themeWriteGuard: false
+        property bool _themePersistScheduled: false
 
         // --- Radii
         property alias barRadius: cfg.barRadius

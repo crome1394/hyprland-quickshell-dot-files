@@ -523,7 +523,7 @@ Rectangle {
         }
 
         function batteryColor(pct) {
-            if (pct < 0) return bar ? bar.subtext : "#b0b0b2";
+            if (pct < 0) return bar ? bar.subtext : "#a8b4c8";
             if (pct <= 15) return "#EF4444";
             if (pct <= 30) return "#F59E0B";
             return "#10B981";
@@ -2113,7 +2113,7 @@ Rectangle {
 
                                         Text {
                                             text: "●"
-                                            color: modelData.mute ? bar.muted : "#00c4f5"
+                                            color: modelData.mute ? bar.muted : "#00F0E0"
                                             font.pixelSize: 11
                                             font.bold: true
                                             Layout.preferredWidth: 14
