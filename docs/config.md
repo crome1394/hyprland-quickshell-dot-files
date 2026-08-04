@@ -7,15 +7,18 @@
 Edit `Config.qml` to change:
 
 - Colors, fonts, spacing, radii, and icon glyphs
+- **Theme editor API** (`themeUiRows`, `themeEditableKeys`, `getThemeColor` / `setThemeColor`) — control strip **Colors** panel; includes button/workspace fills and text tokens (`controlActiveBg`, `buttonText`, `wsActiveBg`, …)
 - Bar position and size (`barPosition`, `barHeight`, `barEdgeMargin`)
 - Bar pill visibility defaults (`showLauncherPill`, `showAudioPill`, etc.) and launcher command (`launcherCommand`)
 - **Quick Launch** apps (`quickLaunchApps`)
 - **Notification bell** daemon commands (`notification*`)
 - **Power menu** session commands (`power*Command`, `powerMenuActions`)
 - **Kill Target** pill (`killTargetIcon`, `showKillTargetPill`, etc.)
-- Workspace pill count, active-only mode, magic pill default, and startup focus (search **WORKSPACES**; IPC: `setWsMinimumShown`, `setWsShowOnlyActive`, `setWsStartupWorkspace`, `setWsStartupCloseMagic`)
+- Workspace pill count, active-only mode, magic pill default, startup focus, and workspace colors (search **WORKSPACES**; IPC: `setWsMinimumShown`, `setWsShowOnlyActive`, `setWsStartupWorkspace`, `setWsStartupCloseMagic`)
 - System Stats pill and metrics popups (search **SYS STATS PILL** and `popupStats*`)
 - Inspector sizing and semantic colors (search `insp*` properties)
+
+Day-to-day color tweaks belong in the control strip **Colors** panel (persisted to `state/theme-colors.json`); only edit `Config.qml` for factory defaults or tokens not exposed in the UI.
 
 Every property in `Config.qml` has an inline or section comment explaining what it does and which widget uses it. Search for the section headers in the file (e.g. **POWER MENU**, **NOTIFICATION BELL**, **WIDGET VISIBILITY**).
 

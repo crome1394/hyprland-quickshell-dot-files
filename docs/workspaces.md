@@ -14,6 +14,15 @@ Workspace pill behavior is configured in `Config.qml` and applied by `widgets/Wo
 | `wsSpecialName` | `"magic"` | Hyprland special workspace name (must match `keybindings.lua`) |
 | `wsIcon1` … `wsIcon10` | — | Per-workspace pill icons; see icon picker comment in `Config.qml` |
 
+**Colors** (editable live from control strip → **Colors**; also in `Config.qml` / `state/theme-colors.json`):
+
+| Property | Default | UI label | Description |
+|----------|---------|----------|-------------|
+| `wsActiveBg` | teal glass | **Active workspace** | Fill of the focused workspace pill |
+| `wsActiveBorder` | tracks `accent` | — | Border of the focused workspace pill |
+| `wsActiveText` | `#e6fffc` | **Active workspace text** | Number/icon color when active |
+| `wsInactiveText` | `#ffffff` | **Workspace text** | Number/icon color when inactive (hover uses active button text / accent) |
+
 **Examples**
 
 ```qml

@@ -62,8 +62,8 @@ Reorder / show-hide at runtime: **Config menu → Widgets**. Defaults and catalo
 | **Display** | Res / refresh / 8·10-bit, adapter + NVIDIA stats, Apply (`hyprctl` modes) |
 | **Wallpaper** | hyprpaper apply / folder |
 | **Widgets** | A–Z list: ✓ · name · L/C/R · ↑↓ · width % |
-| **Options** | Behavior prefs (scale, workspaces, applets, stats gauges, Audio panel sections, FreshRSS server) |
-| **Colors** | Live bar/widget theme: swatches, opposite-side picker (mouse / hex / RGB), opacity, built-in + saved presets |
+| **Options** | Behavior prefs (scale, workspaces, applets, stats gauges, Audio panel sections, color presets visibility, FreshRSS server) |
+| **Colors** | Live theme: Colors + Opacity columns, full-width Text row, optional presets; workspace / button fills & labels |
 | **Launch** | Quick Launch pins |
 | **Autostart** | XDG `~/.config/autostart` |
 | **Services** | systemd units Start / Stop / Restart |
