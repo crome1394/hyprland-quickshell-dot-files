@@ -5,3 +5,4 @@ secrets/
 # Runtime prefs / local noise
 echo-cancel.pref
 state/
+themes/
