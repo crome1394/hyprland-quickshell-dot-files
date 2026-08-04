@@ -61,7 +61,7 @@ Related CLI (outside this repo, on PATH): `hypr-resolution` — rofi menu over t
 
 | Section | Controls | Persistence |
 |---------|----------|-------------|
-| **Bar / UI** | UI scale auto/manual · Config menu icon on bar | `bar-layout.json` |
+| **Bar / UI** | UI scale auto/manual · Config menu icon on bar · **Color presets section** (show/hide presets on Colors) | `bar-layout.json` |
 | **Workspaces** | Magic pill · only-active · min pills · startup workspace · close magic on start | `bar-layout.json` |
 | **Audio** | Show AEC section · show Summary / device profiles / Level meters · keep Summary / Active streams expanded (AEC on/off is only in the Audio panel) | visibility/expand → `bar-layout.json` |
 | **Network** | nm-applet sticky login autostart | XDG / applet control |
@@ -75,18 +75,43 @@ Editable text fields use a slightly lifted background so they read as inputs. To
 
 Non-coder theme editor for the bar and all widgets. Open **Colors** on the control-bar toolbar.
 
+### Layout
+
+| Section | Placement | Contents |
+|---------|-----------|----------|
+| **Colors** | Left column | Swatches: bar / widget / menu backgrounds, border, accent, warning, hover, active button, active workspace, top edge shine |
+| **Opacity** | Right column | Opacity sliders for glass / border / hover / button / workspace fills |
+| **Text** | Full-width row under Colors / Opacity | Two columns of text swatches (left / right split) |
+| **Presets** | Bottom (optional) | Built-in + your presets + load file — toggle from **Options → Color presets section** |
+
+The color picker opens on the **opposite** side of the Colors/Opacity row (left swatch → picker on right; right-column text swatch → picker on left).
+
+### Controls
+
 | Control | What it does |
 |---------|----------------|
+| **Colors** swatches | Bar background, widget background, menu background, border, accent, warning/pink, hover glow, **active button** (selected control-bar tab), **active workspace** (selected workspace pill), top edge shine |
+| **Opacity** sliders | Alpha for glass fills, borders, hover, active button, active workspace, top edge shine |
+| **Text** swatches | **Main** / **Secondary** text · **Button text** / **Active button text** (control-bar tab labels) · **Active workspace text** / **Workspace text** (workspace pill numbers & icons) |
 | **Built-in presets** | **Liquid glass**, **Solid dark**, **Soft grey** — always available, **cannot be removed** |
 | **Your presets** | Click to apply; **×** removes a custom preset only |
 | **Save as preset** | Stores the current look under a name in `~/.config/quickshell/themes/` |
 | **Load file** | Optional path to any theme `.json` |
-| **Colors** (left) | Swatches for bar / widgets / accent / etc. |
-| **Opacity & Text** (right) | Glass opacity sliders + main / secondary text swatches (one combined section) |
-| **Color square** | Opens the picker on the **opposite** column (left click → picker on right, hiding Opacity & Text; text swatch → picker on left) |
 | **Reset** | Restores factory Liquid glass defaults |
 
-Changes apply **live** across the bar and widgets, and the active look is stored in `state/theme-colors.json` (survives `qs` restart). Layout prefs stay in `bar-layout.json` — resetting colors does not move widgets.
+### What maps to what
+
+| UI label | Theme key | Affects |
+|----------|-----------|---------|
+| Widget background | `glassPillBg` / `pillBg` | Bar pills + inactive control-bar tabs |
+| Active button | `controlActiveBg` | Selected control-bar toolbar tab fill |
+| Active workspace | `wsActiveBg` | Selected workspace pill fill on the bar |
+| Button text | `buttonText` | Inactive control-bar tab labels |
+| Active button text | `buttonTextActive` | Active / hovered control-bar tab labels |
+| Active workspace text | `wsActiveText` | Number/icon on the active workspace |
+| Workspace text | `wsInactiveText` | Number/icon on inactive workspaces |
+
+Changes apply **live** across the bar and widgets, and the active look is stored in `state/theme-colors.json` (survives `qs` restart). Layout prefs (including **Color presets section** visibility) stay in `bar-layout.json` — resetting colors does not move widgets.
 
 Theme JSON shape:
 
@@ -96,7 +121,9 @@ Theme JSON shape:
   "version": 1,
   "colors": {
     "glassBg": { "hex": "#0A0F1A", "alpha": 0.58 },
-    "accent": { "hex": "#00F0E0", "alpha": 1.0 }
+    "accent": { "hex": "#00F0E0", "alpha": 1.0 },
+    "wsActiveBg": { "hex": "#00D9CC", "alpha": 0.28 },
+    "buttonText": { "hex": "#A8B4C8", "alpha": 1.0 }
   }
 }
 ```

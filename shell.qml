@@ -137,6 +137,7 @@ ShellRoot {
     property bool showFreshRssPill: true
     property bool showHyprInspPill: false
     property bool showControlBarPill: true       // Bar control / config menu icon on the bar
+    property bool showColorPresets: true         // Colors panel: built-in / custom presets section
     property bool showMagicWorkspacePill: true   // Magic pill inside WorkspacesPill (wsShowSpecialPill)
     // Sys Stats gauges (Options panel; all on by default)
     property bool showStatCpu: true
@@ -293,6 +294,7 @@ ShellRoot {
             root.showFreshRssPill = cfg.showFreshRssPill
             root.showHyprInspPill = cfg.showHyprInspPill
             root.showControlBarPill = cfg.showControlBarPill
+            root.showColorPresets = true
             root.showMagicWorkspacePill = cfg.wsShowSpecialPill
             root.showStatCpu = true
             root.showStatMem = true
@@ -444,6 +446,8 @@ ShellRoot {
                 root.showFreshRssPill = barLayoutAdapter.showFreshRssPill
                 root.showHyprInspPill = barLayoutAdapter.showHyprInspPill
                 root.showControlBarPill = barLayoutAdapter.showControlBarPill
+                if (barLayoutAdapter.hasColorPresetPrefs)
+                    root.showColorPresets = barLayoutAdapter.showColorPresets
                 if (barLayoutAdapter.hasStatPrefs) {
                     root.showStatCpu = barLayoutAdapter.showStatCpu
                     root.showStatMem = barLayoutAdapter.showStatMem
@@ -525,6 +529,9 @@ ShellRoot {
                 property bool showFreshRssPill: true
                 property bool showHyprInspPill: false
                 property bool showControlBarPill: true
+                // Colors panel presets section (BarControlBar → Options)
+                property bool hasColorPresetPrefs: false
+                property bool showColorPresets: true
                 // Workspace Options (BarControlBar → Options)
                 property bool hasWorkspacePrefs: false
                 property bool showMagicWorkspacePill: true
@@ -926,6 +933,8 @@ ShellRoot {
             barLayoutAdapter.showFreshRssPill = root.showFreshRssPill
             barLayoutAdapter.showHyprInspPill = root.showHyprInspPill
             barLayoutAdapter.showControlBarPill = root.showControlBarPill
+            barLayoutAdapter.hasColorPresetPrefs = true
+            barLayoutAdapter.showColorPresets = root.showColorPresets
             barLayoutAdapter.hasWorkspacePrefs = true
             barLayoutAdapter.showMagicWorkspacePill = root.showMagicWorkspacePill
             barLayoutAdapter.wsMinimumShown = root.wsMinimumShown
@@ -957,6 +966,10 @@ ShellRoot {
         // --- Options panel setters (shared with shell IPC) ---
         function setShowControlBarPill(enabled) {
             root.showControlBarPill = !!enabled
+            persistBarLayout()
+        }
+        function setShowColorPresets(enabled) {
+            root.showColorPresets = !!enabled
             persistBarLayout()
         }
         function setShowStatCpu(enabled) {
@@ -1598,6 +1611,8 @@ ShellRoot {
         property alias controlHoverBg: cfg.controlHoverBg
         property alias controlActiveBg: cfg.controlActiveBg
         property alias popupButtonHoverBg: cfg.popupButtonHoverBg
+        property alias buttonText: cfg.buttonText
+        property alias buttonTextActive: cfg.buttonTextActive
 
         // --- Theme editor (Colors panel)
         readonly property alias themeUiRows: cfg.themeUiRows
@@ -1816,10 +1831,10 @@ ShellRoot {
 
         // --- Workspaces
         readonly property alias wsHoverYellow: cfg.wsHoverYellow
-        readonly property alias wsActiveBg: cfg.wsActiveBg
+        property alias wsActiveBg: cfg.wsActiveBg
         readonly property alias wsActiveBorder: cfg.wsActiveBorder
-        readonly property alias wsActiveText: cfg.wsActiveText
-        readonly property alias wsInactiveText: cfg.wsInactiveText
+        property alias wsActiveText: cfg.wsActiveText
+        property alias wsInactiveText: cfg.wsInactiveText
         readonly property alias wsButtonWidth: cfg.wsButtonWidth
         readonly property alias wsButtonHeight: cfg.wsButtonHeight
         readonly property alias wsIconSize: cfg.wsIconSize
@@ -1847,6 +1862,7 @@ ShellRoot {
         property alias wsStartupCloseMagic: root.wsStartupCloseMagic
         property alias showMagicWorkspacePill: root.showMagicWorkspacePill
         property alias showControlBarPill: root.showControlBarPill
+        property alias showColorPresets: root.showColorPresets
         property alias showStatCpu: root.showStatCpu
         property alias showStatMem: root.showStatMem
         property alias showStatGpu: root.showStatGpu

@@ -5,9 +5,12 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
 ## 2026-08 — Control bar & FreshRSS
 
 - **Colors panel** (control strip → **Colors**):
-  - Live theme editor for bar/widgets: Colors column + **Opacity & Text** column; picker opens on the **opposite** side.
-  - Mouse SV square + hue strip, hex / RGB fields, opacity sliders; compact layout so the panel Flickable does not steal drag.
+  - Live theme editor: **Colors** + **Opacity** columns, full-width **Text** row (left/right split), optional **Presets** at the bottom.
+  - Picker opens on the **opposite** Colors/Opacity column (mouse SV + hue, hex / RGB); compact so the panel Flickable does not steal drag.
+  - Editable fills: active control-bar tab (`controlActiveBg`), active workspace pill (`wsActiveBg` + opacity).
+  - Editable labels: button text / active button text (toolbar tabs), workspace text / active workspace text (bar pills).
   - Built-in presets (Liquid glass, Solid dark, Soft grey — not removable); **Save as preset** / remove for user themes in `themes/`.
+  - Options → **Color presets section** toggles preset UI visibility (`showColorPresets` in `bar-layout.json`).
   - Active look in `state/theme-colors.json`; helper `scripts/theme-io.sh` (list / export / import / delete).
   - Liquid-glass default palette (cool blue-slate glass, vivid teal accent, magenta secondary).
 - **Audio panel** (control strip → **Audio**):

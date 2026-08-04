@@ -434,7 +434,8 @@ Rectangle {
                               : bar.wsIconForId(modelData ? modelData.id : 0)
                         font.pixelSize: bar.wsIconSize
                         color: isActive ? bar.wsActiveText :
-                               (isHovered ? bar.accent : bar.clock)
+                               (isHovered ? (bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.accent)
+                                          : (bar.wsInactiveText !== undefined ? bar.wsInactiveText : bar.clock))
                         font.family: bar.fontFamily
                         font.bold: true
                     }
@@ -444,7 +445,8 @@ Rectangle {
                         font.pixelSize: bar.wsNumberSize || 15
                         font.bold: true
                         color: isActive ? bar.wsActiveText :
-                               (isHovered ? bar.accent : bar.clock)
+                               (isHovered ? (bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.accent)
+                                          : (bar.wsInactiveText !== undefined ? bar.wsInactiveText : bar.clock))
                     }
                 }
             }

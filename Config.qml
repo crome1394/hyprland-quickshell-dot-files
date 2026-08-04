@@ -141,6 +141,10 @@ QtObject {
     // Specific popup button hover
     property color popupButtonHoverBg: Qt.rgba(0.08, 0.10, 0.16, 0.65)
 
+    // Control-bar menu tab labels (Position / Colors / …) — independent of accent/subtext
+    property color buttonText:       "#a8b4c8"   // Inactive menu button label
+    property color buttonTextActive: "#00F0E0"   // Active / hovered menu button label
+
     // =========================================================================
     // THEME EDITOR API (control-bar Colors panel — non-coder friendly)
     // =========================================================================
@@ -155,7 +159,9 @@ QtObject {
         "accent", "muted",
         "text", "subtext", "overlay",
         "bg", "surface", "clock",
-        "controlActiveBg", "popupButtonHoverBg"
+        "controlActiveBg", "popupButtonHoverBg",
+        "buttonText", "buttonTextActive",
+        "wsActiveBg", "wsActiveText", "wsInactiveText"
     ]
 
     // Friendly rows shown in the Colors panel (label + property key + opacity?).
@@ -168,7 +174,13 @@ QtObject {
         { key: "muted",       label: "Warning / pink",    opacity: false },
         { key: "text",        label: "Main text",         opacity: false },
         { key: "subtext",     label: "Secondary text",    opacity: false },
+        { key: "buttonText",  label: "Button text",       opacity: false },
+        { key: "buttonTextActive", label: "Active button text", opacity: false },
         { key: "glassHover",  label: "Hover glow",        opacity: true },
+        { key: "controlActiveBg", label: "Active button", opacity: true },
+        { key: "wsActiveBg",  label: "Active workspace",  opacity: true },
+        { key: "wsActiveText", label: "Active workspace text", opacity: false },
+        { key: "wsInactiveText", label: "Workspace text", opacity: false },
         { key: "glassHighlight", label: "Top edge shine", opacity: true }
     ]
 
@@ -255,6 +267,11 @@ QtObject {
         case "iconHoverBg": return iconHoverBg
         case "controlActiveBg": return controlActiveBg
         case "popupButtonHoverBg": return popupButtonHoverBg
+        case "buttonText": return buttonText
+        case "buttonTextActive": return buttonTextActive
+        case "wsActiveBg": return wsActiveBg
+        case "wsActiveText": return wsActiveText
+        case "wsInactiveText": return wsInactiveText
         default: return null
         }
     }
@@ -267,7 +284,12 @@ QtObject {
         case "text": text = c; break
         case "subtext": subtext = c; break
         case "overlay": overlay = c; break
-        case "accent": accent = c; pillHoverBorder = c; break
+        case "accent":
+            accent = c
+            pillHoverBorder = c
+            // Keep active menu labels in the accent family unless user overrides later
+            buttonTextActive = c
+            break
         case "muted": muted = c; break
         case "todayBg": todayBg = c; break
         case "weekday": weekday = c; break
@@ -294,6 +316,11 @@ QtObject {
         case "iconHoverBg": iconHoverBg = c; break
         case "controlActiveBg": controlActiveBg = c; break
         case "popupButtonHoverBg": popupButtonHoverBg = c; break
+        case "buttonText": buttonText = c; break
+        case "buttonTextActive": buttonTextActive = c; break
+        case "wsActiveBg": wsActiveBg = c; break
+        case "wsActiveText": wsActiveText = c; break
+        case "wsInactiveText": wsInactiveText = c; break
         default: return false
         }
         return true
@@ -374,7 +401,12 @@ QtObject {
                 pillBorder: { hex: "#ffffff", alpha: 0.10 },
                 iconHoverBg: { hex: "#00d9d1", alpha: 0.28 },
                 controlActiveBg: { hex: "#00b3bf", alpha: 0.35 },
-                popupButtonHoverBg: { hex: "#141a29", alpha: 0.65 }
+                popupButtonHoverBg: { hex: "#141a29", alpha: 0.65 },
+                buttonText: { hex: "#a8b4c8", alpha: 1 },
+                buttonTextActive: { hex: "#00F0E0", alpha: 1 },
+                wsActiveBg: { hex: "#00d9cc", alpha: 0.28 },
+                wsActiveText: { hex: "#e6fffc", alpha: 1 },
+                wsInactiveText: { hex: "#ffffff", alpha: 1 }
             }
         }
     }
@@ -405,7 +437,12 @@ QtObject {
                 pillBorder: { hex: "#0a0c0e", alpha: 1 },
                 iconHoverBg: { hex: "#0a3a48", alpha: 1 },
                 controlActiveBg: { hex: "#16181c", alpha: 1 },
-                popupButtonHoverBg: { hex: "#121416", alpha: 1 }
+                popupButtonHoverBg: { hex: "#121416", alpha: 1 },
+                buttonText: { hex: "#b0b0b2", alpha: 1 },
+                buttonTextActive: { hex: "#00c4f5", alpha: 1 },
+                wsActiveBg: { hex: "#16181c", alpha: 1 },
+                wsActiveText: { hex: "#ececee", alpha: 1 },
+                wsInactiveText: { hex: "#ffffff", alpha: 1 }
             }
         }
     }
@@ -436,7 +473,12 @@ QtObject {
                 pillBorder: { hex: "#ffffff", alpha: 0.08 },
                 iconHoverBg: { hex: "#7ec8e3", alpha: 0.22 },
                 controlActiveBg: { hex: "#7ec8e3", alpha: 0.28 },
-                popupButtonHoverBg: { hex: "#2a2c32", alpha: 0.70 }
+                popupButtonHoverBg: { hex: "#2a2c32", alpha: 0.70 },
+                buttonText: { hex: "#a0a4b0", alpha: 1 },
+                buttonTextActive: { hex: "#7ec8e3", alpha: 1 },
+                wsActiveBg: { hex: "#7ec8e3", alpha: 0.28 },
+                wsActiveText: { hex: "#e8f7fc", alpha: 1 },
+                wsInactiveText: { hex: "#ffffff", alpha: 1 }
             }
         }
     }
@@ -1141,10 +1183,11 @@ QtObject {
 
     // Legacy workspace hover (unused by WorkspacesPill — uses iconHoverBg now).
     readonly property color wsHoverYellow: "#b8fff8"           // Soft teal hover reference
-    readonly property color wsActiveBg:    Qt.rgba(0.0, 0.85, 0.80, 0.28)  // Active workspace — teal glass
-    readonly property color wsActiveBorder: accent     // Vivid teal-cyan
-    readonly property color wsActiveText:  "#e6fffc"
-    readonly property color wsInactiveText: clock   // Falls back to bar.clock in delegate
+    // Writable so Colors panel can edit live (also in themeEditableKeys).
+    property color wsActiveBg:    Qt.rgba(0.0, 0.85, 0.80, 0.28)  // Active workspace — teal glass
+    readonly property color wsActiveBorder: accent     // Vivid teal-cyan (tracks accent)
+    property color wsActiveText:  "#e6fffc"
+    property color wsInactiveText: "#ffffff"           // Inactive workspace number / icon
 
     // Legacy names some older code paths may still reference
     readonly property color wsText:        "#8a92b0"

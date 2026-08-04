@@ -167,6 +167,8 @@ Item {
 
     function _themeIsTextKey(key) {
         return key === "text" || key === "subtext" || key === "overlay" || key === "clock"
+               || key === "buttonText" || key === "buttonTextActive"
+               || key === "wsActiveText" || key === "wsInactiveText"
     }
 
     // Color swatches column (excludes text-family keys — those live under Text)
@@ -191,7 +193,7 @@ Item {
         return out
     }
 
-    // Text rows (shown under opacity in the combined "Opacity & Text" column)
+    // Text rows (full-width Text section under Colors / Opacity)
     function themeTextRows() {
         const rows = root.themeRows()
         const out = []
@@ -202,13 +204,32 @@ Item {
         return out
     }
 
-    // "left"  = key is in the Colors column → picker opens on the right
-    // "right" = key is in Opacity & Text (text swatches) → picker opens on the left
+    // Split text rows across the full-width two-column Text section
+    function themeTextRowsLeft() {
+        const rows = root.themeTextRows()
+        const mid = Math.ceil(rows.length / 2)
+        return rows.slice(0, mid)
+    }
+
+    function themeTextRowsRight() {
+        const rows = root.themeTextRows()
+        const mid = Math.ceil(rows.length / 2)
+        return rows.slice(mid)
+    }
+
+    // "left"  = key is on the left (Colors column or left Text column) → picker opens on the right
+    // "right" = key is on the right (right Text column) → picker opens on the left
     function themePickerSide(key) {
         if (!key || !key.length)
             return ""
-        if (root._themeIsTextKey(key))
-            return "right"
+        if (root._themeIsTextKey(key)) {
+            const right = root.themeTextRowsRight()
+            for (let i = 0; i < right.length; i++) {
+                if (right[i] && right[i].key === key)
+                    return "right"
+            }
+            return "left"
+        }
         return "left"
     }
 
@@ -524,6 +545,10 @@ Item {
             else if (typeof bar.setWidgetVisible === "function")
                 bar.setWidgetVisible("controlBar", on)
             break
+        case "setShowColorPresets":
+            if (typeof bar.setShowColorPresets === "function")
+                bar.setShowColorPresets(on)
+            break
         case "setShowStatCpu":
             if (typeof bar.setShowStatCpu === "function")
                 bar.setShowStatCpu(on)
@@ -671,8 +696,8 @@ Item {
 
     function chipText(active, hovered) {
         if (active || hovered)
-            return bar.accent
-        return bar.subtext
+            return bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.accent
+        return bar.buttonText !== undefined ? bar.buttonText : bar.subtext
     }
 
     function isWidgetOn(id) {
@@ -4619,6 +4644,68 @@ Item {
                                         }
                                     }
                                 }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
+                                                text: "Color presets section"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "Show built-in / custom presets on the Colors panel"
+                                                color: bar.overlay
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.showColorPresets !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.showColorPresets !== false) ? "✓" : "✕"
+                                                    color: (bar.showColorPresets !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setShowColorPresets", !(bar.showColorPresets !== false))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 Text {
                                     text: "Workspaces"
                                     color: bar.text
@@ -6317,291 +6404,6 @@ Item {
                                     font.family: bar.fontFamily
                                 }
 
-                                // Built-in presets (cannot be removed)
-                                Text {
-                                    text: "Built-in presets"
-                                    color: bar.text
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    font.family: bar.fontFamily
-                                }
-                                Text {
-                                    Layout.fillWidth: true
-                                    wrapMode: Text.WordWrap
-                                    text: "Always available — these cannot be removed."
-                                    color: bar.overlay
-                                    font.pixelSize: 11
-                                    font.family: bar.fontFamily
-                                }
-                                Flow {
-                                    Layout.fillWidth: true
-                                    spacing: 6
-                                    Repeater {
-                                        model: {
-                                            void root.colorsTick
-                                            if (bar && typeof bar.themeBuiltinList === "function")
-                                                return bar.themeBuiltinList()
-                                            return []
-                                        }
-                                        delegate: Rectangle {
-                                            required property var modelData
-                                            width: Math.max(88, presetLbl.implicitWidth + 14)
-                                            height: 26
-                                            radius: root.chipR
-                                            color: presetMa.containsMouse ? bar.glassHover : bar.pillBg
-                                            border.width: 1
-                                            border.color: bar.pillBorder
-                                            Text {
-                                                id: presetLbl
-                                                anchors.centerIn: parent
-                                                text: modelData.name || modelData.id
-                                                color: bar.subtext
-                                                font.pixelSize: 11
-                                                font.family: bar.fontFamily
-                                            }
-                                            MouseArea {
-                                                id: presetMa
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (bar && typeof bar.applyThemePreset === "function")
-                                                        bar.applyThemePreset(modelData.id)
-                                                    root.colorsPickerKey = ""
-                                                    root.colorsTick++
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // User presets — save / apply / remove
-                                Text {
-                                    text: "Your presets"
-                                    color: bar.text
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    font.family: bar.fontFamily
-                                }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 6
-                                    TextField {
-                                        id: exportNameField
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 28
-                                        placeholderText: "Name for new preset…"
-                                        text: root.colorsExportName
-                                        font.pixelSize: 12
-                                        font.family: bar.fontFamily
-                                        color: bar.text
-                                        placeholderTextColor: bar.overlay
-                                        selectedTextColor: "#000000"
-                                        selectionColor: bar.accent
-                                        background: Rectangle {
-                                            radius: 5
-                                            color: root.optFieldBg
-                                            border.width: 1
-                                            border.color: exportNameField.activeFocus ? bar.accent : bar.pillBorder
-                                        }
-                                        onTextChanged: root.colorsExportName = text
-                                        Keys.onReturnPressed: {
-                                            if (bar && typeof bar.saveThemePreset === "function")
-                                                bar.saveThemePreset(root.colorsExportName)
-                                            else if (bar && typeof bar.exportTheme === "function")
-                                                bar.exportTheme(root.colorsExportName)
-                                        }
-                                    }
-                                    Rectangle {
-                                        Layout.preferredHeight: 28
-                                        Layout.preferredWidth: savePresetLbl.implicitWidth + 14
-                                        radius: root.chipR
-                                        color: savePresetMa.containsMouse ? bar.glassHover : bar.pillBg
-                                        border.width: 1
-                                        border.color: bar.pillBorder
-                                        Text {
-                                            id: savePresetLbl
-                                            anchors.centerIn: parent
-                                            text: "Save as preset"
-                                            color: bar.subtext
-                                            font.pixelSize: 11
-                                            font.family: bar.fontFamily
-                                        }
-                                        MouseArea {
-                                            id: savePresetMa
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (bar && typeof bar.saveThemePreset === "function")
-                                                    bar.saveThemePreset(root.colorsExportName)
-                                                else if (bar && typeof bar.exportTheme === "function")
-                                                    bar.exportTheme(root.colorsExportName)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Flow {
-                                    Layout.fillWidth: true
-                                    spacing: 6
-                                    visible: {
-                                        void root.colorsTick
-                                        void bar.themeSavedList
-                                        const list = (bar && bar.themeSavedList) ? bar.themeSavedList : []
-                                        return list.length > 0
-                                    }
-                                    Repeater {
-                                        model: {
-                                            void root.colorsTick
-                                            void bar.themeSavedList
-                                            return (bar && bar.themeSavedList) ? bar.themeSavedList : []
-                                        }
-                                        delegate: Rectangle {
-                                            required property var modelData
-                                            readonly property string presetTarget: modelData.path || modelData.id || ""
-                                            width: userPresetRow.implicitWidth + 12
-                                            height: 28
-                                            radius: root.chipR
-                                            color: userPresetMa.containsMouse ? bar.glassHover : bar.pillBg
-                                            border.width: 1
-                                            border.color: bar.pillBorder
-
-                                            Row {
-                                                id: userPresetRow
-                                                anchors.centerIn: parent
-                                                spacing: 6
-                                                Text {
-                                                    text: modelData.name || modelData.id
-                                                    color: bar.subtext
-                                                    font.pixelSize: 11
-                                                    font.family: bar.fontFamily
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                }
-                                                // Remove (user presets only — builtins never appear here)
-                                                Rectangle {
-                                                    width: 18
-                                                    height: 18
-                                                    radius: 4
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    color: removePresetMa.containsMouse ? Qt.rgba(1, 0.24, 0.54, 0.35) : Qt.rgba(1, 1, 1, 0.08)
-                                                    border.width: 1
-                                                    border.color: Qt.rgba(1, 1, 1, 0.15)
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: "×"
-                                                        color: bar.text
-                                                        font.pixelSize: 12
-                                                        font.bold: true
-                                                    }
-                                                    MouseArea {
-                                                        id: removePresetMa
-                                                        anchors.fill: parent
-                                                        hoverEnabled: true
-                                                        cursorShape: Qt.PointingHandCursor
-                                                        onClicked: {
-                                                            if (bar && typeof bar.deleteThemePreset === "function")
-                                                                bar.deleteThemePreset(presetTarget)
-                                                            root.colorsTick++
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            MouseArea {
-                                                id: userPresetMa
-                                                anchors.fill: parent
-                                                anchors.rightMargin: 24
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (bar && typeof bar.importTheme === "function")
-                                                        bar.importTheme(presetTarget)
-                                                    root.colorsPickerKey = ""
-                                                    root.colorsTick++
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Text {
-                                    Layout.fillWidth: true
-                                    visible: {
-                                        void root.colorsTick
-                                        void bar.themeSavedList
-                                        const list = (bar && bar.themeSavedList) ? bar.themeSavedList : []
-                                        return list.length === 0
-                                    }
-                                    text: "No custom presets yet — save the current look with a name above."
-                                    color: bar.overlay
-                                    font.pixelSize: 11
-                                    font.family: bar.fontFamily
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                // Optional load-from-file (collapsed)
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 6
-                                    Text {
-                                        text: "Load file"
-                                        color: bar.overlay
-                                        font.pixelSize: 11
-                                        font.family: bar.fontFamily
-                                    }
-                                    TextField {
-                                        id: importPathField
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 26
-                                        placeholderText: "/path/to/theme.json"
-                                        text: root.colorsImportPath
-                                        font.pixelSize: 11
-                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
-                                        color: bar.text
-                                        placeholderTextColor: bar.overlay
-                                        selectedTextColor: "#000000"
-                                        selectionColor: bar.accent
-                                        background: Rectangle {
-                                            radius: 5
-                                            color: root.optFieldBg
-                                            border.width: 1
-                                            border.color: importPathField.activeFocus ? bar.accent : bar.pillBorder
-                                        }
-                                        onTextChanged: root.colorsImportPath = text
-                                        Keys.onReturnPressed: {
-                                            if (bar && typeof bar.importTheme === "function")
-                                                bar.importTheme(root.colorsImportPath)
-                                            root.colorsTick++
-                                        }
-                                    }
-                                    Rectangle {
-                                        Layout.preferredHeight: 26
-                                        Layout.preferredWidth: loadPathLbl.implicitWidth + 12
-                                        radius: root.chipR
-                                        color: loadPathMa.containsMouse ? bar.glassHover : bar.pillBg
-                                        border.width: 1
-                                        border.color: bar.pillBorder
-                                        Text {
-                                            id: loadPathLbl
-                                            anchors.centerIn: parent
-                                            text: "Load"
-                                            color: bar.subtext
-                                            font.pixelSize: 11
-                                            font.family: bar.fontFamily
-                                        }
-                                        MouseArea {
-                                            id: loadPathMa
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (bar && typeof bar.importTheme === "function")
-                                                    bar.importTheme(root.colorsImportPath)
-                                                root.colorsTick++
-                                            }
-                                        }
-                                    }
-                                }
-
                                 Text {
                                     Layout.fillWidth: true
                                     visible: !!(bar && bar.themeStatus && bar.themeStatus.length)
@@ -6613,8 +6415,8 @@ Item {
                                 }
 
                                 // ── Two columns; picker opens on the opposite side ──
-                                // Left:  Colors  (or picker when editing a right-side text color)
-                                // Right: Opacity & Text  (or picker when editing a left-side color)
+                                // Left:  Colors  (or picker when editing a right-side key)
+                                // Right: Opacity (or picker when editing a left-side key)
                                 RowLayout {
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignTop
@@ -6707,7 +6509,7 @@ Item {
                                             }
                                         }
 
-                                        // Picker when a right-side (text) swatch is active
+                                        // Picker when a right-side key is active
                                         ColorPickerPanel {
                                             id: colorsPickerLeft
                                             Layout.fillWidth: true
@@ -6746,14 +6548,14 @@ Item {
                                         Text {
                                             text: root.themePickerOpenOnRight()
                                                   ? ("Picker · " + root.themeLabelForKey(root.colorsPickerKey))
-                                                  : "Opacity & Text"
+                                                  : "Opacity"
                                             color: bar.text
                                             font.pixelSize: 12
                                             font.bold: true
                                             font.family: bar.fontFamily
                                         }
 
-                                        // Opacity + Text (hidden while picker is parked here)
+                                        // Opacity sliders (hidden while picker is parked here)
                                         ColumnLayout {
                                             Layout.fillWidth: true
                                             spacing: 6
@@ -6812,11 +6614,67 @@ Item {
                                                     }
                                                 }
                                             }
+                                        }
+
+                                        // Picker when a left-side key is active
+                                        ColorPickerPanel {
+                                            id: colorsPickerRight
+                                            Layout.fillWidth: true
+                                            visible: root.themePickerOpenOnRight()
+                                            title: root.themeLabelForKey(root.colorsPickerKey)
+                                            showOpacity: root.themeKeyHasOpacity(root.colorsPickerKey)
+                                            panelBg: bar.glassPopupBg
+                                            panelBorder: bar.glassPopupBorder
+                                            labelColor: bar.text
+                                            fieldBg: root.optFieldBg
+                                            accentColor: bar.accent
+                                            fontFamily: bar.fontFamily
+                                            onVisibleChanged: {
+                                                if (visible && root.colorsPickerKey.length)
+                                                    colorsPickerRight.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                            }
+                                            Connections {
+                                                target: root
+                                                function onColorsPickerKeyChanged() {
+                                                    if (root.themePickerOpenOnRight())
+                                                        colorsPickerRight.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                                }
+                                            }
+                                            onColorEdited: (c) => root.applyPickedColor(c)
+                                            onAccepted: root.closeColorPicker()
+                                        }
+                                    }
+                                }
+
+                                // ── Text (full-width row under Colors / Opacity) ──
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+
+                                    Text {
+                                        text: "Text"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignTop
+                                        spacing: 10
+
+                                        // Left half of text controls
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.preferredWidth: 1
+                                            Layout.alignment: Qt.AlignTop
+                                            spacing: 6
 
                                             Repeater {
                                                 model: {
                                                     void root.colorsTick
-                                                    return root.themeTextRows()
+                                                    return root.themeTextRowsLeft()
                                                 }
                                                 delegate: Rectangle {
                                                     required property var modelData
@@ -6877,32 +6735,370 @@ Item {
                                             }
                                         }
 
-                                        // Picker when a left-side Colors swatch is active
-                                        ColorPickerPanel {
-                                            id: colorsPickerRight
+                                        // Right half of text controls
+                                        ColumnLayout {
                                             Layout.fillWidth: true
-                                            visible: root.themePickerOpenOnRight()
-                                            title: root.themeLabelForKey(root.colorsPickerKey)
-                                            showOpacity: root.themeKeyHasOpacity(root.colorsPickerKey)
-                                            panelBg: bar.glassPopupBg
-                                            panelBorder: bar.glassPopupBorder
-                                            labelColor: bar.text
-                                            fieldBg: root.optFieldBg
-                                            accentColor: bar.accent
-                                            fontFamily: bar.fontFamily
-                                            onVisibleChanged: {
-                                                if (visible && root.colorsPickerKey.length)
-                                                    colorsPickerRight.loadFromColor(root.themeColorFor(root.colorsPickerKey))
-                                            }
-                                            Connections {
-                                                target: root
-                                                function onColorsPickerKeyChanged() {
-                                                    if (root.themePickerOpenOnRight())
-                                                        colorsPickerRight.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                            Layout.preferredWidth: 1
+                                            Layout.alignment: Qt.AlignTop
+                                            spacing: 6
+
+                                            Repeater {
+                                                model: {
+                                                    void root.colorsTick
+                                                    return root.themeTextRowsRight()
+                                                }
+                                                delegate: Rectangle {
+                                                    required property var modelData
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 36
+                                                    radius: root.chipR
+                                                    color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                    border.width: 1
+                                                    border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 8
+                                                        anchors.rightMargin: 8
+                                                        spacing: 6
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: modelData.label
+                                                            color: bar.text
+                                                            font.pixelSize: 11
+                                                            font.family: bar.fontFamily
+                                                            elide: Text.ElideRight
+                                                        }
+                                                        Rectangle {
+                                                            Layout.preferredWidth: 24
+                                                            Layout.preferredHeight: 18
+                                                            radius: 4
+                                                            color: {
+                                                                void root.colorsTick
+                                                                return root.themeColorFor(modelData.key)
+                                                            }
+                                                            border.width: 1
+                                                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    if (root.colorsPickerKey === modelData.key)
+                                                                        root.closeColorPicker()
+                                                                    else
+                                                                        root.openColorPicker(modelData.key)
+                                                                }
+                                                            }
+                                                        }
+                                                        Text {
+                                                            text: {
+                                                                void root.colorsTick
+                                                                return root.themeHexFor(modelData.key)
+                                                            }
+                                                            color: bar.subtext
+                                                            font.pixelSize: 10
+                                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                            Layout.preferredWidth: 56
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
                                                 }
                                             }
-                                            onColorEdited: (c) => root.applyPickedColor(c)
-                                            onAccepted: root.closeColorPicker()
+                                        }
+                                    }
+                                }
+
+                                // ── Presets (optional; toggled from Options) ──
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    visible: {
+                                        void root.optionsTick
+                                        return bar && bar.showColorPresets !== false
+                                    }
+
+                                    // Built-in presets (cannot be removed)
+                                    Text {
+                                        text: "Built-in presets"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WordWrap
+                                        text: "Always available — these cannot be removed."
+                                        color: bar.overlay
+                                        font.pixelSize: 11
+                                        font.family: bar.fontFamily
+                                    }
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                if (bar && typeof bar.themeBuiltinList === "function")
+                                                    return bar.themeBuiltinList()
+                                                return []
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: Math.max(88, presetLbl.implicitWidth + 14)
+                                                height: 26
+                                                radius: root.chipR
+                                                color: presetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                border.width: 1
+                                                border.color: bar.pillBorder
+                                                Text {
+                                                    id: presetLbl
+                                                    anchors.centerIn: parent
+                                                    text: modelData.name || modelData.id
+                                                    color: bar.subtext
+                                                    font.pixelSize: 11
+                                                    font.family: bar.fontFamily
+                                                }
+                                                MouseArea {
+                                                    id: presetMa
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        if (bar && typeof bar.applyThemePreset === "function")
+                                                            bar.applyThemePreset(modelData.id)
+                                                        root.colorsPickerKey = ""
+                                                        root.colorsTick++
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // User presets — save / apply / remove
+                                    Text {
+                                        text: "Your presets"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        TextField {
+                                            id: exportNameField
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 28
+                                            placeholderText: "Name for new preset…"
+                                            text: root.colorsExportName
+                                            font.pixelSize: 12
+                                            font.family: bar.fontFamily
+                                            color: bar.text
+                                            placeholderTextColor: bar.overlay
+                                            selectedTextColor: "#000000"
+                                            selectionColor: bar.accent
+                                            background: Rectangle {
+                                                radius: 5
+                                                color: root.optFieldBg
+                                                border.width: 1
+                                                border.color: exportNameField.activeFocus ? bar.accent : bar.pillBorder
+                                            }
+                                            onTextChanged: root.colorsExportName = text
+                                            Keys.onReturnPressed: {
+                                                if (bar && typeof bar.saveThemePreset === "function")
+                                                    bar.saveThemePreset(root.colorsExportName)
+                                                else if (bar && typeof bar.exportTheme === "function")
+                                                    bar.exportTheme(root.colorsExportName)
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredHeight: 28
+                                            Layout.preferredWidth: savePresetLbl.implicitWidth + 14
+                                            radius: root.chipR
+                                            color: savePresetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                            border.width: 1
+                                            border.color: bar.pillBorder
+                                            Text {
+                                                id: savePresetLbl
+                                                anchors.centerIn: parent
+                                                text: "Save as preset"
+                                                color: bar.subtext
+                                                font.pixelSize: 11
+                                                font.family: bar.fontFamily
+                                            }
+                                            MouseArea {
+                                                id: savePresetMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (bar && typeof bar.saveThemePreset === "function")
+                                                        bar.saveThemePreset(root.colorsExportName)
+                                                    else if (bar && typeof bar.exportTheme === "function")
+                                                        bar.exportTheme(root.colorsExportName)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        visible: {
+                                            void root.colorsTick
+                                            void bar.themeSavedList
+                                            const list = (bar && bar.themeSavedList) ? bar.themeSavedList : []
+                                            return list.length > 0
+                                        }
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                void bar.themeSavedList
+                                                return (bar && bar.themeSavedList) ? bar.themeSavedList : []
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                readonly property string presetTarget: modelData.path || modelData.id || ""
+                                                width: userPresetRow.implicitWidth + 12
+                                                height: 28
+                                                radius: root.chipR
+                                                color: userPresetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                border.width: 1
+                                                border.color: bar.pillBorder
+
+                                                Row {
+                                                    id: userPresetRow
+                                                    anchors.centerIn: parent
+                                                    spacing: 6
+                                                    Text {
+                                                        text: modelData.name || modelData.id
+                                                        color: bar.subtext
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                    }
+                                                    // Remove (user presets only — builtins never appear here)
+                                                    Rectangle {
+                                                        width: 18
+                                                        height: 18
+                                                        radius: 4
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        color: removePresetMa.containsMouse ? Qt.rgba(1, 0.24, 0.54, 0.35) : Qt.rgba(1, 1, 1, 0.08)
+                                                        border.width: 1
+                                                        border.color: Qt.rgba(1, 1, 1, 0.15)
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "×"
+                                                            color: bar.text
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                        }
+                                                        MouseArea {
+                                                            id: removePresetMa
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (bar && typeof bar.deleteThemePreset === "function")
+                                                                    bar.deleteThemePreset(presetTarget)
+                                                                root.colorsTick++
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                MouseArea {
+                                                    id: userPresetMa
+                                                    anchors.fill: parent
+                                                    anchors.rightMargin: 24
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        if (bar && typeof bar.importTheme === "function")
+                                                            bar.importTheme(presetTarget)
+                                                        root.colorsPickerKey = ""
+                                                        root.colorsTick++
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: {
+                                            void root.colorsTick
+                                            void bar.themeSavedList
+                                            const list = (bar && bar.themeSavedList) ? bar.themeSavedList : []
+                                            return list.length === 0
+                                        }
+                                        text: "No custom presets yet — save the current look with a name above."
+                                        color: bar.overlay
+                                        font.pixelSize: 11
+                                        font.family: bar.fontFamily
+                                        wrapMode: Text.WordWrap
+                                    }
+
+                                    // Optional load-from-file
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+                                        Text {
+                                            text: "Load file"
+                                            color: bar.overlay
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        TextField {
+                                            id: importPathField
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 26
+                                            placeholderText: "/path/to/theme.json"
+                                            text: root.colorsImportPath
+                                            font.pixelSize: 11
+                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                            color: bar.text
+                                            placeholderTextColor: bar.overlay
+                                            selectedTextColor: "#000000"
+                                            selectionColor: bar.accent
+                                            background: Rectangle {
+                                                radius: 5
+                                                color: root.optFieldBg
+                                                border.width: 1
+                                                border.color: importPathField.activeFocus ? bar.accent : bar.pillBorder
+                                            }
+                                            onTextChanged: root.colorsImportPath = text
+                                            Keys.onReturnPressed: {
+                                                if (bar && typeof bar.importTheme === "function")
+                                                    bar.importTheme(root.colorsImportPath)
+                                                root.colorsTick++
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredHeight: 26
+                                            Layout.preferredWidth: loadPathLbl.implicitWidth + 12
+                                            radius: root.chipR
+                                            color: loadPathMa.containsMouse ? bar.glassHover : bar.pillBg
+                                            border.width: 1
+                                            border.color: bar.pillBorder
+                                            Text {
+                                                id: loadPathLbl
+                                                anchors.centerIn: parent
+                                                text: "Load"
+                                                color: bar.subtext
+                                                font.pixelSize: 11
+                                                font.family: bar.fontFamily
+                                            }
+                                            MouseArea {
+                                                id: loadPathMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (bar && typeof bar.importTheme === "function")
+                                                        bar.importTheme(root.colorsImportPath)
+                                                    root.colorsTick++
+                                                }
+                                            }
                                         }
                                     }
                                 }
