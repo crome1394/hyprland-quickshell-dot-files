@@ -2,7 +2,7 @@
 
 # Bar control strip (`BarControlBar.qml`)
 
-Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar on the **bottom**; content expands above and resizes to fit (scroll only for tall panels: Display, Wallpaper, Widgets, Options, Colors, Launch, Autostart).
+Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar on the **bottom**; content expands above and resizes to fit (scroll only for tall panels: Display, Wallpaper, Widgets, Options, Colors, Launch, Autostart). **MIME**, Services, Audio, and Keybinds use a fixed tall panel with internal scrolling.
 
 | Panel | What it does |
 |-------|----------------|
@@ -14,10 +14,32 @@ Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar o
 | **Colors** | Bar / widget look — color picker, opacity, presets, export/import (see Colors subsection) |
 | **Launch** | Quick Launch pins (installed apps or custom) |
 | **Autostart** | XDG `~/.config/autostart` (see Autostart subsection) |
+| **MIME** | Preferred applications / file-type defaults (see MIME subsection) |
 | **Services** | systemd user/system units — filter, select, **Start / Stop / Restart** (reuses Inspector `ServicesView`) |
 | **Audio** | Sound manager: overview (summary / streams / levels), dual device columns + profiles, echo cancel; **pw-top** / **Restart audio** (reuses Inspector `AudioMonitorView`) |
 | **Keybinds** | Browse `keybindings.lua` by category; **edit key chord, category, description** (not the action) |
 | **Clock** | Clock format presets |
+
+## MIME panel (Preferred applications)
+
+Set which program opens a given file type or link scheme. Opens from the control-strip **MIME** tab (after Autostart). UI: `components/MimeAppsView.qml`. Scripts: `scripts/mime-catalog-json.sh`, `mime-apps-json.sh`, `mime-file-probe.sh`, `mime-set-default.sh` (app picker reuses `desktop-apps-json.sh`).
+
+Dual-pane layout fills the panel height; lists scroll inside each pane.
+
+| Control | Behavior |
+|---------|----------|
+| **File types \| Applications** | **File types:** pick a type → apps that can open it. **Applications:** pick an app → file types linked to it (from `.desktop` `MimeType=` plus your associations). |
+| **★ Default opener** | The app that runs when you open that kind of file. Other listed apps *can* open it, but are not currently the default. |
+| **What opens this file?** | Paste a path → **Look up** detects the type (`xdg-mime query filetype`) and selects it. |
+| **Associate app…** | (File types) Pick any installed app and make it the default opener — works even if the app doesn’t advertise that type (e.g. VSCodium + Markdown). |
+| **+ Add type** | (Applications) Link another file type to this app and set it as the default opener. |
+| **Use as default** | Make the selected listed app the default opener (double-click a row, or Enter when the apps list is focused). |
+| **Clear default** | Removes your saved default under user `mimeapps.list` `[Default Applications]` only. |
+| **Keyboard (File types)** | ↑/↓ (or j/k) type list · → / Enter focus apps · Enter set default · **A** associate · ← / Esc back · Page Up/Down · Home/End. |
+| **Search / filters** | Name, extension, app name. Chips: **All** · **Files** · **Links** (`x-scheme-handler/*`) · **Has default** (explicit `mimeapps.list` entry). |
+| **Reload** | Re-read catalog after external changes. |
+
+Writes go only to `~/.config/mimeapps.list` (via `xdg-mime default` for set/associate; surgical edit for clear). No `update-mime-database` and no system package edits.
 
 ## Display panel
 

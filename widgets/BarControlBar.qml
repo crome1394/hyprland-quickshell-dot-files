@@ -7,8 +7,9 @@
 //
 // Single PopupWindow (grabFocus). Expandable panel on top; toolbar buttons
 // along the bottom: Position · Display · Wallpaper · Widgets · Options ·
-// Colors · Launch · Autostart · Services · Audio · Keybinds · Clock
+// Colors · Launch · Autostart · MIME · Services · Audio · Keybinds · Clock
 // Widgets = layout; Options = behavior prefs; Colors = bar/widget theme;
+// MIME = preferred applications / file-type defaults (MimeAppsView);
 // Services = systemd; Audio = devices/ports/AEC (AudioMonitorView);
 // Keybinds = chord/category/desc.
 // Display = monitor resolution / refresh / bit depth (Apply to switch).
@@ -36,7 +37,7 @@ Item {
     readonly property bool open: controlPopup.visible
 
     // "" | "position" | "display" | "wallpaper" | "widgets" | "options" |
-    // "colors" | "launch" | "autostart" | "services" | "audio" | "keybinds" | "clock"
+    // "colors" | "launch" | "autostart" | "mime" | "services" | "audio" | "keybinds" | "clock"
     // ("sizes" accepted as alias of "widgets" for any leftover callers)
     property string activeMenu: ""
     property int menuTick: 0
@@ -2064,10 +2065,12 @@ Item {
                                      || root.activeMenu === "colors"
                                      || root.activeMenu === "widgets"
                                      || root.activeMenu === "display"
+                                     || root.activeMenu === "mime"
                                      || root.activeMenu === "services"
                                      || root.activeMenu === "audio"
                                      || root.activeMenu === "keybinds")
-                                        ? ((root.activeMenu === "services"
+                                        ? ((root.activeMenu === "mime"
+                                            || root.activeMenu === "services"
                                             || root.activeMenu === "audio"
                                             || root.activeMenu === "keybinds") ? 620
                                            : (root.activeMenu === "colors" ? 560 : 520))
@@ -6113,6 +6116,53 @@ Item {
                                 }
                             }
 
+                            // ===== MIME (preferred applications / file-type defaults) =====
+                            ColumnLayout {
+                                id: mimePanel
+                                visible: root.activeMenu === "mime"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.max(320, root.panelMaxH - 12)
+                                spacing: 6
+
+                                Text {
+                                    text: "Preferred applications"
+                                    color: bar.text
+                                    font.pixelSize: bar.popupTitleSize
+                                    font.bold: true
+                                    font.family: bar.fontFamily
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: "Choose a file type or app, then set which program opens it by default."
+                                    color: bar.overlay
+                                    font.pixelSize: bar.popupHintSize
+                                    font.family: bar.fontFamily
+                                }
+                                MimeAppsView {
+                                    id: controlMime
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    Layout.minimumHeight: 200
+                                    // Stretch to panel bottom (preferredHeight 0 + fillHeight)
+                                    Layout.preferredHeight: 0
+                                    active: mimePanel.visible && controlPopup.visible
+                                    textColor: bar.text
+                                    subtextColor: bar.subtext
+                                    accentColor: bar.accent
+                                    surfaceColor: Qt.rgba(0.05, 0.07, 0.12, 0.90)
+                                    overlayColor: bar.overlay
+                                    okColor: root.onGreen
+                                    warnColor: "#f0d060"
+                                    errorColor: root.offRed
+                                    fieldBg: root.optFieldBg
+                                    fieldBgFocus: root.optFieldBgFocus
+                                    pillBorder: bar.pillBorder
+                                    fontFamily: bar.fontFamily
+                                    fontMono: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                }
+                            }
+
                             // ===== SERVICES (systemd — same engine as Inspector) =====
                             ColumnLayout {
                                 id: servicesPanel
@@ -7207,6 +7257,7 @@ Item {
                             { id: "colors",    label: "Colors" },
                             { id: "launch",    label: "Launch" },
                             { id: "autostart", label: "Autostart" },
+                            { id: "mime",      label: "MIME" },
                             { id: "services",  label: "Services" },
                             { id: "audio",     label: "Audio" },
                             { id: "keybinds",  label: "Keybinds" },

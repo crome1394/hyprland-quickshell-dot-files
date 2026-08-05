@@ -4,6 +4,14 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
 
 ## 2026-08 — Control bar & FreshRSS
 
+- **MIME panel** (control strip → **MIME**): Preferred applications / file-type defaults.
+  - Dual modes: **File types** (set default opener) and **Applications** (linked types; ★ = default opener).
+  - **Associate app…** / **+ Add type** pickers (any installed app, even if it doesn’t advertise the type).
+  - Path look-up (“What opens this file?”), search, filters (All / Files / Links / Has default).
+  - Keyboard nav on File types (↑↓, → apps, Enter set default, A associate).
+  - Dual panes fill the tall panel height; lists scroll internally.
+  - Set via `xdg-mime default`; clear only your `~/.config/mimeapps.list` `[Default Applications]` entry.
+  - Scripts: `mime-catalog-json.sh`, `mime-apps-json.sh`, `mime-file-probe.sh`, `mime-set-default.sh`; UI: `components/MimeAppsView.qml`.
 - **Colors panel** (control strip → **Colors**):
   - Live theme editor: **Colors** + **Opacity** columns, full-width **Text** row (left/right split), optional **Presets** at the bottom.
   - Picker opens on the **opposite** Colors/Opacity column (mouse SV + hue, hex / RGB); compact so the panel Flickable does not steal drag.
@@ -26,7 +34,7 @@ Notable changes for people upgrading this config. Day-to-day usage is in [README
   - Resolution block slider + refresh dropdown + bit-depth dropdown; linked by hyprctl modes / Hz families.
   - **Apply** at scale 1.0 via `scripts/monitor-mode.sh` (pending until Apply).
 - **SysStats pill layout:** center CPU/Memory/GPU; sections hug content (Memory no longer clips); snug fit with no empty side ballast; single separator slots between visible gauges.
-- Control strip: Position, **Display**, Wallpaper, Widgets, Options, **Colors**, Launch, Autostart, **Services**, **Audio**, **Keybinds**, Clock (toolbar on bottom).
+- Control strip: Position, **Display**, Wallpaper, Widgets, Options, **Colors**, Launch, Autostart, **MIME**, **Services**, **Audio**, **Keybinds**, Clock (toolbar on bottom).
 - **Keybinds** panel: browse `keybindings.lua` by category; edit key chord / category / description (in-place write + backup; Reload Hypr separate).
 - **Services** panel: systemd user/system units with filter + Start/Stop/Restart (reuses Inspector `ServicesView`).
 - Widgets panel: A–Z list; row layout ✓/name · L/C/R · ↑↓; horizontal width scale.

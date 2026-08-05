@@ -14,7 +14,7 @@ Personal [Hyprland](https://hyprland.org) status bar and floating **Config Inspe
 ## Features
 
 - Liquid-glass bar (top or bottom) with left / center / right zones
-- **Control strip** — right-click empty chrome or **Config menu** gear: layout, Display (resolution / refresh / bit depth), wallpaper, Options, **Colors** (live theme editor), Quick Launch, XDG Autostart, systemd Services, **Audio** (devices/ports/AEC), Keybinds editor, clock formats
+- **Control strip** — right-click empty chrome or **Config menu** gear: layout, Display (resolution / refresh / bit depth), wallpaper, Options, **Colors** (live theme editor), Quick Launch, XDG Autostart, **MIME** (preferred applications / file-type defaults), systemd Services, **Audio** (devices/ports/AEC), Keybinds editor, clock formats
 - Network, Bluetooth, Audio (optional combined pill), workspaces (incl. magic space), sys stats, tray, notifications, power
 - FreshRSS reader pill (external secrets file)
 - Floating Hyprland Config Inspector (metrics, logs, services, split Lua configs)
@@ -66,6 +66,7 @@ Reorder / show-hide at runtime: **Config menu → Widgets**. Defaults and catalo
 | **Colors** | Live theme: Colors + Opacity columns, full-width Text row, optional presets; workspace / button fills & labels |
 | **Launch** | Quick Launch pins |
 | **Autostart** | XDG `~/.config/autostart` |
+| **MIME** | Preferred apps: dual panes (file types \| applications), associate any app, path look-up, keyboard nav |
 | **Services** | systemd units Start / Stop / Restart |
 | **Audio** | Devices, ports, profiles, streams, levels, echo cancel |
 | **Keybinds** | Edit key chord / category / description |
