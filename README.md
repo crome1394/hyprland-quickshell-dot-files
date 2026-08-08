@@ -1,129 +1,79 @@
 # Quickshell Status Bar & Hyprland Config Inspector
 
-Personal [Hyprland](https://hyprland.org) status bar and floating **Config Inspector**, built with [Quickshell](https://quickshell.org).
+Personal [Hyprland](https://hyprland.org) bar + floating Config Inspector ([Quickshell](https://quickshell.org)).
 
 | Path | Role |
 |------|------|
-| `shell.qml` | Bar entry point |
-| `Config.qml` | Theme, visibility defaults, workspace tokens |
-| `widgets/` | Pills, popups, control strip, inspector |
-| `scripts/` | Pollers, network/audio/FreshRSS helpers |
-| `docs/` | Full reference (IPC, per-widget guides) |
-| `state/` | Runtime layout prefs (gitignored) |
+| `shell.qml` | Bar entry |
+| `Config.qml` | Theme, fonts, defaults |
+| `widgets/` | Pills, control strip, inspector |
+| `scripts/` | Pollers & helpers |
+| `docs/` | Full guides |
+| `state/` | Runtime prefs (gitignored) |
 
 ## Features
 
-- Liquid-glass bar (top or bottom) with left / center / right zones
-- **Control strip** — right-click empty chrome or **Config menu** gear: layout, Display (resolution / refresh / bit depth), wallpaper, Options, **Colors** (live theme editor), Quick Launch, XDG Autostart, **MIME** (preferred applications / file-type defaults), systemd Services, **Audio** (devices/ports/AEC), Keybinds editor, clock formats
-- Network, Bluetooth, Audio (optional combined pill), workspaces (incl. magic space), sys stats, tray, notifications, power
-- FreshRSS reader pill (external secrets file)
-- Floating Hyprland Config Inspector (metrics, logs, services, split Lua configs)
+- Liquid-glass bar (top/bottom) · left / center / right zones
+- **Control strip** (gear or right-click chrome): Position, Display, Wallpaper, Widgets, Options, **Themes**, Launch, Autostart, MIME, Services, Audio, Keybinds, Clock
+- **Themes** — colors, opacity, fonts (UI / mono / Main / Secondary / Bar roles), thresholds, liquid + solid presets
+- Net · BT · Audio (combined pill), workspaces, sys stats, tray, notifications (history + copy), power, FreshRSS
+- Hyprland Config Inspector (metrics, logs, services, Lua configs)
 
 ## Requirements
 
-- [Quickshell](https://quickshell.org) (`qs`)
-- Hyprland (or compatible compositor for layer-shell)
-- Typical helpers used by scripts: `jq`, `nmcli`, `pactl` / PipeWire, `curl` (FreshRSS), optional `yt-dlp`, `btop`, `nvtop`
+Quickshell (`qs`), Hyprland, and helpers used by scripts (`jq`, `nmcli`, PipeWire/`pactl`, optional `curl`, `btop`, `nvtop`).
 
-## Install
+## Quick start
 
 ```bash
-# Example: clone into the XDG config path Quickshell loads by default
 git clone git@github.com:crome1394/quickshell-dot-files.git ~/.config/quickshell
 cd ~/.config/quickshell
-
-# Optional: FreshRSS credentials (outside this repo — never commit)
-mkdir -p ~/.config/freshrss-quickshell
-cp secrets/freshrss.env.example ~/.config/freshrss-quickshell/freshrss.env
-chmod 600 ~/.config/freshrss-quickshell/freshrss.env
-# edit FRESHRSS_BASE_URL, FRESHRSS_USER, FRESHRSS_API_PASSWORD
-
-# Run (or start from Hyprland autostart)
 qs --daemonize -n
+# Or from this worktree:  qs -p shell.qml
 ```
 
-Layout and many prefs persist under `state/bar-layout.json` (created at runtime). Active color theme: `state/theme-colors.json`; named presets: `themes/*.json` (via control strip → **Colors**).
+| Persist | File |
+|---------|------|
+| Layout / Options | `state/bar-layout.json` |
+| Active theme | `state/theme-colors.json` |
+| Named presets | `themes/*.json` |
+| Display mode | `~/.config/hypr/config/monitors.lua` (on Apply) |
+| FreshRSS secrets | `~/.config/freshrss-quickshell/freshrss.env` (not in git) |
 
-## Default bar layout
+## Bar layout (default)
 
 | Zone | Widgets |
 |------|---------|
-| **Left** | App Launcher, Quick Launch, FreshRSS, Media |
+| **Left** | Launcher, Quick Launch, FreshRSS, Media |
 | **Center** | Workspaces |
-| **Right** | Sys Stats, Tray, Net·BT·Audio, Clock, Notifications, Config menu, Power |
+| **Right** | Sys Stats, Tray, Net·BT·Audio, Clock, Notifications, Config, Power |
 
-Reorder / show-hide at runtime: **Config menu → Widgets**. Defaults and catalog live in `Config.qml` / `shell.qml`.
+Reorder in **Widgets**. Theme in **Themes**. Options for gauges, graphs, applets.
 
-## Control strip
-
-| Panel | Purpose |
-|-------|---------|
-| **Position** | Bar top / bottom |
-| **Display** | Res / refresh / 8·10-bit, adapter + NVIDIA stats, Apply (`hyprctl` modes) |
-| **Wallpaper** | hyprpaper apply / folder |
-| **Widgets** | A–Z list: ✓ · name · L/C/R · ↑↓ · width % |
-| **Options** | Behavior prefs (scale, workspaces, applets, stats gauges, Audio panel sections, color presets visibility, FreshRSS server) |
-| **Colors** | Live theme: Colors + Opacity columns, full-width Text row, optional presets; workspace / button fills & labels |
-| **Launch** | Quick Launch pins |
-| **Autostart** | XDG `~/.config/autostart` |
-| **MIME** | Preferred apps: dual panes (file types \| applications), associate any app, path look-up, keyboard nav |
-| **Services** | systemd units Start / Stop / Restart |
-| **Audio** | Devices, ports, profiles, streams, levels, echo cancel |
-| **Keybinds** | Edit key chord / category / description |
-| **Clock** | Date/time format |
-
-Details: [docs/control-bar.md](docs/control-bar.md)
-
-## IPC (quick start)
-
-List all targets: `qs ipc show`
+## IPC (cheat sheet)
 
 ```bash
-# Bar / control strip
+qs ipc show
 qs ipc call shell toggleBarControlBar
 qs ipc call shell setBarPosition bottom
-qs ipc call shell setShowAudioPill false
-qs ipc call shell setShowControlBarPill true
 qs ipc call shell setUiScale 0.85
-qs ipc call shell setUiScaleAuto
-
-# Common widget actions
-qs ipc call clockPill showCalendar
-qs ipc call notificationBell toggleDoNotDisturb
 qs ipc call networkPill togglePopup
-qs ipc call bluetoothPill togglePopup
-qs ipc call audioPill toggleEchoCancel
-qs ipc call freshRss toggle
-qs ipc call hyprConfigInsp toggle
-qs ipc call sysStatsPill toggleMetricsLiveUpdates
-qs ipc call killTargetPill activatePickMode
+qs ipc call notificationBell toggleDoNotDisturb
 ```
 
 Full tables: [docs/ipc.md](docs/ipc.md)
 
-## Configuration
+## Docs
 
-- **Theme & defaults:** `Config.qml` (search section headers, e.g. **WIDGET VISIBILITY**, **FRESHRSS**, **POWER MENU**)
-- **Runtime layout / Options:** `state/bar-layout.json` (via control strip)
-- **FreshRSS secrets:** `~/.config/freshrss-quickshell/freshrss.env` (not in git)
-
-Token reference: [docs/config.md](docs/config.md)
-
-## Documentation
-
-| Guide | Contents |
-|-------|----------|
-| [Control bar](docs/control-bar.md) | Widgets, Options, Autostart |
-| [FreshRSS](docs/freshrss.md) | Reader UI, secrets, setup |
-| [IPC](docs/ipc.md) | Visibility + action commands |
-| [Network](docs/network.md) | Network pill |
-| [Bluetooth](docs/bluetooth.md) | Bluetooth pill |
-| [Audio](docs/audio.md) | Audio pill, control-bar Audio panel, echo cancel |
-| [Workspaces](docs/workspaces.md) | Magic pill, min shown, startup |
-| [Inspector](docs/inspector.md) | Hyprland Config Inspector |
-| [Config tokens](docs/config.md) | `Config.qml` deep dive |
-| [Changelog](CHANGELOG.md) | Notable upgrades |
+| Guide | Topic |
+|-------|--------|
+| [Control bar](docs/control-bar.md) | Panels, Themes, Display, MIME |
+| [Config tokens](docs/config.md) | `Config.qml` reference |
+| [IPC](docs/ipc.md) | All IPC targets |
+| [Audio](docs/audio.md) · [Network](docs/network.md) · [Bluetooth](docs/bluetooth.md) | Connectivity pills |
+| [FreshRSS](docs/freshrss.md) · [Workspaces](docs/workspaces.md) · [Inspector](docs/inspector.md) | Feature guides |
+| [Changelog](CHANGELOG.md) | Upgrade notes |
 
 ## License
 
-Personal configuration. Feel free to take inspiration.
+Personal configuration — take what you need.

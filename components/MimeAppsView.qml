@@ -1061,7 +1061,7 @@ Item {
             Item { Layout.fillWidth: true }
             Text {
                 text: "↑↓ list  ·  → apps  ·  Enter set default"
-                color: root.overlayColor
+                color: root.subtextColor
                 font.pixelSize: 9
                 font.family: root.fontFamily
                 visible: root.mode === "types"
@@ -1205,7 +1205,7 @@ Item {
                                         return "Default opener for " + owned + " · " + total + " listed"
                                     return total + " file types listed"
                                 }
-                                color: root.overlayColor
+                                color: root.subtextColor
                                 font.pixelSize: 10
                                 font.family: root.fontFamily
                                 elide: Text.ElideRight
@@ -1241,7 +1241,7 @@ Item {
                                        ? "No defaults set yet. Try All or Files."
                                        : "No file types found.")
                                     : "No applications with file types found."))
-                        color: root.overlayColor
+                        color: root.subtextColor
                         font.pixelSize: 11
                         font.family: root.fontFamily
                     }
@@ -1290,7 +1290,7 @@ Item {
                                 return t.id + "  ·  Extensions: " + g
                             return t.id
                         }
-                        color: root.overlayColor
+                        color: root.subtextColor
                         font.pixelSize: 10
                         font.family: root.fontMono
                         elide: Text.ElideRight
@@ -1411,7 +1411,7 @@ Item {
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
                             text: "No apps listed yet.\nClick “Associate app…” to pick one\n(e.g. VSCodium for Markdown)."
-                            color: root.overlayColor
+                            color: root.subtextColor
                             font.pixelSize: 11
                             font.family: root.fontFamily
                         }
@@ -1657,7 +1657,7 @@ Item {
                                                 s += " · added by you"
                                             return s
                                         }
-                                        color: root.overlayColor
+                                        color: root.subtextColor
                                         font.pixelSize: 9
                                         font.family: root.fontMono
                                         elide: Text.ElideRight
@@ -1693,7 +1693,7 @@ Item {
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
                             text: "No file types linked yet.\nUse “+ Add type” to associate one."
-                            color: root.overlayColor
+                            color: root.subtextColor
                             font.pixelSize: 11
                             font.family: root.fontFamily
                         }
@@ -1847,7 +1847,7 @@ Item {
                                 text: root.pickerKind === "associateApp"
                                       ? (modelData.id || "")
                                       : root.globsText(modelData.globs) || (modelData.id || "")
-                                color: root.overlayColor
+                                color: root.subtextColor
                                 font.pixelSize: 10
                                 font.family: root.fontMono
                                 elide: Text.ElideRight
@@ -1871,7 +1871,7 @@ Item {
                         anchors.centerIn: parent
                         visible: pickerList.count === 0 && !root.pickerLoading
                         text: root.pickerLoading ? "" : "No matches."
-                        color: root.overlayColor
+                        color: root.subtextColor
                         font.pixelSize: 11
                         font.family: root.fontFamily
                     }
@@ -1891,7 +1891,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         text: "↑↓ select · Enter confirm · Esc cancel"
-                        color: root.overlayColor
+                        color: root.subtextColor
                         font.pixelSize: 10
                         font.family: root.fontFamily
                     }

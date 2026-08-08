@@ -1060,7 +1060,7 @@ Item {
                             }
                             Text {
                                 text: "AUDIO SUMMARY"
-                                color: root.accentColor
+                                color: root.textColor
                                 font.pixelSize: 12
                                 font.bold: true
                                 font.family: "monospace"
@@ -1159,7 +1159,7 @@ Item {
 
                             Text {
                                 text: "Active streams"
-                                color: root.accentColor
+                                color: root.textColor
                                 font.pixelSize: 12
                                 font.bold: true
                                 font.family: "monospace"
@@ -1302,7 +1302,7 @@ Item {
 
                     Text {
                         text: "LEVELS"
-                        color: root.accentColor
+                        color: root.textColor
                         font.pixelSize: 11
                         font.bold: true
                         font.family: "monospace"
@@ -1443,7 +1443,7 @@ Item {
                         }
                         Text {
                             text: "Output Devices"
-                            color: root.accentColor
+                            color: root.textColor
                             font.pixelSize: 11
                             font.bold: true
                             font.family: "monospace"
@@ -1878,7 +1878,7 @@ Item {
                         }
                         Text {
                             text: "Input Devices"
-                            color: root.accentColor
+                            color: root.textColor
                             font.pixelSize: 11
                             font.bold: true
                             font.family: "monospace"

@@ -69,14 +69,27 @@ Rectangle {
     property real pillScale: 1.0
 
     readonly property real _s: (pillScale > 0 ? pillScale : 1)
-    readonly property int _contentW: Math.max(80, Math.round(bar.audioViewContentWidth * _s))
+    readonly property int _sidePad: Math.max(4, Math.round((bar.audioViewSidePadding !== undefined
+        ? bar.audioViewSidePadding : 6) * _s))
     readonly property int _barW: Math.max(40, Math.round(110 * _s))
     readonly property int _h: bar.pillHeight
+    // Hug the active view's content (speaker / mic / dual) — no fixed 330px blank.
+    readonly property int _contentW: {
+        var inner = 64
+        if (audio.viewMode === 0)
+            inner = speakerViewRow.implicitWidth
+        else if (audio.viewMode === 1)
+            inner = micViewRow.implicitWidth
+        else
+            inner = dualViewRow.implicitWidth
+        return Math.max(64, Math.ceil(inner) + _sidePad * 2)
+    }
+    readonly property int _outerPad: Math.max(8, Math.round(10 * _s))
 
     // === Layout ===
     Layout.preferredWidth: embedded
-        ? (_contentW + 12)
-        : (_contentW + bar.pillHPadding)
+        ? (_contentW + 8)
+        : (_contentW + _outerPad)
     Layout.preferredHeight: embedded ? Math.max(18, _h - 8) : _h
     Layout.alignment: Qt.AlignVCenter
     width: Layout.preferredWidth
@@ -85,14 +98,29 @@ Rectangle {
     implicitHeight: Layout.preferredHeight
 
     // === Appearance via Theme ===
+    // Reliable hover for rim/glow (MouseArea is z:-1 so wheels still work)
+    HoverHandler {
+        id: audioHoverVis
+    }
+    readonly property bool audioHovered: audioHoverVis.hovered || audioHover.containsMouse
+
+    // Standalone: stable outer chrome; content chip highlights.
+    // Embedded (connectivity pill): this rect is the content chip — hover rim + glow.
     radius: embedded ? bar.workspaceRadius : bar.pillRadius
     color: {
         if (embedded)
-            return audioHover.containsMouse ? bar.iconHoverBg : "transparent"
+            return root.audioHovered ? bar.iconHoverBg : "transparent"
         return bar.pillBg
     }
-    border.width: embedded ? 0 : bar.controlBorderWidth
-    border.color: embedded ? "transparent" : bar.pillBorder
+    border.width: embedded
+        ? (root.audioHovered ? bar.controlBorderWidth : 0)
+        : bar.controlBorderWidth
+    border.color: embedded
+        ? (root.audioHovered ? bar.accent : "transparent")
+        : bar.pillBorder
+
+    Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+    Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
     // ===== AUDIO STATE =====
     // Track only our debounced speaker/mic refs — NEVER bind PwObjectTracker to
@@ -1484,7 +1512,7 @@ Rectangle {
         }
     }
 
-    // Content chip: per-item hover (same token as QuickLaunch / SysStats)
+    // Content chip: hover rim on contents only (outer pill border stays stable).
     // MouseArea stays on the chip so padding outside does not light the whole pill.
     // When embedded, the outer rect is already the chip (no double chrome).
     Rectangle {
@@ -1496,12 +1524,16 @@ Rectangle {
         color: {
             if (embedded)
                 return "transparent"
-            return audioHover.containsMouse ? bar.iconHoverBg : "transparent"
+            return root.audioHovered ? bar.iconHoverBg : "transparent"
         }
+        border.width: (!embedded && root.audioHovered) ? bar.controlBorderWidth : 0
+        border.color: (!embedded && root.audioHovered) ? bar.accent : "transparent"
         implicitWidth: width
         implicitHeight: height
+        clip: true
 
         Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+        Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
         MouseArea {
             id: audioHover
@@ -1530,6 +1562,7 @@ Rectangle {
 
         // SPEAKER VIEW
         Row {
+            id: speakerViewRow
             visible: audio.viewMode === 0
             anchors.centerIn: parent
             spacing: 6
@@ -1594,7 +1627,7 @@ Rectangle {
                 Text {
                     text: "|"
                     font.pixelSize: 11
-                    color: bar.overlay
+                    color: bar.subtext
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
@@ -1617,6 +1650,7 @@ Rectangle {
 
         // MIC VIEW
         Row {
+            id: micViewRow
             visible: audio.viewMode === 1
             anchors.centerIn: parent
             spacing: 6
@@ -1680,7 +1714,7 @@ Rectangle {
                 Text {
                     text: "|"
                     font.pixelSize: 11
-                    color: bar.overlay
+                    color: bar.subtext
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
@@ -1702,13 +1736,11 @@ Rectangle {
         }
 
         // DUAL VIEW (default) — wider: icon + bar + % for speaker and mic
-        Item {
+        Row {
+            id: dualViewRow
             visible: audio.viewMode === 2
-            anchors.fill: parent
-
-            Row {
-                anchors.centerIn: parent
-                spacing: 10
+            anchors.centerIn: parent
+            spacing: 10
 
                 // --- Speaker half ---
                 Row {
@@ -1776,7 +1808,7 @@ Rectangle {
                         Text {
                             text: "|"
                             font.pixelSize: 10
-                            color: bar.overlay
+                            color: bar.subtext
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Text {
@@ -1877,7 +1909,7 @@ Rectangle {
                         Text {
                             text: "|"
                             font.pixelSize: 10
-                            color: bar.overlay
+                            color: bar.subtext
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Text {
@@ -1897,7 +1929,6 @@ Rectangle {
                         }
                     }
                 }
-            }
         }
     }
 
@@ -2040,7 +2071,7 @@ Rectangle {
 
                     Text {
                         text: "Active streams"
-                        color: bar.accent
+                        color: bar.text
                         font.pixelSize: bar.popupSectionSize
                         font.bold: true
                         font.family: bar.fontFamily
@@ -2142,7 +2173,7 @@ Rectangle {
                                     visible: root.streamPlayback.length === 0
                                              && root.streamRecording.length === 0
                                     text: "No active app streams (paused & level-meters hidden)"
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 11
                                     font.italic: true
                                     font.family: bar.fontFamily
@@ -2159,7 +2190,7 @@ Rectangle {
 
                     Text {
                         text: "Playback"
-                        color: bar.accent
+                        color: bar.text
                         font.pixelSize: bar.popupSectionSize
                         font.bold: true
                     }
@@ -2407,7 +2438,7 @@ Rectangle {
                                 Text {
                                     text: Math.round(audio.popupSpeakerLeftVolume * 100) + " / "
                                           + Math.round(audio.popupSpeakerRightVolume * 100)
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 11
                                     font.family: bar.fontFamily
                                 }
@@ -2583,7 +2614,7 @@ Rectangle {
 
                     Text {
                         text: "Recording"
-                        color: bar.accent
+                        color: bar.text
                         font.pixelSize: bar.popupSectionSize
                         font.bold: true
                     }
@@ -2830,7 +2861,7 @@ Rectangle {
                                 Text {
                                     text: Math.round(audio.popupMicLeftVolume * 100) + " / "
                                           + Math.round(audio.popupMicRightVolume * 100)
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 11
                                     font.family: bar.fontFamily
                                 }
@@ -3185,7 +3216,7 @@ Rectangle {
 
                 Text {
                     text: "Selecting a device makes it Active (live routing)"
-                    color: bar.overlay
+                    color: bar.subtext
                     font.pixelSize: 10
                     font.family: bar.fontFamily
                     wrapMode: Text.WordWrap
@@ -3295,7 +3326,7 @@ Rectangle {
                     Text {
                         visible: (audio.deviceListForSink ? audio.sinks.length : audio.sources.length) === 0
                         text: "(no devices)"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: 11
                         font.italic: true
                     }
@@ -3422,7 +3453,7 @@ Rectangle {
                         Text {
                             visible: audio.profileListItems.length === 0
                             text: "(no profiles)"
-                            color: bar.overlay
+                            color: bar.subtext
                             font.pixelSize: 11
                             font.italic: true
                         }

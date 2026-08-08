@@ -5,43 +5,9 @@ import Quickshell
 import Quickshell.Io as Io
 import "../components"
 
-// =============================================================================
-// SysStatsPill.qml — System resource gauges (CPU, Memory, GPU)
-// =============================================================================
-//
-// Purpose:
-//   Overlay gauges showing CPU + Memory + GPU utilization (and temps for CPU/GPU).
-//   Left-click each section opens a metrics dropdown (Cpu/Memory/GpuMonitorView).
-//   Right-click CPU/Memory launches btop; right-click GPU launches nvtop.
-//   Content is centered in the pill; sections grow to fit labels (esp. Memory).
-//   Automatically hides when media is playing.
-//
-// Theme Properties Consumed:
-//   - bar.glassPillBg, bar.glassBorder, bar.glassHighlight
-//   - bar.iconHoverBg, bar.workspaceRadius  (per-section hover; Config.qml)
-//   - bar.glassPopupBg, bar.glassPopupBorder, bar.glassPopupHighlight
-//   - bar.pillRadius, bar.popupRadius, bar.controlBorderWidth, bar.accent, bar.subtext, bar.text
-//   - bar.statGaugeWidth, bar.statGaugeHeight, bar.statGaugeRadius, bar.statTrack
-//   - bar.statUtilTier1–4, bar.statUtilThreshold1–3, bar.statUtilColor()
-//   - bar.statTempCool, bar.statTempWarm, bar.statTempHot, bar.statTempWarmAt,
-//     bar.statTempHotAt, bar.statTempColor(), bar.statValueSeparator
-//   - bar.divider, bar.fontFamily, bar.tooltipDelay, bar.popupAnchorY()
-//   - bar.popupStatsCpu/Mem/Gpu Width/Height and per-section position tokens (AnchorX, AnchorWholePill, OffsetX/Y, BarGap)
-//   - bar.statPillWidth / statPillSectionWidth (optional mins; 0 = hug content),
-//     bar.statPillSpacing, bar.statPillPaddingH
-//   - bar.popupStatsLiveUpdates, bar.popupStatsPersistPause
-//   - bar.surface, bar.overlay, bar.gaugeLow/Mid/High (metrics popup views)
-//
-// Dependencies:
-//   - required property var bar (from shell.qml)
-//   - required property Item barBg (popup positioning)
-//   - property bool mediaActive (from parent)
-//   - SysMonService (local; polls only while a metrics popup is open and live updates on)
-//
-// Notes:
-//   - Pill display still uses the lightweight bar-stats.sh poller (unchanged).
-//   - Rich metrics popups reuse HyprConfigInsp tab views via sysmon-poller.sh.
-// =============================================================================
+// SysStatsPill — CPU / Memory / GPU on the bar; left-click metrics, right-click btop/nvtop.
+// Options: showStatCpu/Mem/Gpu, showStatGauges (bar), showStatMenuGraphs (popups).
+// Face text: bar.barText / fontBarResolved / fontBarFace.
 
 Rectangle {
     id: root
@@ -53,7 +19,13 @@ Rectangle {
     // Horizontal scale only. Scale section widths, gauges, and fonts together so
     // labels/values never stack on top of each other when shrunk.
     readonly property real _ws: (bar.widgetScale ? bar.widgetScale("stats") : 1.0)
-    readonly property int _font: Math.max(9, Math.round(13 * _ws))
+    // Bar widget text size (Themes → Fonts → Bar widget text)
+    readonly property int _font: {
+        var base = (bar.fontBarFace !== undefined) ? bar.fontBarFace : 13
+        return Math.max(9, Math.round(base * _ws))
+    }
+    readonly property string _faceFont: (bar.fontBarResolved !== undefined && String(bar.fontBarResolved).length)
+                                        ? bar.fontBarResolved : bar.fontFamily
     readonly property int _gaugeW: Math.max(18, Math.round(bar.statGaugeWidth * _ws))
     readonly property int _gaugeH: Math.max(4, Math.round(bar.statGaugeHeight * _ws))
     // Optional minimum section width (0 = hug content). Sections never clip.
@@ -62,10 +34,14 @@ Rectangle {
     readonly property int _valGap: Math.max(2, Math.round(3 * _ws))
     readonly property int _secInnerPad: Math.max(3, Math.round(4 * _ws))
     readonly property int _secH: Math.max(20, Math.round(26 * _ws))
-    // Options: which gauges appear on the pill
+    // Options: which sections / util bars appear on the pill
     readonly property bool _showCpu: bar.showStatCpu !== undefined ? !!bar.showStatCpu : true
     readonly property bool _showMem: bar.showStatMem !== undefined ? !!bar.showStatMem : true
     readonly property bool _showGpu: bar.showStatGpu !== undefined ? !!bar.showStatGpu : true
+    // Options: util bars on the bar face (independent of menu graphs)
+    readonly property bool _showGauges: bar.showStatGauges !== undefined ? !!bar.showStatGauges : true
+    // Options: circular gauges + history in metrics popups (process lists always stay)
+    readonly property bool _showMenuGraphs: bar.showStatMenuGraphs !== undefined ? !!bar.showStatMenuGraphs : true
     readonly property int _nSec: (_showCpu ? 1 : 0) + (_showMem ? 1 : 0) + (_showGpu ? 1 : 0)
     readonly property int _padH: Math.max(4, Math.round(bar.statPillPaddingH * _ws))
     // Full slot between sections (divider centered inside; Row spacing is 0).
@@ -97,9 +73,10 @@ Rectangle {
     implicitWidth: Layout.preferredWidth
     implicitHeight: Layout.preferredHeight
     radius: bar.pillRadius
+    // Outer chrome is stable; CPU/Mem/GPU sections highlight individually.
     color: bar.glassPillBg
     border.width: bar.controlBorderWidth
-    border.color: bar.glassBorder
+    border.color: bar.pillBorder
     clip: true
 
     readonly property bool metricsPopupOpen: cpuMetricsPopup.visible || memMetricsPopup.visible || gpuMetricsPopup.visible
@@ -361,8 +338,11 @@ Rectangle {
             height: root._secH
             radius: bar.workspaceRadius
             color: cpuClick.containsMouse ? bar.iconHoverBg : "transparent"
+            border.width: cpuClick.containsMouse ? bar.controlBorderWidth : 0
+            border.color: cpuClick.containsMouse ? bar.accent : "transparent"
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+            Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
             MouseArea {
                 id: cpuClick
@@ -378,9 +358,12 @@ Rectangle {
                         root.showMetricsPopup(cpuMetricsPopup, cpuSection, "cpu")
                     }
                 }
-                ToolTip.text: "Left: CPU metrics · Right: btop"
-                ToolTip.visible: cpuClick.containsMouse
-                ToolTip.delay: bar.tooltipDelay
+                BarToolTip {
+                    bar: root.bar
+                    visible: cpuClick.containsMouse
+                    text: "Left: CPU metrics · Right: btop"
+                    anchorItem: cpuClick
+                }
             }
 
             Row {
@@ -392,12 +375,14 @@ Rectangle {
                     text: "CPU"
                     font.pixelSize: root._font
                     font.bold: true
-                    font.family: bar.fontFamily
-                    color: cpuClick.containsMouse ? bar.accent : bar.subtext
+                    font.family: root._faceFont
+                    color: cpuClick.containsMouse ? bar.accent
+                           : ((bar.barText !== undefined) ? bar.barText : bar.text)
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Item {
+                    visible: root._showGauges
                     width: root._gaugeW
                     height: root._gaugeH
                     anchors.verticalCenter: parent.verticalCenter
@@ -430,20 +415,20 @@ Rectangle {
                         text: Math.round(root.cpuUtil) + "%"
                         font.pixelSize: root._font
                         font.bold: true
-                        font.family: bar.fontFamily
+                        font.family: root._faceFont
                         color: bar.statUtilColor(root.cpuUtil)
                     }
                     Text {
                         text: "|"
                         font.pixelSize: root._font
-                        font.family: bar.fontFamily
+                        font.family: root._faceFont
                         color: bar.statValueSeparator
                     }
                     Text {
                         text: root.cpuTemp + "°"
                         font.pixelSize: root._font
                         font.bold: true
-                        font.family: bar.fontFamily
+                        font.family: root._faceFont
                         color: bar.statTempColor(root.cpuTemp)
                     }
                 }
@@ -472,8 +457,11 @@ Rectangle {
             height: root._secH
             radius: bar.workspaceRadius
             color: memClick.containsMouse ? bar.iconHoverBg : "transparent"
+            border.width: memClick.containsMouse ? bar.controlBorderWidth : 0
+            border.color: memClick.containsMouse ? bar.accent : "transparent"
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+            Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
             MouseArea {
                 id: memClick
@@ -489,9 +477,12 @@ Rectangle {
                         root.showMetricsPopup(memMetricsPopup, memSection, "mem")
                     }
                 }
-                ToolTip.text: "Left: Memory metrics · Right: btop"
-                ToolTip.visible: memClick.containsMouse
-                ToolTip.delay: bar.tooltipDelay
+                BarToolTip {
+                    bar: root.bar
+                    visible: memClick.containsMouse
+                    text: "Left: Memory metrics · Right: btop"
+                    anchorItem: memClick
+                }
             }
 
             Row {
@@ -503,12 +494,14 @@ Rectangle {
                     text: "Memory"
                     font.pixelSize: root._font
                     font.bold: true
-                    font.family: bar.fontFamily
-                    color: memClick.containsMouse ? bar.accent : bar.subtext
+                    font.family: root._faceFont
+                    color: memClick.containsMouse ? bar.accent
+                           : ((bar.barText !== undefined) ? bar.barText : bar.text)
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Item {
+                    visible: root._showGauges
                     width: root._gaugeW
                     height: root._gaugeH
                     anchors.verticalCenter: parent.verticalCenter
@@ -541,21 +534,21 @@ Rectangle {
                         text: Math.round(root.memUtil) + "%"
                         font.pixelSize: root._font
                         font.bold: true
-                        font.family: bar.fontFamily
+                        font.family: root._faceFont
                         color: bar.statUtilColor(root.memUtil)
                     }
                     Text {
                         text: "|"
                         font.pixelSize: root._font
-                        font.family: bar.fontFamily
+                        font.family: root._faceFont
                         color: bar.statValueSeparator
                     }
                     Text {
                         text: root.memUsedGib.toFixed(0) + "G"
                         font.pixelSize: root._font
                         font.bold: true
-                        font.family: bar.fontFamily
-                        color: bar.subtext
+                        font.family: root._faceFont
+                        color: (bar.barText !== undefined) ? bar.barText : bar.text
                     }
                 }
             }
@@ -582,8 +575,11 @@ Rectangle {
             height: root._secH
             radius: bar.workspaceRadius
             color: gpuClick.containsMouse ? bar.iconHoverBg : "transparent"
+            border.width: gpuClick.containsMouse ? bar.controlBorderWidth : 0
+            border.color: gpuClick.containsMouse ? bar.accent : "transparent"
 
             Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+            Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
             MouseArea {
                 id: gpuClick
@@ -599,9 +595,12 @@ Rectangle {
                         root.showMetricsPopup(gpuMetricsPopup, gpuSection, "gpu")
                     }
                 }
-                ToolTip.text: "Left: GPU metrics · Right: nvtop"
-                ToolTip.visible: gpuClick.containsMouse
-                ToolTip.delay: bar.tooltipDelay
+                BarToolTip {
+                    bar: root.bar
+                    visible: gpuClick.containsMouse
+                    text: "Left: GPU metrics · Right: nvtop"
+                    anchorItem: gpuClick
+                }
             }
 
             Row {
@@ -613,12 +612,14 @@ Rectangle {
                     text: "GPU"
                     font.pixelSize: root._font
                     font.bold: true
-                    font.family: bar.fontFamily
-                    color: gpuClick.containsMouse ? bar.accent : bar.subtext
+                    font.family: root._faceFont
+                    color: gpuClick.containsMouse ? bar.accent
+                           : ((bar.barText !== undefined) ? bar.barText : bar.text)
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Item {
+                    visible: root._showGauges
                     width: root._gaugeW
                     height: root._gaugeH
                     anchors.verticalCenter: parent.verticalCenter
@@ -651,20 +652,20 @@ Rectangle {
                         text: Math.round(root.gpuUtil) + "%"
                         font.pixelSize: root._font
                         font.bold: true
-                        font.family: bar.fontFamily
+                        font.family: root._faceFont
                         color: bar.statUtilColor(root.gpuUtil)
                     }
                     Text {
                         text: "|"
                         font.pixelSize: root._font
-                        font.family: bar.fontFamily
+                        font.family: root._faceFont
                         color: bar.statValueSeparator
                     }
                     Text {
                         text: root.gpuTemp + "°"
                         font.pixelSize: root._font
                         font.bold: true
-                        font.family: bar.fontFamily
+                        font.family: root._faceFont
                         color: bar.statTempColor(root.gpuTemp)
                     }
                 }
@@ -750,7 +751,7 @@ Rectangle {
 
                     Text {
                         text: (cpuLiveUpdates ? "live" : "paused") + " · click outside to close"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.popupHintSize
                         font.family: bar.fontFamily
                     }
@@ -760,6 +761,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     service: sysMonService
+                    showGraphs: root._showMenuGraphs
                     textColor: bar.text
                     subtextColor: bar.subtext
                     accentColor: bar.accent
@@ -854,7 +856,7 @@ Rectangle {
 
                     Text {
                         text: (memLiveUpdates ? "live" : "paused") + " · click outside to close"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.popupHintSize
                         font.family: bar.fontFamily
                     }
@@ -864,6 +866,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     service: sysMonService
+                    showGraphs: root._showMenuGraphs
                     textColor: bar.text
                     subtextColor: bar.subtext
                     accentColor: bar.accent
@@ -961,7 +964,7 @@ Rectangle {
 
                     Text {
                         text: (gpuLiveUpdates ? "live" : "paused") + " · click outside to close"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.popupHintSize
                         font.family: bar.fontFamily
                     }
@@ -971,6 +974,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     service: sysMonService
+                    showGraphs: root._showMenuGraphs
                     textColor: bar.text
                     subtextColor: bar.subtext
                     accentColor: bar.accent

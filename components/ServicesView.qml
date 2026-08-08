@@ -553,6 +553,7 @@ Item {
                     Repeater {
                         model: root.filteredServices()
                         delegate: Item {
+                            id: svcRow
                             width: parent.width
                             height: root.rowHeight
 
@@ -562,8 +563,8 @@ Item {
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 2
-                                color: parent.isSelected ? Qt.rgba(0.55, 0.70, 0.96, 0.18)
-                                    : (parent.rowHover ? Qt.rgba(1, 1, 1, 0.04) : (index % 2 === 0 ? "transparent" : Qt.rgba(1, 1, 1, 0.02)))
+                                color: svcRow.isSelected ? Qt.rgba(0.55, 0.70, 0.96, 0.18)
+                                    : (svcRow.rowHover ? Qt.rgba(1, 1, 1, 0.04) : (index % 2 === 0 ? "transparent" : Qt.rgba(1, 1, 1, 0.02)))
                             }
 
                             Row {
@@ -576,10 +577,10 @@ Item {
                                     width: root.nameColWidth(parent.width - 8)
                                     height: parent.height
                                     text: root.shortName(modelData.id) + (modelData.scope === "system" ? " [sys]" : "")
-                                    color: root.isSelected ? root.accentColor : root.textColor
+                                    color: svcRow.isSelected ? root.accentColor : root.textColor
                                     font.pixelSize: 10
                                     font.family: "monospace"
-                                    font.bold: parent.isSelected
+                                    font.bold: svcRow.isSelected
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
                                 }

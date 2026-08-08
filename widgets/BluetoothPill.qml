@@ -1,4 +1,5 @@
 import QtQuick
+import "../components"
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
@@ -91,16 +92,24 @@ Rectangle {
     Layout.preferredHeight: implicitHeight
     Layout.alignment: Qt.AlignVCenter
 
+    HoverHandler {
+        id: btHoverVis
+    }
+    readonly property bool btHovered: btHoverVis.hovered || btMouse.containsMouse
+
+    // Standalone: stable outer chrome. Embedded: this rect is the content chip.
     radius: embedded ? bar.workspaceRadius : bar.pillRadius
     color: {
         if (embedded)
-            return btMouse.containsMouse ? bar.iconHoverBg : "transparent"
-        return btMouse.containsMouse ? bar.glassHover : bar.pillBg
+            return root.btHovered ? bar.iconHoverBg : "transparent"
+        return bar.pillBg
     }
-    border.width: embedded ? 0 : bar.controlBorderWidth
+    border.width: embedded
+        ? (root.btHovered ? bar.controlBorderWidth : 0)
+        : bar.controlBorderWidth
     border.color: embedded
-                 ? "transparent"
-                 : (btMouse.containsMouse ? bar.accent : bar.pillBorder)
+        ? (root.btHovered ? bar.accent : "transparent")
+        : bar.pillBorder
 
     Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
     Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
@@ -474,8 +483,8 @@ Rectangle {
         readonly property color pillGlyphColor: {
             if (!hasAdapter || !powered) return bar ? bar.muted : "#6e7a90"
             if (discovering) return bar ? bar.accent : "#00F0E0"
-            if (connectedCount > 0) return bar ? bar.accent : "#00F0E0"
-            return bar ? bar.subtext : "#a8b4c8"
+            if (connectedCount > 0) return bar ? (bar.iconColor !== undefined ? bar.iconColor : bar.subtext) : "#ffffff"
+            return bar ? (bar.iconColor !== undefined ? bar.iconColor : bar.subtext) : "#a8b4c8"
         }
     }
 
@@ -710,49 +719,74 @@ Rectangle {
     }
 
     // =========================================================================
-    // Pill content
+    // Pill content (chip highlights; outer pill border stays stable)
     // =========================================================================
-    Item {
-        id: btContent
+    Rectangle {
+        id: btChip
         anchors.centerIn: parent
-        implicitWidth: pillRow.implicitWidth
-        implicitHeight: pillRow.implicitHeight
+        width: Math.max(18, btContent.implicitWidth + (embedded ? 4 : 10))
+        height: embedded ? parent.height : Math.max(18, parent.height - 8)
+        radius: bar.workspaceRadius
+        color: {
+            if (embedded)
+                return "transparent"
+            return root.btHovered ? bar.iconHoverBg : "transparent"
+        }
+        border.width: (!embedded && root.btHovered) ? bar.controlBorderWidth : 0
+        border.color: (!embedded && root.btHovered) ? bar.accent : "transparent"
 
-        Row {
-            id: pillRow
-            spacing: Math.max(3, Math.round(6 * root._s))
+        Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+        Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+
+        Item {
+            id: btContent
             anchors.centerIn: parent
+            implicitWidth: pillRow.implicitWidth
+            implicitHeight: pillRow.implicitHeight
 
-            Item {
-                width: Math.max(12, Math.round(bar.iconSizeTray * root._s))
-                height: Math.max(12, Math.round(bar.iconSizeTray * root._s))
-                anchors.verticalCenter: parent.verticalCenter
+            Row {
+                id: pillRow
+                spacing: Math.max(3, Math.round(6 * root._s))
+                anchors.centerIn: parent
+
+                Item {
+                    width: Math.max(12, Math.round(bar.iconSizeTray * root._s))
+                    height: Math.max(12, Math.round(bar.iconSizeTray * root._s))
+                    anchors.verticalCenter: parent.verticalCenter
+                    Text {
+                        anchors.centerIn: parent
+                        text: bt.pillGlyph
+                        font.pixelSize: Math.max(12, Math.round(bar.iconSizeTray * root._s))
+                        font.family: bar.fontFamily
+                        color: bt.pillGlyphColor
+                    }
+                }
+
+                // Compact status: battery of primary, or connected count
                 Text {
-                    anchors.centerIn: parent
-                    text: bt.pillGlyph
-                    font.pixelSize: Math.max(12, Math.round(bar.iconSizeTray * root._s))
-                    font.family: bar.fontFamily
-                    color: bt.pillGlyphColor
+                    visible: bt.powered && (bt.primaryBattery >= 0 || bt.connectedCount > 0)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: {
+                        if (bt.primaryBattery >= 0)
+                            return bt.primaryBattery + "%"
+                        if (bt.connectedCount > 0)
+                            return String(bt.connectedCount)
+                        return ""
+                    }
+                    color: bt.primaryBattery >= 0
+                           ? bt.batteryColor(bt.primaryBattery)
+                           : (bar
+                              ? ((bar.barText !== undefined) ? bar.barText : bar.text)
+                              : "#e6edf7")
+                    // Bar widget text size/family
+                    font.pixelSize: {
+                        var base = (bar && bar.fontBarFace !== undefined) ? bar.fontBarFace : 13
+                        return Math.max(9, Math.round(base * root._s))
+                    }
+                    font.bold: true
+                    font.family: (bar && bar.fontBarResolved !== undefined && String(bar.fontBarResolved).length)
+                                 ? bar.fontBarResolved : bar.fontFamily
                 }
-            }
-
-            // Compact status: battery of primary, or connected count
-            Text {
-                visible: bt.powered && (bt.primaryBattery >= 0 || bt.connectedCount > 0)
-                anchors.verticalCenter: parent.verticalCenter
-                text: {
-                    if (bt.primaryBattery >= 0)
-                        return bt.primaryBattery + "%"
-                    if (bt.connectedCount > 0)
-                        return String(bt.connectedCount)
-                    return ""
-                }
-                color: bt.primaryBattery >= 0
-                       ? bt.batteryColor(bt.primaryBattery)
-                       : (bar ? bar.subtext : "#a8b4c8")
-                font.pixelSize: bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12
-                font.bold: true
-                font.family: bar.fontFamily
             }
         }
     }
@@ -764,17 +798,20 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-        ToolTip.text: {
-            if (!bt.hasAdapter) return "No Bluetooth adapter"
-            if (!bt.powered) return "Bluetooth off · left-click menu · right-click power"
-            if (bt.primaryName.length)
-                return bt.primaryName
-                    + (bt.primaryBattery >= 0 ? (" · " + bt.primaryBattery + "%") : "")
-                    + " · left-click menu · right-click power"
-            return "Bluetooth · left-click menu · right-click power"
+        BarToolTip {
+            bar: root.bar
+            visible: btMouse.containsMouse && !btPopup.visible
+            anchorItem: btMouse
+            text: {
+                if (!bt.hasAdapter) return "No Bluetooth adapter"
+                if (!bt.powered) return "Bluetooth off · left-click menu · right-click power"
+                if (bt.primaryName.length)
+                    return bt.primaryName
+                        + (bt.primaryBattery >= 0 ? (" · " + bt.primaryBattery + "%") : "")
+                        + " · left-click menu · right-click power"
+                return "Bluetooth · left-click menu · right-click power"
+            }
         }
-        ToolTip.visible: containsMouse && !btPopup.visible
-        ToolTip.delay: bar.tooltipDelay || 400
 
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {
@@ -1233,7 +1270,7 @@ Rectangle {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: "Use Power on above, or right-click the pill"
-                                color: bar.overlay
+                                color: bar.subtext
                                 font.pixelSize: bar.fontTiny
                                 font.family: bar.fontFamily
                             }
@@ -1326,7 +1363,7 @@ Rectangle {
                                 text: bt.discovering
                                       ? "Searching for devices…"
                                       : "No devices · press Scan to discover"
-                                color: bar.overlay
+                                color: bar.subtext
                                 font.pixelSize: 12
                                 font.family: bar.fontFamily
                                 horizontalAlignment: Text.AlignHCenter
@@ -1338,7 +1375,7 @@ Rectangle {
                     Text {
                         Layout.fillWidth: true
                         text: "right-click pill toggles power · pair may open Blueman agent"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.popupHintSize || bar.fontTiny
                         font.family: bar.fontFamily
                         horizontalAlignment: Text.AlignHCenter

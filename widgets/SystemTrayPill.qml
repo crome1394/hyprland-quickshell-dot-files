@@ -48,6 +48,7 @@ Rectangle {
     Layout.preferredWidth: visible ? (trayContent.implicitWidth + Math.round(14 * _ws)) : 0
     Layout.preferredHeight: bar.pillHeight
     radius: bar.pillRadius
+    // Outer chrome is stable; each tray icon highlights on its own.
     color: bar.pillBg
     border.width: bar.controlBorderWidth
     border.color: bar.pillBorder
@@ -74,8 +75,11 @@ Rectangle {
                     height: root._icon + 8
                     radius: bar.workspaceRadius
                     color: trayIconMa.containsMouse ? bar.iconHoverBg : "transparent"
+                    border.width: trayIconMa.containsMouse ? bar.controlBorderWidth : 0
+                    border.color: trayIconMa.containsMouse ? bar.accent : "transparent"
 
                     Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+                    Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
                     IconImage {
                         anchors.centerIn: parent
@@ -396,7 +400,7 @@ Rectangle {
                         visible: (!trayMenuOpener.children || trayMenuOpener.children.length === 0) && !trayMenuPopup.menuHandle
                         Layout.alignment: Qt.AlignHCenter
                         text: "(no menu)"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.popupHintSize
                         font.italic: true
                     }

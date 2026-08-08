@@ -7,8 +7,8 @@
 //
 // Single PopupWindow (grabFocus). Expandable panel on top; toolbar buttons
 // along the bottom: Position · Display · Wallpaper · Widgets · Options ·
-// Colors · Launch · Autostart · MIME · Services · Audio · Keybinds · Clock
-// Widgets = layout; Options = behavior prefs; Colors = bar/widget theme;
+// Themes · Launch · Autostart · MIME · Services · Audio · Keybinds · Clock
+// Widgets = layout; Options = behavior prefs; Themes = bar/widget theme;
 // MIME = preferred applications / file-type defaults (MimeAppsView);
 // Services = systemd; Audio = devices/ports/AEC (AudioMonitorView);
 // Keybinds = chord/category/desc.
@@ -43,12 +43,38 @@ Item {
     property int menuTick: 0
     // Options panel live reads (refreshed on open / toggle)
     property int optionsTick: 0
-    // Colors panel state
+    // Themes panel state (activeMenu id remains "colors" for compatibility)
     property int colorsTick: 0
     property string colorsPickerKey: ""
     property string colorsExportName: ""
     property string colorsImportPath: ""
     property bool colorsShowImport: false
+    // Themes sub-tabs: "theming" | "thresholds" | "fonts" | "presets"
+    property string colorsTab: "theming"
+    // Collapsible Theming sections (true = expanded)
+    property bool themeSecColorsOpen: true
+    property bool themeSecTextOpen: true
+    property bool themeSecEffectsOpen: true
+    // System font list for Fonts tab dropdowns (filled on first open)
+    property var systemFontFamilies: []
+    property bool systemFontsLoaded: false
+    // Themes undo stack (snapshots of themeExport); max 40 entries
+    property var themeUndoStack: []
+    property bool _themeUndoGuard: false
+    // Preferred height for the side color picker so the SV square uses free vertical space
+    readonly property int colorsPickerPreferredH: {
+        void root.menuTick
+        void root.panelMaxH
+        // Leave room for header + sticky tabs (~120–160px inside Themes body)
+        return Math.max(260, Math.min(460, root.panelMaxH - 200))
+    }
+    // Themes panel fills the outer panel; body scrolls under sticky tabs
+    readonly property int themesPanelBodyH: {
+        void root.menuTick
+        void root.panelMaxH
+        // panelMaxH minus title/hint/tabs chrome inside the Themes column
+        return Math.max(180, root.panelMaxH - 150)
+    }
     // Options panel: fixed right slot — toggles & fields share the same vertical center line
     readonly property int optControlColW: 40
     readonly property int optToggleW: 28
@@ -166,24 +192,43 @@ Item {
         return []
     }
 
+    function _themeSection(row) {
+        if (!row)
+            return "colors"
+        if (row.section && ("" + row.section).length)
+            return row.section
+        // Legacy rows without section field
+        if (root._themeIsTextKey(row.key))
+            return "text"
+        if (row.key === "glassHover" || row.key === "glassHighlight"
+                || row.key === "iconHoverBg" || row.key === "glassPopupHighlight")
+            return "effects"
+        return "colors"
+    }
+
     function _themeIsTextKey(key) {
-        return key === "text" || key === "subtext" || key === "overlay" || key === "clock"
+        return key === "text" || key === "subtext" || key === "barText"
+               || key === "overlay" || key === "clock"
                || key === "buttonText" || key === "buttonTextActive"
                || key === "wsActiveText" || key === "wsInactiveText"
     }
 
-    // Color swatches column (excludes text-family keys — those live under Text)
-    function themeColorRows() {
+    function themeRowsInSection(section) {
         const rows = root.themeRows()
         const out = []
         for (let i = 0; i < rows.length; i++) {
-            if (rows[i] && !root._themeIsTextKey(rows[i].key))
+            if (rows[i] && root._themeSection(rows[i]) === section)
                 out.push(rows[i])
         }
         return out
     }
 
-    // Opacity sliders column (glass / border / hover only)
+    // Solid color swatches (Theming → Colors)
+    function themeColorRows() {
+        return root.themeRowsInSection("colors")
+    }
+
+    // Opacity sliders (all keys with opacity: true)
     function themeOpacityRows() {
         const rows = root.themeRows()
         const out = []
@@ -194,52 +239,32 @@ Item {
         return out
     }
 
-    // Text rows (full-width Text section under Colors / Opacity)
+    // Text color swatches
     function themeTextRows() {
-        const rows = root.themeRows()
-        const out = []
-        for (let i = 0; i < rows.length; i++) {
-            if (rows[i] && root._themeIsTextKey(rows[i].key))
-                out.push(rows[i])
-        }
-        return out
+        return root.themeRowsInSection("text")
     }
 
-    // Split text rows across the full-width two-column Text section
-    function themeTextRowsLeft() {
-        const rows = root.themeTextRows()
-        const mid = Math.ceil(rows.length / 2)
-        return rows.slice(0, mid)
+    // Special / Effects swatches (hover glow, top edge shine, …)
+    function themeEffectsRows() {
+        return root.themeRowsInSection("effects")
     }
 
-    function themeTextRowsRight() {
-        const rows = root.themeTextRows()
-        const mid = Math.ceil(rows.length / 2)
-        return rows.slice(mid)
-    }
-
-    // "left"  = key is on the left (Colors column or left Text column) → picker opens on the right
-    // "right" = key is on the right (right Text column) → picker opens on the left
-    function themePickerSide(key) {
-        if (!key || !key.length)
-            return ""
-        if (root._themeIsTextKey(key)) {
-            const right = root.themeTextRowsRight()
-            for (let i = 0; i < right.length; i++) {
-                if (right[i] && right[i].key === key)
-                    return "right"
-            }
-            return "left"
-        }
-        return "left"
-    }
-
+    // Theming: always open the picker on the right so bottom chrome fits the panel height
+    // (left column stays the lists). Thresholds also use the right column.
     function themePickerOpenOnRight() {
-        return root.colorsPickerKey.length > 0 && root.themePickerSide(root.colorsPickerKey) === "left"
+        return root.colorsPickerKey.length > 0
+               && !root.isThresholdThemeKey(root.colorsPickerKey)
     }
 
     function themePickerOpenOnLeft() {
-        return root.colorsPickerKey.length > 0 && root.themePickerSide(root.colorsPickerKey) === "right"
+        // Reserved — Theming no longer parks the picker on the left (avoids truncation)
+        return false
+    }
+
+    function thresholdsPickerOpen() {
+        return root.colorsTab === "thresholds"
+               && root.colorsPickerKey.length > 0
+               && root.isThresholdThemeKey(root.colorsPickerKey)
     }
 
     function themeLabelForKey(key) {
@@ -247,6 +272,12 @@ Item {
         for (let i = 0; i < rows.length; i++) {
             if (rows[i].key === key)
                 return rows[i].label
+        }
+        const extra = root.volumeTierRows().concat(root.micVolumeTierRows())
+            .concat(root.statUtilTierRows()).concat(root.statTempRows())
+        for (let j = 0; j < extra.length; j++) {
+            if (extra[j].key === key)
+                return extra[j].label
         }
         return "Pick a color"
     }
@@ -280,6 +311,12 @@ Item {
 
     function openColorPicker(key) {
         root.colorsPickerKey = key || ""
+        root._pickerUndoPushed = false
+        // Route threshold-tier swatches to the Thresholds tab; everything else to Theming
+        if (root.isThresholdThemeKey(root.colorsPickerKey))
+            root.colorsTab = "thresholds"
+        else
+            root.colorsTab = "theming"
         root.colorsTick++
         // Keep picker fully on-screen and avoid Flickable fighting the drag
         if (typeof panelFlick !== "undefined" && panelFlick) {
@@ -287,24 +324,40 @@ Item {
             if (panelFlick.returnToBounds)
                 panelFlick.returnToBounds()
         }
+        if (typeof themesBodyFlick !== "undefined" && themesBodyFlick)
+            themesBodyFlick.contentY = 0
     }
 
     function closeColorPicker() {
         root.colorsPickerKey = ""
+        root._pickerUndoPushed = false
         root.colorsTick++
     }
 
     function applyPickedColor(c) {
         if (!root.colorsPickerKey || !bar || typeof bar.setThemeColor !== "function")
             return
+        // One undo step per continuous drag session: push only on first edit after open/key change
+        if (!root._pickerUndoPushed) {
+            root.pushThemeUndo()
+            root._pickerUndoPushed = true
+        }
         bar.setThemeColor(root.colorsPickerKey, c)
         // Bump tick so swatches / opacity labels refresh; picker keeps its own HSV state.
         root.colorsTick++
     }
 
+    property bool _pickerUndoPushed: false
+
+    property string _alphaUndoKey: ""
     function setThemeAlphaPct(key, pct) {
         if (!bar || typeof bar.setThemeAlpha !== "function")
             return
+        // One undo step per opacity control until a different key is moved
+        if (root._alphaUndoKey !== key) {
+            root.pushThemeUndo()
+            root._alphaUndoKey = key
+        }
         bar.setThemeAlpha(key, Math.max(0, Math.min(100, pct)) / 100)
         root.colorsTick++
     }
@@ -437,6 +490,7 @@ Item {
         if (root.activeMenu === "colors") {
             root.colorsPickerKey = ""
             root.colorsShowImport = false
+            root.colorsTab = "theming"
             root.colorsTick++
             if (bar && typeof bar.refreshThemeSavedList === "function")
                 bar.refreshThemeSavedList()
@@ -562,6 +616,18 @@ Item {
             if (typeof bar.setShowStatGpu === "function")
                 bar.setShowStatGpu(on)
             break
+        case "setShowStatGauges":
+            if (typeof bar.setShowStatGauges === "function")
+                bar.setShowStatGauges(on)
+            break
+        case "setShowStatMenuGraphs":
+            if (typeof bar.setShowStatMenuGraphs === "function")
+                bar.setShowStatMenuGraphs(on)
+            break
+        case "setShowNetTrafficGraph":
+            if (typeof bar.setShowNetTrafficGraph === "function")
+                bar.setShowNetTrafficGraph(on)
+            break
         case "setShowEchoCancelInMenu":
             if (typeof bar.setShowEchoCancelInMenu === "function")
                 bar.setShowEchoCancelInMenu(on)
@@ -686,19 +752,346 @@ Item {
             return bar.controlActiveBg !== undefined ? bar.controlActiveBg : Qt.rgba(0.0, 0.77, 0.96, 0.22)
         if (hovered)
             return bar.glassHover
-        return bar.pillBg
+        // Isolated button fill (legend 1/6/11) — not glassPillBg/pillBg
+        return bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg
     }
 
+    function controlButtonBg(hovered) {
+        if (hovered)
+            return bar.glassHover
+        return bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg
+    }
+
+    function volumeTierRows() {
+        if (bar && bar.themeVolumeTierUiRows)
+            return bar.themeVolumeTierUiRows
+        return [
+            { key: "audioSpeakerTier1", label: "Out low" },
+            { key: "audioSpeakerTier2", label: "Out mid" },
+            { key: "audioSpeakerTier3", label: "Out high" },
+            { key: "audioSpeakerTier4", label: "Out peak" }
+        ]
+    }
+
+    function micVolumeTierRows() {
+        if (bar && bar.themeMicVolumeTierUiRows)
+            return bar.themeMicVolumeTierUiRows
+        return [
+            { key: "audioMicTier1", label: "In low" },
+            { key: "audioMicTier2", label: "In mid" },
+            { key: "audioMicTier3", label: "In high" },
+            { key: "audioMicTier4", label: "In peak" }
+        ]
+    }
+
+    function pushThemeUndo() {
+        if (root._themeUndoGuard)
+            return
+        if (!bar || typeof bar.getThemeSnapshot !== "function")
+            return
+        try {
+            const snap = bar.getThemeSnapshot()
+            if (!snap)
+                return
+            // Deep-ish copy via JSON so later mutations don't rewrite history
+            const copy = JSON.parse(JSON.stringify(snap))
+            let stack = root.themeUndoStack ? root.themeUndoStack.slice() : []
+            stack.push(copy)
+            if (stack.length > 40)
+                stack = stack.slice(stack.length - 40)
+            root.themeUndoStack = stack
+            root.colorsTick++
+        } catch (e) {}
+    }
+
+    function canThemeUndo() {
+        void root.colorsTick
+        return !!(root.themeUndoStack && root.themeUndoStack.length)
+    }
+
+    function undoThemeEdit() {
+        if (!root.canThemeUndo())
+            return
+        if (!bar || typeof bar.applyThemeObject !== "function")
+            return
+        const stack = root.themeUndoStack.slice()
+        const prev = stack.pop()
+        root.themeUndoStack = stack
+        root._themeUndoGuard = true
+        try {
+            bar.applyThemeObject(prev)
+        } catch (e) {}
+        root._themeUndoGuard = false
+        root.colorsPickerKey = ""
+        root.colorsTick++
+    }
+
+    function statUtilTierRows() {
+        if (bar && bar.themeStatUtilTierUiRows)
+            return bar.themeStatUtilTierUiRows
+        return [
+            { key: "statUtilTier1", label: "Load low" },
+            { key: "statUtilTier2", label: "Load mid" },
+            { key: "statUtilTier3", label: "Load high" },
+            { key: "statUtilTier4", label: "Load peak" }
+        ]
+    }
+
+    function statTempRows() {
+        if (bar && bar.themeStatTempUiRows)
+            return bar.themeStatTempUiRows
+        return [
+            { key: "statTempCool", label: "Temp cool" },
+            { key: "statTempWarm", label: "Temp warm" },
+            { key: "statTempHot", label: "Temp hot" }
+        ]
+    }
+
+    function isThresholdThemeKey(key) {
+        if (!key || !key.length)
+            return false
+        return key.indexOf("audioSpeakerTier") === 0
+            || key.indexOf("audioMicTier") === 0
+            || key.indexOf("audioUtilThreshold") === 0
+            || key.indexOf("audioMicUtilThreshold") === 0
+            || key.indexOf("statUtilTier") === 0
+            || key.indexOf("statUtilThreshold") === 0
+            || key.indexOf("statTemp") === 0
+    }
+
+    function themeNumberFor(key) {
+        if (bar && typeof bar.getThemeNumber === "function") {
+            const n = bar.getThemeNumber(key)
+            if (n !== null && n !== undefined)
+                return n
+        }
+        if (key === "audioUtilThreshold1") return bar && bar.audioUtilThreshold1 !== undefined ? bar.audioUtilThreshold1 : 25
+        if (key === "audioUtilThreshold2") return bar && bar.audioUtilThreshold2 !== undefined ? bar.audioUtilThreshold2 : 50
+        if (key === "audioUtilThreshold3") return bar && bar.audioUtilThreshold3 !== undefined ? bar.audioUtilThreshold3 : 75
+        if (key === "audioMicUtilThreshold1") return bar && bar.audioMicUtilThreshold1 !== undefined ? bar.audioMicUtilThreshold1 : 25
+        if (key === "audioMicUtilThreshold2") return bar && bar.audioMicUtilThreshold2 !== undefined ? bar.audioMicUtilThreshold2 : 50
+        if (key === "audioMicUtilThreshold3") return bar && bar.audioMicUtilThreshold3 !== undefined ? bar.audioMicUtilThreshold3 : 75
+        if (key === "statUtilThreshold1") return bar && bar.statUtilThreshold1 !== undefined ? bar.statUtilThreshold1 : 25
+        if (key === "statUtilThreshold2") return bar && bar.statUtilThreshold2 !== undefined ? bar.statUtilThreshold2 : 50
+        if (key === "statUtilThreshold3") return bar && bar.statUtilThreshold3 !== undefined ? bar.statUtilThreshold3 : 75
+        if (key === "statTempWarmAt") return bar && bar.statTempWarmAt !== undefined ? bar.statTempWarmAt : 70
+        if (key === "statTempHotAt") return bar && bar.statTempHotAt !== undefined ? bar.statTempHotAt : 85
+        return 0
+    }
+
+    function setThemeNumberValue(key, n) {
+        if (!bar || typeof bar.setThemeNumber !== "function")
+            return
+        root.pushThemeUndo()
+        bar.setThemeNumber(key, n)
+        root.colorsTick++
+    }
+
+    function setColorsTab(tab) {
+        const t = tab || "theming"
+        if (root.colorsTab === t) {
+            if (t === "fonts")
+                root.refreshSystemFonts()
+            return
+        }
+        root.colorsTab = t
+        // Picker lives on Theming / Thresholds — close when leaving its host
+        if (root.colorsPickerKey.length) {
+            if (root.isThresholdThemeKey(root.colorsPickerKey) && t !== "thresholds")
+                root.closeColorPicker()
+            else if (!root.isThresholdThemeKey(root.colorsPickerKey) && t !== "theming")
+                root.closeColorPicker()
+        }
+        if (t === "fonts")
+            root.refreshSystemFonts()
+        root.colorsTick++
+    }
+
+    function toggleThemeSection(sec) {
+        if (sec === "colors")
+            root.themeSecColorsOpen = !root.themeSecColorsOpen
+        else if (sec === "text")
+            root.themeSecTextOpen = !root.themeSecTextOpen
+        else if (sec === "effects")
+            root.themeSecEffectsOpen = !root.themeSecEffectsOpen
+        root.colorsTick++
+    }
+
+    function refreshSystemFonts() {
+        if (root.systemFontsLoaded && root.systemFontFamilies && root.systemFontFamilies.length)
+            return
+        var list = []
+        try {
+            // Qt.fontFamilies() — all installed faces (Qt 5.15+ / Qt 6)
+            list = Qt.fontFamilies()
+        } catch (e) {
+            list = []
+        }
+        if (!list || !list.length) {
+            list = [
+                "JetBrains Mono Nerd Font", "Symbols Nerd Font",
+                "DejaVu Sans", "DejaVu Sans Mono", "Noto Sans", "Noto Sans Mono",
+                "FreeSans", "FreeMono", "Monospace", "Sans Serif"
+            ]
+        }
+        // Sort case-insensitive; drop empties
+        var out = []
+        for (var i = 0; i < list.length; i++) {
+            var n = ("" + list[i]).trim()
+            if (n.length)
+                out.push(n)
+        }
+        out.sort(function(a, b) {
+            var al = a.toLowerCase(), bl = b.toLowerCase()
+            if (al < bl) return -1
+            if (al > bl) return 1
+            return 0
+        })
+        root.systemFontFamilies = out
+        root.systemFontsLoaded = true
+    }
+
+    function currentUiFontName() {
+        if (bar && typeof bar.primaryUiFontFamily === "function")
+            return bar.primaryUiFontFamily()
+        return ""
+    }
+
+    function currentMonoFontName() {
+        if (bar && typeof bar.primaryFontFamily === "function")
+            return bar.primaryFontFamily(bar.fontMono || "")
+        return ""
+    }
+
+    function fontIndexFor(name) {
+        var list = root.systemFontFamilies || []
+        var want = ("" + (name || "")).trim().toLowerCase()
+        if (!want.length)
+            return -1
+        for (var i = 0; i < list.length; i++) {
+            if (("" + list[i]).trim().toLowerCase() === want)
+                return i
+        }
+        return -1
+    }
+
+    function applyUiFontFromCombo(index) {
+        var list = root.systemFontFamilies || []
+        if (index < 0 || index >= list.length)
+            return
+        root.pushThemeUndo()
+        if (bar && typeof bar.setUiFontFamily === "function")
+            bar.setUiFontFamily(list[index])
+        root.colorsTick++
+    }
+
+    function applyMonoFontFromCombo(index) {
+        var list = root.systemFontFamilies || []
+        if (index < 0 || index >= list.length)
+            return
+        root.pushThemeUndo()
+        if (bar && typeof bar.setMonoFontFamily === "function")
+            bar.setMonoFontFamily(list[index])
+        root.colorsTick++
+    }
+
+    function applyFontScalePct(pct) {
+        var p = Number(pct)
+        if (!(p > 0))
+            return
+        // Undo is pushed once on slider press (see Fonts tab), not every tick
+        if (bar && typeof bar.setThemeFontScale === "function")
+            bar.setThemeFontScale(p / 100)
+        root.colorsTick++
+    }
+
+    function currentFontScalePct() {
+        void root.colorsTick
+        var s = (bar && bar.fontScale !== undefined) ? Number(bar.fontScale) : 1
+        if (!(s > 0))
+            s = 1
+        return Math.round(s * 100)
+    }
+
+    // role: "main" | "secondary" | "bar"
+    function currentRoleFontName(role) {
+        void root.colorsTick
+        if (bar && typeof bar.primaryRoleFontFamily === "function")
+            return bar.primaryRoleFontFamily(role)
+        return root.currentUiFontName()
+    }
+
+    function applyRoleFontFromCombo(role, index) {
+        var list = root.systemFontFamilies || []
+        if (index < 0 || index >= list.length)
+            return
+        root.pushThemeUndo()
+        if (bar && typeof bar.setRoleFontFamily === "function")
+            bar.setRoleFontFamily(role, list[index])
+        root.colorsTick++
+    }
+
+    function applyRoleFontScalePct(role, pct) {
+        var p = Number(pct)
+        if (!(p > 0))
+            return
+        if (bar && typeof bar.setThemeFontRoleScale === "function")
+            bar.setThemeFontRoleScale(role, p / 100)
+        root.colorsTick++
+    }
+
+    function currentRoleFontScalePct(role) {
+        void root.colorsTick
+        var s = 1
+        if (role === "ui" || role === "scale")
+            s = (bar && bar.fontScale !== undefined) ? Number(bar.fontScale) : 1
+        else if (role === "mono" && bar && bar.fontMonoScale !== undefined)
+            s = Number(bar.fontMonoScale)
+        else if (role === "main" && bar && bar.fontMainScale !== undefined)
+            s = Number(bar.fontMainScale)
+        else if (role === "secondary" && bar && bar.fontSecondaryScale !== undefined)
+            s = Number(bar.fontSecondaryScale)
+        else if (role === "bar" && bar && bar.fontBarScale !== undefined)
+            s = Number(bar.fontBarScale)
+        if (!(s > 0))
+            s = 1
+        return Math.round(s * 100)
+    }
+
+    // Shared size slider chip (right column of font rows)
+    function fontSizeChipWidth() { return 168 }
+
+    // Helpers for Fonts tab / panels — safe fallbacks
+    function menuTitleFont() {
+        void root.colorsTick
+        return (bar && bar.fontMainResolved) ? bar.fontMainResolved : bar.fontFamily
+    }
+    function menuBodyFont() {
+        void root.colorsTick
+        return (bar && bar.fontSecondaryResolved) ? bar.fontSecondaryResolved : bar.fontFamily
+    }
+    function barFaceFont() {
+        void root.colorsTick
+        return (bar && bar.fontBarResolved) ? bar.fontBarResolved : bar.fontFamily
+    }
+
+    // Active/hover chip chrome uses button tokens — not accent — so editing Accent
+    // does not recolor toolbar labels or tab borders (use Active button / Active button text).
     function chipBorder(active, hovered) {
         if (active || hovered)
-            return bar.accent
+            return bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.pillBorder
         return bar.pillBorder
     }
 
     function chipText(active, hovered) {
         if (active || hovered)
-            return bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.accent
+            return bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.text
         return bar.buttonText !== undefined ? bar.buttonText : bar.subtext
+    }
+
+    // Active control labels inside Themes/Options panels (not accent)
+    function activeLabelColor() {
+        return bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.text
     }
 
     function isWidgetOn(id) {
@@ -760,8 +1153,13 @@ Item {
                 })
             }
         }
-        // Alphabetical by label for easier scanning (↑↓ still changes bar layout order)
+        // Sort: zone L → C → R, then alphabetical by label (↑↓ still changes bar layout order)
         out.sort(function (a, b) {
+            const zoneOrder = { left: 0, center: 1, right: 2 }
+            const za = zoneOrder[a.zone] !== undefined ? zoneOrder[a.zone] : 9
+            const zb = zoneOrder[b.zone] !== undefined ? zoneOrder[b.zone] : 9
+            if (za !== zb)
+                return za - zb
             const la = String(a.label || a.id).toLowerCase()
             const lb = String(b.label || b.id).toLowerCase()
             if (la < lb)
@@ -2159,9 +2557,10 @@ Item {
                         // Scroll only when content exceeds the panel (Wallpaper/Widgets/Autostart/Launch)
                         // Disable scrolling while the color picker is open — Flickable
                         // otherwise steals vertical drag from the SV square / hue strip.
+                        // Themes panel scrolls internally (sticky tabs) — never use outer flick
                         interactive: root.panelNeedsScroll
                                      && (contentHeight > height + 4)
-                                     && !(root.activeMenu === "colors" && root.colorsPickerKey.length > 0)
+                                     && root.activeMenu !== "colors"
 
                         onContentHeightChanged: {
                             if (contentHeight <= height + 4)
@@ -2216,7 +2615,7 @@ Item {
                                 }
                                 Text {
                                     text: "Pin the status bar to the top or bottom edge"
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -2235,9 +2634,9 @@ Item {
                                         radius: root.chipR
                                         color: (bar.barPosition === "top")
                                                ? (bar.controlActiveBg || Qt.rgba(0, 0.77, 0.96, 0.22))
-                                               : (posTopMa.containsMouse ? bar.glassHover : bar.pillBg)
+                                               : (posTopMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg))
                                         border.width: bar.controlBorderWidth
-                                        border.color: (bar.barPosition === "top") ? bar.accent : bar.pillBorder
+                                        border.color: (bar.barPosition === "top") ? root.activeLabelColor() : bar.pillBorder
                                         RowLayout {
                                             anchors.fill: parent
                                             anchors.leftMargin: 12
@@ -2250,7 +2649,7 @@ Item {
                                                 text: bar.barPositionIconTop
                                                 font.pixelSize: bar.iconSizePill
                                                 font.family: bar.fontFamily
-                                                color: bar.barPosition === "top" ? bar.accent : bar.subtext
+                                                color: bar.barPosition === "top" ? root.activeLabelColor() : bar.subtext
                                             }
                                             Text {
                                                 Layout.alignment: Qt.AlignVCenter
@@ -2258,7 +2657,7 @@ Item {
                                                 font.pixelSize: 13
                                                 font.bold: bar.barPosition === "top"
                                                 font.family: bar.fontFamily
-                                                color: bar.barPosition === "top" ? bar.accent : bar.text
+                                                color: bar.barPosition === "top" ? root.activeLabelColor() : bar.text
                                             }
                                             Item { Layout.fillWidth: true }
                                         }
@@ -2283,9 +2682,9 @@ Item {
                                         radius: root.chipR
                                         color: (bar.barPosition === "bottom")
                                                ? (bar.controlActiveBg || Qt.rgba(0, 0.77, 0.96, 0.22))
-                                               : (posBotMa.containsMouse ? bar.glassHover : bar.pillBg)
+                                               : (posBotMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg))
                                         border.width: bar.controlBorderWidth
-                                        border.color: (bar.barPosition === "bottom") ? bar.accent : bar.pillBorder
+                                        border.color: (bar.barPosition === "bottom") ? root.activeLabelColor() : bar.pillBorder
                                         RowLayout {
                                             anchors.fill: parent
                                             anchors.leftMargin: 12
@@ -2298,7 +2697,7 @@ Item {
                                                 text: bar.barPositionIconBottom
                                                 font.pixelSize: bar.iconSizePill
                                                 font.family: bar.fontFamily
-                                                color: bar.barPosition === "bottom" ? bar.accent : bar.subtext
+                                                color: bar.barPosition === "bottom" ? root.activeLabelColor() : bar.subtext
                                             }
                                             Text {
                                                 Layout.alignment: Qt.AlignVCenter
@@ -2306,7 +2705,7 @@ Item {
                                                 font.pixelSize: 13
                                                 font.bold: bar.barPosition === "bottom"
                                                 font.family: bar.fontFamily
-                                                color: bar.barPosition === "bottom" ? bar.accent : bar.text
+                                                color: bar.barPosition === "bottom" ? root.activeLabelColor() : bar.text
                                             }
                                             Item { Layout.fillWidth: true }
                                         }
@@ -2347,7 +2746,7 @@ Item {
                                         Layout.preferredHeight: 26
                                         Layout.preferredWidth: Math.max(72, nvidiaPanelRow.implicitWidth + 14)
                                         radius: root.chipR
-                                        color: nvidiaPanelMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: nvidiaPanelMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: nvidiaPanelMa.containsMouse
                                                       ? "#76b900"   // NVIDIA green accent on hover
@@ -2388,7 +2787,7 @@ Item {
                                         Layout.preferredHeight: 26
                                         Layout.preferredWidth: Math.max(56, refreshDispTxt.implicitWidth + 16)
                                         radius: root.chipR
-                                        color: refreshDispMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: refreshDispMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -2428,7 +2827,7 @@ Item {
                                         Text {
                                             Layout.fillWidth: true
                                             text: root.displayCurrentLabel()
-                                            color: bar.accent
+                                            color: bar.text
                                             font.pixelSize: 13
                                             font.bold: true
                                             font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
@@ -2447,7 +2846,7 @@ Item {
                                             Layout.fillWidth: true
                                             visible: root.displayConnectorLabel().length > 0
                                             text: root.displayConnectorLabel()
-                                            color: bar.overlay
+                                            color: bar.subtext
                                             font.pixelSize: 10
                                             font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                             elide: Text.ElideRight
@@ -2456,7 +2855,7 @@ Item {
                                             Layout.fillWidth: true
                                             visible: root.displayMetaLabel().length > 0
                                             text: root.displayMetaLabel()
-                                            color: bar.overlay
+                                            color: bar.subtext
                                             font.pixelSize: 10
                                             font.family: bar.fontFamily
                                             elide: Text.ElideRight
@@ -2499,7 +2898,7 @@ Item {
                                         Text {
                                             Layout.fillWidth: true
                                             text: root.displayGpuStatsLine1()
-                                            color: bar.overlay
+                                            color: bar.subtext
                                             font.pixelSize: 10
                                             font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                             elide: Text.ElideRight
@@ -2508,7 +2907,7 @@ Item {
                                             Layout.fillWidth: true
                                             visible: root.displayGpuStatsLine2().length > 0
                                             text: root.displayGpuStatsLine2()
-                                            color: bar.overlay
+                                            color: bar.subtext
                                             font.pixelSize: 10
                                             font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                             elide: Text.ElideRight
@@ -2528,7 +2927,7 @@ Item {
                                                 spacing: 2
                                                 Text {
                                                     text: "GPU"
-                                                    color: bar.overlay
+                                                    color: bar.subtext
                                                     font.pixelSize: 9
                                                     font.family: bar.fontFamily
                                                 }
@@ -2550,7 +2949,7 @@ Item {
                                                 spacing: 2
                                                 Text {
                                                     text: "VRAM"
-                                                    color: bar.overlay
+                                                    color: bar.subtext
                                                     font.pixelSize: 9
                                                     font.family: bar.fontFamily
                                                 }
@@ -2682,7 +3081,7 @@ Item {
                                                 return (root.displayResIndex + 1) + "/" + n
                                                        + " res near " + fam + " Hz"
                                             }
-                                            color: bar.overlay
+                                            color: bar.subtext
                                             font.pixelSize: 10
                                             font.family: bar.fontFamily
                                         }
@@ -2727,7 +3126,7 @@ Item {
                                                 }
                                                 Text {
                                                     text: root.displayRateMenuOpen ? "▴" : "▾"
-                                                    color: bar.overlay
+                                                    color: bar.subtext
                                                     font.pixelSize: 11
                                                 }
                                             }
@@ -2760,13 +3159,13 @@ Item {
                                                            ? (bar.controlActiveBg || Qt.rgba(0, 0.77, 0.96, 0.22))
                                                            : (rateRowMa.containsMouse ? bar.glassHover : Qt.rgba(0.10, 0.10, 0.12, 0.55))
                                                     border.width: 1
-                                                    border.color: active ? bar.accent : bar.dividerStrong
+                                                    border.color: active ? root.activeLabelColor() : bar.dividerStrong
                                                     Text {
                                                         anchors.left: parent.left
                                                         anchors.leftMargin: 8
                                                         anchors.verticalCenter: parent.verticalCenter
                                                         text: root.displayFormatRate(modelData) + " Hz"
-                                                        color: active ? bar.accent : bar.text
+                                                        color: active ? root.activeLabelColor() : bar.text
                                                         font.pixelSize: 11
                                                         font.family: bar.fontFamily
                                                         font.bold: active
@@ -2817,7 +3216,7 @@ Item {
                                                 }
                                                 Text {
                                                     text: root.displayBitdepthMenuOpen ? "▴" : "▾"
-                                                    color: bar.overlay
+                                                    color: bar.subtext
                                                     font.pixelSize: 11
                                                 }
                                             }
@@ -2849,11 +3248,11 @@ Item {
                                                            ? (bar.controlActiveBg || Qt.rgba(0, 0.77, 0.96, 0.22))
                                                            : (bdRowMa.containsMouse ? bar.glassHover : Qt.rgba(0.10, 0.10, 0.12, 0.55))
                                                     border.width: 1
-                                                    border.color: active ? bar.accent : bar.dividerStrong
+                                                    border.color: active ? root.activeLabelColor() : bar.dividerStrong
                                                     Text {
                                                         anchors.centerIn: parent
                                                         text: modelData + "-bit"
-                                                        color: active ? bar.accent : bar.text
+                                                        color: active ? root.activeLabelColor() : bar.text
                                                         font.pixelSize: 11
                                                         font.bold: active
                                                         font.family: bar.fontFamily
@@ -2888,7 +3287,7 @@ Item {
                                                   : Qt.rgba(0, 0.77, 0.96, 0.18))
                                                : Qt.rgba(0.12, 0.12, 0.14, 0.55)
                                         border.width: 1
-                                        border.color: canApply ? bar.accent : bar.dividerStrong
+                                        border.color: canApply ? root.activeLabelColor() : bar.dividerStrong
                                         Text {
                                             anchors.centerIn: parent
                                             text: root.displayApplying
@@ -2897,7 +3296,7 @@ Item {
                                                      ? ("Apply  " + root.displayPendingMode()
                                                         + "  ·  " + root.displayBitdepth + "-bit")
                                                      : "No changes")
-                                            color: parent.canApply ? bar.accent : bar.overlay
+                                            color: parent.canApply ? root.activeLabelColor() : bar.overlay
                                             font.pixelSize: 12
                                             font.bold: parent.canApply
                                             font.family: bar.fontFamily
@@ -2937,7 +3336,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "Res ↔ rate linked (hyprctl). GPU stats poll every 3s only while this panel is open (paused while dragging). Apply uses scale 1.0."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 10
                                     font.family: bar.fontFamily
                                 }
@@ -2963,7 +3362,7 @@ Item {
                                         Layout.preferredHeight: 26
                                         Layout.preferredWidth: refreshWpLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: refreshWpMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: refreshWpMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -2988,7 +3387,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WrapAnywhere
                                     text: root.wallpaperDirDisplay || root.wallpaperDir()
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                 }
@@ -3009,14 +3408,14 @@ Item {
                                         Layout.preferredHeight: 30
                                         Layout.preferredWidth: changeDirLbl.implicitWidth + 14
                                         radius: root.chipR
-                                        color: changeDirMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: changeDirMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: changeDirMa.containsMouse ? bar.accent : bar.pillBorder
                                         Text {
                                             id: changeDirLbl
                                             anchors.centerIn: parent
                                             text: "Change folder…"
-                                            color: changeDirMa.containsMouse ? bar.accent : bar.subtext
+                                            color: changeDirMa.containsMouse ? root.activeLabelColor() : bar.subtext
                                             font.pixelSize: 11
                                             font.family: bar.fontFamily
                                         }
@@ -3032,14 +3431,14 @@ Item {
                                         Layout.preferredHeight: 30
                                         Layout.preferredWidth: addWpLbl.implicitWidth + 14
                                         radius: root.chipR
-                                        color: addWpMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: addWpMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: addWpMa.containsMouse ? bar.accent : bar.pillBorder
                                         Text {
                                             id: addWpLbl
                                             anchors.centerIn: parent
                                             text: "Add wallpapers…"
-                                            color: addWpMa.containsMouse ? bar.accent : bar.subtext
+                                            color: addWpMa.containsMouse ? root.activeLabelColor() : bar.subtext
                                             font.pixelSize: 11
                                             font.family: bar.fontFamily
                                         }
@@ -3055,7 +3454,7 @@ Item {
                                         Layout.preferredHeight: 30
                                         Layout.preferredWidth: openWpLbl.implicitWidth + 14
                                         radius: root.chipR
-                                        color: openWpMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: openWpMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -3173,7 +3572,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "No images in this folder. Use “Add wallpapers…” or “Change folder…”."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 11
                                     font.family: bar.fontFamily
                                 }
@@ -3199,7 +3598,7 @@ Item {
                                         Layout.preferredHeight: 24
                                         Layout.preferredWidth: resetLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: resetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: resetMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: bar.controlBorderWidth
                                         border.color: bar.pillBorder
                                         Text {
@@ -3227,7 +3626,7 @@ Item {
                                         Layout.preferredHeight: 24
                                         Layout.preferredWidth: resetSizesLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: resetSizesMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: resetSizesMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -3255,8 +3654,8 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: "A–Z · ✓/✕ · name · L/C/R · ↑↓ · width % (80–180)"
-                                    color: bar.overlay
+                                    text: "L→C→R then A–Z · ✓/✕ · name · L/C/R · ↑↓ · width % (80–180)"
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -3363,15 +3762,15 @@ Item {
                                                         Layout.preferredWidth: 22
                                                         Layout.preferredHeight: 22
                                                         radius: 4
-                                                        color: widgetRow.widgetZone === "left" ? bar.controlActiveBg : bar.pillBg
+                                                        color: widgetRow.widgetZone === "left" ? bar.controlActiveBg : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                         border.width: 1
-                                                        border.color: widgetRow.widgetZone === "left" ? bar.accent : bar.pillBorder
+                                                        border.color: widgetRow.widgetZone === "left" ? root.activeLabelColor() : bar.pillBorder
                                                         Text {
                                                             anchors.centerIn: parent
                                                             text: "L"
                                                             font.pixelSize: 10
                                                             font.family: bar.fontFamily
-                                                            color: widgetRow.widgetZone === "left" ? bar.accent : bar.subtext
+                                                            color: widgetRow.widgetZone === "left" ? root.activeLabelColor() : bar.subtext
                                                         }
                                                         MouseArea {
                                                             anchors.fill: parent
@@ -3388,15 +3787,15 @@ Item {
                                                         Layout.preferredWidth: 22
                                                         Layout.preferredHeight: 22
                                                         radius: 4
-                                                        color: widgetRow.widgetZone === "center" ? bar.controlActiveBg : bar.pillBg
+                                                        color: widgetRow.widgetZone === "center" ? bar.controlActiveBg : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                         border.width: 1
-                                                        border.color: widgetRow.widgetZone === "center" ? bar.accent : bar.pillBorder
+                                                        border.color: widgetRow.widgetZone === "center" ? root.activeLabelColor() : bar.pillBorder
                                                         Text {
                                                             anchors.centerIn: parent
                                                             text: "C"
                                                             font.pixelSize: 10
                                                             font.family: bar.fontFamily
-                                                            color: widgetRow.widgetZone === "center" ? bar.accent : bar.subtext
+                                                            color: widgetRow.widgetZone === "center" ? root.activeLabelColor() : bar.subtext
                                                         }
                                                         MouseArea {
                                                             anchors.fill: parent
@@ -3413,15 +3812,15 @@ Item {
                                                         Layout.preferredWidth: 22
                                                         Layout.preferredHeight: 22
                                                         radius: 4
-                                                        color: widgetRow.widgetZone === "right" ? bar.controlActiveBg : bar.pillBg
+                                                        color: widgetRow.widgetZone === "right" ? bar.controlActiveBg : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                         border.width: 1
-                                                        border.color: widgetRow.widgetZone === "right" ? bar.accent : bar.pillBorder
+                                                        border.color: widgetRow.widgetZone === "right" ? root.activeLabelColor() : bar.pillBorder
                                                         Text {
                                                             anchors.centerIn: parent
                                                             text: "R"
                                                             font.pixelSize: 10
                                                             font.family: bar.fontFamily
-                                                            color: widgetRow.widgetZone === "right" ? bar.accent : bar.subtext
+                                                            color: widgetRow.widgetZone === "right" ? root.activeLabelColor() : bar.subtext
                                                         }
                                                         MouseArea {
                                                             anchors.fill: parent
@@ -3448,7 +3847,7 @@ Item {
                                                         Layout.preferredWidth: 24
                                                         Layout.preferredHeight: 24
                                                         radius: 4
-                                                        color: upMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                        color: upMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                         border.width: 1
                                                         border.color: bar.pillBorder
                                                         Text {
@@ -3474,7 +3873,7 @@ Item {
                                                         Layout.preferredWidth: 24
                                                         Layout.preferredHeight: 24
                                                         radius: 4
-                                                        color: dnMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                        color: dnMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                         border.width: 1
                                                         border.color: bar.pillBorder
                                                         Text {
@@ -3576,7 +3975,7 @@ Item {
                                                 }
                                                 Text {
                                                     text: "%"
-                                                    color: bar.overlay
+                                                    color: bar.subtext
                                                     font.pixelSize: 10
                                                     font.family: bar.fontFamily
                                                 }
@@ -3606,7 +4005,7 @@ Item {
                                         Layout.preferredHeight: 24
                                         Layout.preferredWidth: resetLaunchLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: resetLaunchMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: resetLaunchMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: bar.controlBorderWidth
                                         border.color: bar.pillBorder
                                         Text {
@@ -3635,7 +4034,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "Pinned icons on the bar · ✕ remove · ↑↓ reorder · add from installed apps or custom"
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -3721,7 +4120,7 @@ Item {
                                                     Layout.fillWidth: true
                                                     elide: Text.ElideRight
                                                     text: modelData.commandText
-                                                    color: bar.overlay
+                                                    color: bar.subtext
                                                     font.pixelSize: 10
                                                     font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                                 }
@@ -3731,7 +4130,7 @@ Item {
                                                 Layout.preferredWidth: 24
                                                 Layout.preferredHeight: 24
                                                 radius: 4
-                                                color: upLMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                color: upLMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                 border.width: 1
                                                 border.color: bar.pillBorder
                                                 Text {
@@ -3752,7 +4151,7 @@ Item {
                                                 Layout.preferredWidth: 24
                                                 Layout.preferredHeight: 24
                                                 radius: 4
-                                                color: dnLMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                color: dnLMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                 border.width: 1
                                                 border.color: bar.pillBorder
                                                 Text {
@@ -3795,7 +4194,7 @@ Item {
                                         Layout.preferredHeight: 30
                                         placeholderText: "Search apps…"
                                         color: bar.text
-                                        placeholderTextColor: bar.overlay
+                                        placeholderTextColor: bar.subtext
                                         font.pixelSize: 12
                                         font.family: bar.fontFamily
                                         background: Rectangle {
@@ -3813,7 +4212,7 @@ Item {
                                         Layout.preferredHeight: 30
                                         Layout.preferredWidth: searchBtnLbl.implicitWidth + 14
                                         radius: root.chipR
-                                        color: searchBtnMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: searchBtnMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -3911,7 +4310,7 @@ Item {
                                     Layout.preferredHeight: 28
                                     placeholderText: "Name (tooltip)"
                                     color: bar.text
-                                    placeholderTextColor: bar.overlay
+                                    placeholderTextColor: bar.subtext
                                     font.pixelSize: 12
                                     text: root.customName
                                     onTextChanged: root.customName = text
@@ -3927,7 +4326,7 @@ Item {
                                     Layout.preferredHeight: 28
                                     placeholderText: "Command (e.g. gtk-launch firefox or /usr/bin/app)"
                                     color: bar.text
-                                    placeholderTextColor: bar.overlay
+                                    placeholderTextColor: bar.subtext
                                     font.pixelSize: 12
                                     text: root.customCommand
                                     onTextChanged: root.customCommand = text
@@ -3943,7 +4342,7 @@ Item {
                                     Layout.preferredHeight: 28
                                     placeholderText: "Icon path (optional, e.g. /home/…/icons/app.svg)"
                                     color: bar.text
-                                    placeholderTextColor: bar.overlay
+                                    placeholderTextColor: bar.subtext
                                     font.pixelSize: 12
                                     text: root.customIcon
                                     onTextChanged: root.customIcon = text
@@ -3958,7 +4357,7 @@ Item {
                                     Layout.preferredHeight: 32
                                     Layout.preferredWidth: addCustomLbl.implicitWidth + 18
                                     radius: root.chipR
-                                    color: addCustomMa.containsMouse ? bar.glassHover : bar.pillBg
+                                    color: addCustomMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                     border.width: 1
                                     border.color: addCustomMa.containsMouse ? bar.accent : bar.pillBorder
                                     opacity: root.customCommand.trim().length ? 1 : 0.5
@@ -4001,7 +4400,7 @@ Item {
                                         Layout.preferredHeight: 24
                                         Layout.preferredWidth: refreshAsLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: refreshAsMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: refreshAsMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -4025,7 +4424,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "XDG apps in ~/.config/autostart (session login). Core Hyprland services stay in autostarts.lua."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -4045,7 +4444,7 @@ Item {
                                         Layout.preferredHeight: 28
                                         Layout.preferredWidth: openAsLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: openAsMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: openAsMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -4068,7 +4467,7 @@ Item {
                                         Layout.preferredHeight: 28
                                         Layout.preferredWidth: runAllLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: runAllMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: runAllMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: runAllMa.containsMouse ? bar.accent : bar.pillBorder
                                         Text {
@@ -4172,7 +4571,7 @@ Item {
                                                     Layout.fillWidth: true
                                                     elide: Text.ElideRight
                                                     text: modelData.exec || modelData.id
-                                                    color: bar.overlay
+                                                    color: bar.subtext
                                                     font.pixelSize: 10
                                                     font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                                 }
@@ -4183,7 +4582,7 @@ Item {
                                                 Layout.preferredWidth: 28
                                                 Layout.preferredHeight: 26
                                                 radius: 4
-                                                color: runOneMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                color: runOneMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                 border.width: 1
                                                 border.color: bar.pillBorder
                                                 Text {
@@ -4239,7 +4638,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "No XDG autostart entries yet. Add one from installed apps below."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 11
                                     font.family: bar.fontFamily
                                 }
@@ -4264,7 +4663,7 @@ Item {
                                         Layout.preferredHeight: 30
                                         placeholderText: "Search apps…"
                                         color: bar.text
-                                        placeholderTextColor: bar.overlay
+                                        placeholderTextColor: bar.subtext
                                         font.pixelSize: 12
                                         font.family: bar.fontFamily
                                         background: Rectangle {
@@ -4288,7 +4687,7 @@ Item {
                                           ? ("Showing " + root.filteredDesktopApps().length
                                              + " · scroll for more · type to filter")
                                           : ("Scroll if the list is longer than the panel")
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 10
                                     font.family: bar.fontFamily
                                 }
@@ -4400,7 +4799,7 @@ Item {
                                         Layout.preferredHeight: 24
                                         Layout.preferredWidth: refreshOptLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: refreshOptMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: refreshOptMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -4424,7 +4823,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "Behavior prefs (saved where noted). Layout is under Widgets. Actions stay on keybinds / qs ipc."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -4462,7 +4861,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Scale with monitor width (recommended)"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -4611,7 +5010,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Gear pill opens this control strip"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -4673,7 +5072,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Show built-in / custom presets on the Colors panel"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -4720,7 +5119,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "Saved to bar layout"
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 10
                                     font.family: bar.fontFamily
                                 }
@@ -4804,7 +5203,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Hide empty numbered pills"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -4866,7 +5265,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Show 1…N when not “only active”"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -4927,7 +5326,7 @@ Item {
                                             }
                                             Text {
                                                 text: "0 = leave focus alone (safe on qs reload)"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -4988,7 +5387,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Only if startup workspace > 0"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5057,7 +5456,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Show AEC section on Audio pill + control-bar Audio (on/off stays in the panel)"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5120,7 +5519,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Control-bar Audio panel section"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5182,7 +5581,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Profile dropdowns under Output / Input devices"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5244,7 +5643,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Playback / Recording VU meters below Active streams"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5306,7 +5705,7 @@ Item {
                                             }
                                             Text {
                                                 text: "When opening the control-bar Audio panel"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5368,7 +5767,7 @@ Item {
                                             }
                                             Text {
                                                 text: "When opening the control-bar Audio panel"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5437,7 +5836,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Sticky · survives reboot"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5468,6 +5867,68 @@ Item {
                                                     anchors.fill: parent
                                                     cursorShape: Qt.PointingHandCursor
                                                     onClicked: root.setOptToggle("setNetworkAppletAutostart", !root.optNetApplet())
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
+                                                text: "Traffic graph"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "Sparkline in network details (adapters stay)"
+                                                color: bar.subtext
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.showNetTrafficGraph !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.showNetTrafficGraph !== false) ? "✓" : "✕"
+                                                    color: (bar.showNetTrafficGraph !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setShowNetTrafficGraph", !(bar.showNetTrafficGraph !== false))
                                                 }
                                             }
                                         }
@@ -5506,7 +5967,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Sticky · survives reboot"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5553,7 +6014,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "Which gauges appear on the Sys Stats pill (saved)"
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 10
                                     font.family: bar.fontFamily
                                 }
@@ -5583,7 +6044,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Gauge + metrics popup on the pill"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5645,7 +6106,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Gauge + metrics popup on the pill"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5707,7 +6168,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Gauge + metrics popup on the pill"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5760,6 +6221,130 @@ Item {
                                             Layout.minimumWidth: 0
                                             spacing: 0
                                             Text {
+                                                text: "Bar util graphs"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "Mini bars on the Sys Stats pill face"
+                                                color: bar.subtext
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.showStatGauges !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.showStatGauges !== false) ? "✓" : "✕"
+                                                    color: (bar.showStatGauges !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setShowStatGauges", !(bar.showStatGauges !== false))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
+                                                text: "Menu util graphs"
+                                                color: bar.text
+                                                font.pixelSize: 12
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: "Gauges + history in left-click metrics; processes stay"
+                                                color: bar.subtext
+                                                font.pixelSize: 10
+                                                font.family: bar.fontFamily
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        Item {
+                                            Layout.preferredWidth: root.optControlColW
+                                            Layout.maximumWidth: root.optControlColW
+                                            Layout.minimumWidth: root.optControlColW
+                                            Layout.fillHeight: true
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: root.optToggleW
+                                                height: root.optToggleH
+                                                radius: 4
+                                                border.width: 1
+                                                border.color: (bar.showStatMenuGraphs !== false) ? root.onGreen : root.offRed
+                                                color: "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: (bar.showStatMenuGraphs !== false) ? "✓" : "✕"
+                                                    color: (bar.showStatMenuGraphs !== false) ? root.onGreen : root.offRed
+                                                    font.pixelSize: 14
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: root.setOptToggle("setShowStatMenuGraphs", !(bar.showStatMenuGraphs !== false))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 40
+                                    radius: root.chipR
+                                    color: Qt.rgba(0.10, 0.10, 0.12, 0.55)
+                                    border.width: 1
+                                    border.color: bar.dividerStrong
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 10
+                                        spacing: 10
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 0
+                                            Text {
                                                 text: "Metrics live updates"
                                                 color: bar.text
                                                 font.pixelSize: 12
@@ -5769,7 +6354,7 @@ Item {
                                             }
                                             Text {
                                                 text: "CPU / Mem / GPU popups (session)"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5818,7 +6403,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "Server + credentials write to ~/.config/freshrss-quickshell/freshrss.env (outside git). API password = Profile → API password."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: 10
                                     font.family: bar.fontFamily
                                 }
@@ -5848,7 +6433,7 @@ Item {
                                             }
                                             Text {
                                                 text: "Search / max days / per feed section"
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -5908,7 +6493,7 @@ Item {
                                             radius: root.chipR
                                             color: root.frScheme === modelData.id
                                                    ? (bar.controlActiveBg || Qt.rgba(0, 0.77, 0.96, 0.22))
-                                                   : (frSchemeMa.containsMouse ? bar.glassHover : bar.pillBg)
+                                                   : (frSchemeMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg))
                                             border.width: 1
                                             border.color: root.frScheme === modelData.id ? bar.accent : bar.pillBorder
                                             Text {
@@ -5950,7 +6535,7 @@ Item {
                                         Layout.preferredHeight: 30
                                         placeholderText: "freshrss.example or 10.74.10.8"
                                         color: bar.text
-                                        placeholderTextColor: bar.overlay
+                                        placeholderTextColor: bar.subtext
                                         font.pixelSize: 12
                                         font.family: bar.fontFamily
                                         text: root.frHost
@@ -5983,7 +6568,7 @@ Item {
                                         Layout.preferredHeight: 30
                                         placeholderText: "admin"
                                         color: bar.text
-                                        placeholderTextColor: bar.overlay
+                                        placeholderTextColor: bar.subtext
                                         font.pixelSize: 12
                                         font.family: bar.fontFamily
                                         text: root.frUser
@@ -6019,7 +6604,7 @@ Item {
                                                          ? "•••• set (type to replace)"
                                                          : "Profile → API password"
                                         color: bar.text
-                                        placeholderTextColor: bar.overlay
+                                        placeholderTextColor: bar.subtext
                                         font.pixelSize: 12
                                         font.family: bar.fontFamily
                                         text: root.frPassword
@@ -6061,7 +6646,7 @@ Item {
                                         Layout.preferredHeight: 28
                                         Layout.preferredWidth: frTestLbl.implicitWidth + 16
                                         radius: root.chipR
-                                        color: frTestMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: frTestMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: frTestMa.containsMouse ? bar.accent : bar.pillBorder
                                         opacity: root.frLoading ? 0.6 : 1.0
@@ -6069,7 +6654,7 @@ Item {
                                             id: frTestLbl
                                             anchors.centerIn: parent
                                             text: "Test"
-                                            color: frTestMa.containsMouse ? bar.accent : bar.subtext
+                                            color: frTestMa.containsMouse ? root.activeLabelColor() : bar.subtext
                                             font.pixelSize: 11
                                             font.family: bar.fontFamily
                                         }
@@ -6089,7 +6674,7 @@ Item {
                                         Layout.preferredHeight: 28
                                         Layout.preferredWidth: frSaveLbl.implicitWidth + 16
                                         radius: root.chipR
-                                        color: frSaveMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: frSaveMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: frSaveMa.containsMouse ? bar.accent : bar.pillBorder
                                         opacity: root.frLoading ? 0.6 : 1.0
@@ -6097,7 +6682,7 @@ Item {
                                             id: frSaveLbl
                                             anchors.centerIn: parent
                                             text: "Save server"
-                                            color: frSaveMa.containsMouse ? bar.accent : bar.subtext
+                                            color: frSaveMa.containsMouse ? root.activeLabelColor() : bar.subtext
                                             font.pixelSize: 11
                                             font.family: bar.fontFamily
                                         }
@@ -6129,15 +6714,15 @@ Item {
                                     color: bar.text
                                     font.pixelSize: bar.popupTitleSize
                                     font.bold: true
-                                    font.family: bar.fontFamily
+                                    font.family: root.menuTitleFont()
                                 }
                                 Text {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "Choose a file type or app, then set which program opens it by default."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
-                                    font.family: bar.fontFamily
+                                    font.family: root.menuBodyFont()
                                 }
                                 MimeAppsView {
                                     id: controlMime
@@ -6151,14 +6736,15 @@ Item {
                                     subtextColor: bar.subtext
                                     accentColor: bar.accent
                                     surfaceColor: Qt.rgba(0.05, 0.07, 0.12, 0.90)
-                                    overlayColor: bar.overlay
+                                    // Secondary text for muted body greys (not overlay)
+                                    overlayColor: bar.subtext
                                     okColor: root.onGreen
                                     warnColor: "#f0d060"
                                     errorColor: root.offRed
                                     fieldBg: root.optFieldBg
                                     fieldBgFocus: root.optFieldBgFocus
                                     pillBorder: bar.pillBorder
-                                    fontFamily: bar.fontFamily
+                                    fontFamily: root.menuBodyFont()
                                     fontMono: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                 }
                             }
@@ -6205,7 +6791,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "User and system units (same as Inspector Services). Select a row, then Start / Stop / Restart. System scope may prompt for polkit."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -6215,7 +6801,7 @@ Item {
                                     Layout.preferredHeight: 30
                                     placeholderText: "Filter services…"
                                     color: bar.text
-                                    placeholderTextColor: bar.overlay
+                                    placeholderTextColor: bar.subtext
                                     font.pixelSize: 12
                                     font.family: bar.fontFamily
                                     text: root.servicesFilter
@@ -6289,7 +6875,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "Sinks, sources, ports, and defaults (same as Inspector Audio). Tools: Refresh, pw-top, Restart audio, echo cancel. Pill stays the quick volume control."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -6299,7 +6885,7 @@ Item {
                                     Layout.preferredHeight: 30
                                     placeholderText: "Filter devices / apps…"
                                     color: bar.text
-                                    placeholderTextColor: bar.overlay
+                                    placeholderTextColor: bar.subtext
                                     font.pixelSize: 12
                                     font.family: bar.fontFamily
                                     text: root.audioFilter
@@ -6355,7 +6941,7 @@ Item {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                     text: "From keybindings.lua (same categories as Inspector). Edit key, category, or description — not the action. Loop/dynamic binds are read-only. Save writes the file; use Reload Hypr to apply."
-                                    color: bar.overlay
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -6365,7 +6951,7 @@ Item {
                                     Layout.preferredHeight: 30
                                     placeholderText: "Filter keybindings…"
                                     color: bar.text
-                                    placeholderTextColor: bar.overlay
+                                    placeholderTextColor: bar.subtext
                                     font.pixelSize: 12
                                     font.family: bar.fontFamily
                                     text: root.keybindsFilter
@@ -6400,17 +6986,21 @@ Item {
                                 }
                             }
 
-                            // ===== COLORS (bar / widget theme) =====
+                            // ===== THEMES (bar / widget theme) =====
                             ColumnLayout {
+                                id: themesPanel
                                 visible: root.activeMenu === "colors"
                                 Layout.fillWidth: true
+                                // Fill the panel height so title + tabs stay fixed; body scrolls inside
+                                Layout.preferredHeight: root.panelMaxH - 24
+                                Layout.minimumHeight: 280
                                 spacing: 8
 
                                 RowLayout {
                                     Layout.fillWidth: true
                                     Text {
                                         Layout.fillWidth: true
-                                        text: "Colors"
+                                        text: "Themes"
                                         color: bar.text
                                         font.pixelSize: bar.popupTitleSize
                                         font.bold: true
@@ -6418,9 +7008,40 @@ Item {
                                     }
                                     Rectangle {
                                         Layout.preferredHeight: 24
+                                        Layout.preferredWidth: undoThemeLbl.implicitWidth + 12
+                                        radius: root.chipR
+                                        opacity: root.canThemeUndo() ? 1 : 0.4
+                                        color: undoThemeMa.containsMouse && root.canThemeUndo()
+                                               ? bar.glassHover
+                                               : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
+                                        border.width: 1
+                                        border.color: bar.pillBorder
+                                        Text {
+                                            id: undoThemeLbl
+                                            anchors.centerIn: parent
+                                            text: {
+                                                void root.colorsTick
+                                                const n = root.themeUndoStack ? root.themeUndoStack.length : 0
+                                                return n > 0 ? ("Undo (" + n + ")") : "Undo"
+                                            }
+                                            color: bar.subtext
+                                            font.pixelSize: 11
+                                            font.family: bar.fontFamily
+                                        }
+                                        MouseArea {
+                                            id: undoThemeMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: root.canThemeUndo()
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: root.undoThemeEdit()
+                                        }
+                                    }
+                                    Rectangle {
+                                        Layout.preferredHeight: 24
                                         Layout.preferredWidth: resetThemeLbl.implicitWidth + 12
                                         radius: root.chipR
-                                        color: resetThemeMa.containsMouse ? bar.glassHover : bar.pillBg
+                                        color: resetThemeMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                         border.width: 1
                                         border.color: bar.pillBorder
                                         Text {
@@ -6437,6 +7058,7 @@ Item {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
+                                                root.pushThemeUndo()
                                                 if (bar && typeof bar.resetThemeColors === "function")
                                                     bar.resetThemeColors()
                                                 root.colorsPickerKey = ""
@@ -6448,8 +7070,9 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: "Change how the bar and widgets look. Click a color square to open the picker (mouse, hex, or RGB). Changes apply immediately and are saved."
-                                    color: bar.overlay
+                                    text: "Change how the bar and widgets look. Click a color square to open the picker. Changes apply immediately and are saved."
+                                    // Secondary text — body / help copy (not headers)
+                                    color: bar.subtext
                                     font.pixelSize: bar.popupHintSize
                                     font.family: bar.fontFamily
                                 }
@@ -6458,140 +7081,449 @@ Item {
                                     Layout.fillWidth: true
                                     visible: !!(bar && bar.themeStatus && bar.themeStatus.length)
                                     text: bar ? (bar.themeStatus || "") : ""
-                                    color: bar.accent
+                                    // Secondary text — status line under the header
+                                    color: bar.subtext
                                     font.pixelSize: 11
                                     font.family: bar.fontFamily
                                     wrapMode: Text.WordWrap
                                 }
 
-                                // ── Two columns; picker opens on the opposite side ──
-                                // Left:  Colors  (or picker when editing a right-side key)
-                                // Right: Opacity (or picker when editing a left-side key)
+                                // ── Sticky sub-tabs (do not scroll with body) ──
                                 RowLayout {
                                     Layout.fillWidth: true
+                                    spacing: 6
+                                    Repeater {
+                                        model: {
+                                            void root.optionsTick
+                                            const tabs = [
+                                                { id: "theming", label: "Theming" },
+                                                { id: "thresholds", label: "Thresholds" },
+                                                { id: "fonts", label: "Fonts" }
+                                            ]
+                                            if (bar && bar.showColorPresets !== false)
+                                                tabs.push({ id: "presets", label: "Presets" })
+                                            return tabs
+                                        }
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            readonly property bool active: root.colorsTab === modelData.id
+                                            Layout.preferredHeight: root.chipH
+                                            Layout.preferredWidth: Math.max(72, tabLbl.implicitWidth + 18)
+                                            radius: root.chipR
+                                            color: root.chipBg(active, tabMa.containsMouse)
+                                            border.width: bar.controlBorderWidth
+                                            border.color: root.chipBorder(active, tabMa.containsMouse)
+                                            Text {
+                                                id: tabLbl
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                font.pixelSize: bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12
+                                                font.family: bar.fontFamily
+                                                font.bold: active
+                                                color: root.chipText(active, tabMa.containsMouse)
+                                            }
+                                            MouseArea {
+                                                id: tabMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.setColorsTab(modelData.id)
+                                            }
+                                        }
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+
+                                // ── Scrollable body under sticky tabs ──
+                                Flickable {
+                                    id: themesBodyFlick
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    Layout.minimumHeight: 160
+                                    clip: true
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    flickableDirection: Flickable.VerticalFlick
+                                    contentWidth: width
+                                    // When the color picker is open, size content to the viewport
+                                    // so the picker fills height (no empty gap under it).
+                                    contentHeight: {
+                                        void root.colorsTick
+                                        if (root.themePickerOpenOnRight() || root.thresholdsPickerOpen())
+                                            return Math.max(themesBodyCol.implicitHeight, height)
+                                        return themesBodyCol.implicitHeight
+                                    }
+                                    interactive: contentHeight > height + 4
+                                                 && !(root.colorsPickerKey.length > 0)
+                                    ScrollBar.vertical: ScrollBar {
+                                        policy: themesBodyFlick.contentHeight > themesBodyFlick.height + 4
+                                                ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                        width: 8
+                                        contentItem: Rectangle {
+                                            implicitWidth: 6
+                                            radius: 3
+                                            color: bar.accent
+                                            opacity: 0.5
+                                        }
+                                    }
+
+                                ColumnLayout {
+                                    id: themesBodyCol
+                                    width: themesBodyFlick.width - 10
+                                    spacing: 8
+
+                                // ════════ THEMING tab ════════
+                                // Left: Colors / Text / Special · Right: Opacity or picker
+                                // When picker is open, row height matches body viewport (no gap).
+                                RowLayout {
+                                    id: themingRow
+                                    visible: root.colorsTab === "theming"
+                                    Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignTop
+                                    Layout.preferredHeight: {
+                                        void root.colorsTick
+                                        if (root.themePickerOpenOnRight())
+                                            return Math.max(280, themesBodyFlick.height)
+                                        return -1
+                                    }
                                     spacing: 10
 
-                                    // ════ LEFT ════
-                                    ColumnLayout {
+                                    // ════ LEFT — sectioned swatches (scrolls when picker is open) ════
+                                    Flickable {
+                                        id: themingLeftFlick
                                         Layout.fillWidth: true
                                         Layout.preferredWidth: 1
+                                        Layout.fillHeight: root.themePickerOpenOnRight()
+                                        Layout.preferredHeight: root.themePickerOpenOnRight()
+                                                                ? -1
+                                                                : themingLeftCol.implicitHeight
                                         Layout.alignment: Qt.AlignTop
-                                        spacing: 6
-
-                                        Text {
-                                            text: root.themePickerOpenOnLeft()
-                                                  ? ("Picker · " + root.themeLabelForKey(root.colorsPickerKey))
-                                                  : "Colors"
-                                            color: bar.text
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            font.family: bar.fontFamily
+                                        clip: true
+                                        boundsBehavior: Flickable.StopAtBounds
+                                        flickableDirection: Flickable.VerticalFlick
+                                        contentWidth: width
+                                        contentHeight: themingLeftCol.implicitHeight
+                                        interactive: contentHeight > height + 4
+                                        ScrollBar.vertical: ScrollBar {
+                                            policy: themingLeftFlick.contentHeight > themingLeftFlick.height + 4
+                                                    ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                            width: 6
+                                            contentItem: Rectangle {
+                                                implicitWidth: 4
+                                                radius: 2
+                                                color: bar.accent
+                                                opacity: 0.45
+                                            }
                                         }
 
-                                        // Normal colors list (hidden while picker is parked here)
-                                        ColumnLayout {
+                                    ColumnLayout {
+                                        id: themingLeftCol
+                                        width: themingLeftFlick.width - 8
+                                        spacing: 8
+
+                                        // ── Colors (collapsible) ──
+                                        Rectangle {
                                             Layout.fillWidth: true
-                                            spacing: 6
-                                            visible: !root.themePickerOpenOnLeft()
-
-                                            Repeater {
-                                                model: {
-                                                    void root.colorsTick
-                                                    return root.themeColorRows()
+                                            Layout.preferredHeight: 28
+                                            radius: root.chipR
+                                            color: secColorsMa.containsMouse ? bar.glassHover : "transparent"
+                                            border.width: 1
+                                            border.color: bar.dividerStrong
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 6
+                                                Text {
+                                                    text: root.themeSecColorsOpen ? "▾" : "▸"
+                                                    color: bar.text
+                                                    font.pixelSize: 12
+                                                    font.family: bar.fontFamily
                                                 }
-                                                delegate: Rectangle {
-                                                    required property var modelData
+                                                Text {
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 36
-                                                    radius: root.chipR
-                                                    color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
-                                                    border.width: 1
-                                                    border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
-
-                                                    RowLayout {
-                                                        anchors.fill: parent
-                                                        anchors.leftMargin: 8
-                                                        anchors.rightMargin: 8
-                                                        spacing: 6
-                                                        Text {
-                                                            Layout.fillWidth: true
-                                                            text: modelData.label
-                                                            color: bar.text
-                                                            font.pixelSize: 11
-                                                            font.family: bar.fontFamily
-                                                            elide: Text.ElideRight
+                                                    text: "Colors"
+                                                    color: bar.text
+                                                    font.pixelSize: 12
+                                                    font.bold: true
+                                                    font.family: bar.fontFamily
+                                                }
+                                            }
+                                            MouseArea {
+                                                id: secColorsMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.toggleThemeSection("colors")
+                                            }
+                                        }
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                return root.themeSecColorsOpen ? root.themeColorRows() : []
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 34
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 8
+                                                    spacing: 6
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.label
+                                                        color: bar.subtext
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 24
+                                                        Layout.preferredHeight: 18
+                                                        radius: 4
+                                                        color: {
+                                                            void root.colorsTick
+                                                            return root.themeColorFor(modelData.key)
                                                         }
-                                                        Rectangle {
-                                                            Layout.preferredWidth: 24
-                                                            Layout.preferredHeight: 18
-                                                            radius: 4
-                                                            color: {
-                                                                void root.colorsTick
-                                                                return root.themeColorFor(modelData.key)
-                                                            }
-                                                            border.width: 1
-                                                            border.color: Qt.rgba(1, 1, 1, 0.25)
-                                                            MouseArea {
-                                                                anchors.fill: parent
-                                                                cursorShape: Qt.PointingHandCursor
-                                                                onClicked: {
-                                                                    if (root.colorsPickerKey === modelData.key)
-                                                                        root.closeColorPicker()
-                                                                    else
-                                                                        root.openColorPicker(modelData.key)
-                                                                }
+                                                        border.width: 1
+                                                        border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (root.colorsPickerKey === modelData.key)
+                                                                    root.closeColorPicker()
+                                                                else
+                                                                    root.openColorPicker(modelData.key)
                                                             }
                                                         }
-                                                        Text {
-                                                            text: {
-                                                                void root.colorsTick
-                                                                return root.themeHexFor(modelData.key)
-                                                            }
-                                                            color: bar.subtext
-                                                            font.pixelSize: 10
-                                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
-                                                            Layout.preferredWidth: 56
-                                                            elide: Text.ElideRight
+                                                    }
+                                                    Text {
+                                                        text: {
+                                                            void root.colorsTick
+                                                            return root.themeHexFor(modelData.key)
                                                         }
+                                                        color: bar.subtext
+                                                        font.pixelSize: 10
+                                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                        Layout.preferredWidth: 56
+                                                        elide: Text.ElideRight
                                                     }
                                                 }
                                             }
                                         }
 
-                                        // Picker when a right-side key is active
-                                        ColorPickerPanel {
-                                            id: colorsPickerLeft
+                                        // ── Text (collapsible) ──
+                                        Rectangle {
                                             Layout.fillWidth: true
-                                            visible: root.themePickerOpenOnLeft()
-                                            title: root.themeLabelForKey(root.colorsPickerKey)
-                                            showOpacity: root.themeKeyHasOpacity(root.colorsPickerKey)
-                                            panelBg: bar.glassPopupBg
-                                            panelBorder: bar.glassPopupBorder
-                                            labelColor: bar.text
-                                            fieldBg: root.optFieldBg
-                                            accentColor: bar.accent
-                                            fontFamily: bar.fontFamily
-                                            onVisibleChanged: {
-                                                if (visible && root.colorsPickerKey.length)
-                                                    colorsPickerLeft.loadFromColor(root.themeColorFor(root.colorsPickerKey))
-                                            }
-                                            Connections {
-                                                target: root
-                                                function onColorsPickerKeyChanged() {
-                                                    if (root.themePickerOpenOnLeft())
-                                                        colorsPickerLeft.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                            Layout.preferredHeight: 28
+                                            Layout.topMargin: 4
+                                            radius: root.chipR
+                                            color: secTextMa.containsMouse ? bar.glassHover : "transparent"
+                                            border.width: 1
+                                            border.color: bar.dividerStrong
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 6
+                                                Text {
+                                                    text: root.themeSecTextOpen ? "▾" : "▸"
+                                                    color: bar.text
+                                                    font.pixelSize: 12
+                                                    font.family: bar.fontFamily
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: "Text"
+                                                    color: bar.text
+                                                    font.pixelSize: 12
+                                                    font.bold: true
+                                                    font.family: bar.fontFamily
                                                 }
                                             }
-                                            onColorEdited: (c) => root.applyPickedColor(c)
-                                            onAccepted: root.closeColorPicker()
+                                            MouseArea {
+                                                id: secTextMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.toggleThemeSection("text")
+                                            }
                                         }
-                                    }
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                return root.themeSecTextOpen ? root.themeTextRows() : []
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 34
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 8
+                                                    spacing: 6
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.label
+                                                        color: bar.subtext
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 24
+                                                        Layout.preferredHeight: 18
+                                                        radius: 4
+                                                        color: {
+                                                            void root.colorsTick
+                                                            return root.themeColorFor(modelData.key)
+                                                        }
+                                                        border.width: 1
+                                                        border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (root.colorsPickerKey === modelData.key)
+                                                                    root.closeColorPicker()
+                                                                else
+                                                                    root.openColorPicker(modelData.key)
+                                                            }
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: {
+                                                            void root.colorsTick
+                                                            return root.themeHexFor(modelData.key)
+                                                        }
+                                                        color: bar.subtext
+                                                        font.pixelSize: 10
+                                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                        Layout.preferredWidth: 56
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+                                            }
+                                        }
 
-                                    // ════ RIGHT ════
+                                        // ── Special / Effects (collapsible) ──
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 28
+                                            Layout.topMargin: 4
+                                            radius: root.chipR
+                                            color: secFxMa.containsMouse ? bar.glassHover : "transparent"
+                                            border.width: 1
+                                            border.color: bar.dividerStrong
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 6
+                                                Text {
+                                                    text: root.themeSecEffectsOpen ? "▾" : "▸"
+                                                    color: bar.text
+                                                    font.pixelSize: 12
+                                                    font.family: bar.fontFamily
+                                                }
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: "Special / Effects"
+                                                    color: bar.text
+                                                    font.pixelSize: 12
+                                                    font.bold: true
+                                                    font.family: bar.fontFamily
+                                                }
+                                            }
+                                            MouseArea {
+                                                id: secFxMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.toggleThemeSection("effects")
+                                            }
+                                        }
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                return root.themeSecEffectsOpen ? root.themeEffectsRows() : []
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 34
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 8
+                                                    spacing: 6
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.label
+                                                        color: bar.subtext
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 24
+                                                        Layout.preferredHeight: 18
+                                                        radius: 4
+                                                        color: {
+                                                            void root.colorsTick
+                                                            return root.themeColorFor(modelData.key)
+                                                        }
+                                                        border.width: 1
+                                                        border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                if (root.colorsPickerKey === modelData.key)
+                                                                    root.closeColorPicker()
+                                                                else
+                                                                    root.openColorPicker(modelData.key)
+                                                            }
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: {
+                                                            void root.colorsTick
+                                                            return root.themeHexFor(modelData.key)
+                                                        }
+                                                        color: bar.subtext
+                                                        font.pixelSize: 10
+                                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                        Layout.preferredWidth: 56
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                    } // themingLeftCol
+                                    } // themingLeftFlick
+
+                                    // ════ RIGHT — Opacity OR color picker ════
                                     ColumnLayout {
                                         Layout.fillWidth: true
                                         Layout.preferredWidth: 1
+                                        Layout.fillHeight: true
                                         Layout.alignment: Qt.AlignTop
                                         spacing: 6
 
@@ -6605,7 +7537,7 @@ Item {
                                             font.family: bar.fontFamily
                                         }
 
-                                        // Opacity sliders (hidden while picker is parked here)
+                                        // Opacity sliders
                                         ColumnLayout {
                                             Layout.fillWidth: true
                                             spacing: 6
@@ -6619,12 +7551,11 @@ Item {
                                                 delegate: Rectangle {
                                                     required property var modelData
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 36
+                                                    Layout.preferredHeight: 34
                                                     radius: root.chipR
                                                     color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
                                                     border.width: 1
                                                     border.color: bar.dividerStrong
-
                                                     RowLayout {
                                                         anchors.fill: parent
                                                         anchors.leftMargin: 8
@@ -6632,12 +7563,13 @@ Item {
                                                         spacing: 6
                                                         Text {
                                                             text: modelData.label
-                                                            color: bar.text
+                                                            color: bar.subtext
                                                             font.pixelSize: 11
                                                             font.family: bar.fontFamily
-                                                            elide: Text.ElideRight
-                                                            Layout.preferredWidth: 88
-                                                            Layout.maximumWidth: 110
+                                                            wrapMode: Text.NoWrap
+                                                            // No width cap — full labels (e.g. "Widget / pill fill")
+                                                            Layout.preferredWidth: implicitWidth
+                                                            Layout.maximumWidth: 160
                                                         }
                                                         Slider {
                                                             Layout.fillWidth: true
@@ -6666,10 +7598,12 @@ Item {
                                             }
                                         }
 
-                                        // Picker when a left-side key is active
+                                        // Color picker — fills remaining height; bottom chrome always reserved
                                         ColorPickerPanel {
                                             id: colorsPickerRight
                                             Layout.fillWidth: true
+                                            Layout.fillHeight: true
+                                            Layout.minimumHeight: 220
                                             visible: root.themePickerOpenOnRight()
                                             title: root.themeLabelForKey(root.colorsPickerKey)
                                             showOpacity: root.themeKeyHasOpacity(root.colorsPickerKey)
@@ -6696,133 +7630,164 @@ Item {
                                     }
                                 }
 
-                                // ── Text (full-width row under Colors / Opacity) ──
-                                ColumnLayout {
+                                // ════════ THRESHOLDS tab (volume + sys stats) ════════
+                                // Left: threshold controls · Right: color picker (no scroll to bottom)
+                                RowLayout {
+                                    id: thresholdsRow
+                                    visible: root.colorsTab === "thresholds"
                                     Layout.fillWidth: true
-                                    spacing: 6
+                                    Layout.alignment: Qt.AlignTop
+                                    Layout.preferredHeight: {
+                                        void root.colorsTick
+                                        if (root.thresholdsPickerOpen())
+                                            return Math.max(280, themesBodyFlick.height)
+                                        return -1
+                                    }
+                                    spacing: 10
 
+                                    // ════ LEFT — volume + sys stats controls (scroll when picker open) ════
+                                    Flickable {
+                                        id: thresholdsLeftFlick
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 1
+                                        Layout.fillHeight: root.thresholdsPickerOpen()
+                                        Layout.preferredHeight: root.thresholdsPickerOpen()
+                                                                ? -1
+                                                                : thresholdsLeftCol.implicitHeight
+                                        Layout.alignment: Qt.AlignTop
+                                        clip: true
+                                        boundsBehavior: Flickable.StopAtBounds
+                                        flickableDirection: Flickable.VerticalFlick
+                                        contentWidth: width
+                                        contentHeight: thresholdsLeftCol.implicitHeight
+                                        interactive: contentHeight > height + 4
+                                        ScrollBar.vertical: ScrollBar {
+                                            policy: thresholdsLeftFlick.contentHeight > thresholdsLeftFlick.height + 4
+                                                    ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                            width: 6
+                                            contentItem: Rectangle {
+                                                implicitWidth: 4
+                                                radius: 2
+                                                color: bar.accent
+                                                opacity: 0.45
+                                            }
+                                        }
+
+                                    ColumnLayout {
+                                        id: thresholdsLeftCol
+                                        width: thresholdsLeftFlick.width - 8
+                                        spacing: 10
+
+                                    // ── Output volume (speaker) ──
                                     Text {
-                                        text: "Text"
+                                        text: "Output volume"
                                         color: bar.text
-                                        font.pixelSize: 12
+                                        font.pixelSize: 13
                                         font.bold: true
+                                        font.family: bar.fontFamily
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WordWrap
+                                        text: "Speaker / output bars on the status bar and in Audio panels."
+                                        color: bar.subtext
+                                        font.pixelSize: (bar.popupHintSize !== undefined ? bar.popupHintSize : 11) + 1
                                         font.family: bar.fontFamily
                                     }
 
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Layout.alignment: Qt.AlignTop
-                                        spacing: 10
-
-                                        // Left half of text controls
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            Layout.preferredWidth: 1
-                                            Layout.alignment: Qt.AlignTop
-                                            spacing: 6
-
-                                            Repeater {
-                                                model: {
-                                                    void root.colorsTick
-                                                    return root.themeTextRowsLeft()
-                                                }
-                                                delegate: Rectangle {
-                                                    required property var modelData
-                                                    Layout.fillWidth: true
-                                                    Layout.preferredHeight: 36
-                                                    radius: root.chipR
-                                                    color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
-                                                    border.width: 1
-                                                    border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
-
-                                                    RowLayout {
-                                                        anchors.fill: parent
-                                                        anchors.leftMargin: 8
-                                                        anchors.rightMargin: 8
-                                                        spacing: 6
-                                                        Text {
-                                                            Layout.fillWidth: true
-                                                            text: modelData.label
-                                                            color: bar.text
-                                                            font.pixelSize: 11
-                                                            font.family: bar.fontFamily
-                                                            elide: Text.ElideRight
+                                        spacing: 8
+                                        Repeater {
+                                            model: [
+                                                { key: "audioUtilThreshold1", label: "Low ≤" },
+                                                { key: "audioUtilThreshold2", label: "Mid ≤" },
+                                                { key: "audioUtilThreshold3", label: "High ≤" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 36
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: bar.dividerStrong
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 6
+                                                    spacing: 4
+                                                    Text {
+                                                        text: modelData.label
+                                                        color: bar.text
+                                                        font.pixelSize: 12
+                                                        font.family: bar.fontFamily
+                                                    }
+                                                    TextInput {
+                                                        Layout.fillWidth: true
+                                                        horizontalAlignment: Text.AlignRight
+                                                        color: bar.text
+                                                        font.pixelSize: 13
+                                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                        selectByMouse: true
+                                                        validator: IntValidator { bottom: 1; top: 99 }
+                                                        text: {
+                                                            void root.colorsTick
+                                                            return "" + root.themeNumberFor(modelData.key)
                                                         }
-                                                        Rectangle {
-                                                            Layout.preferredWidth: 24
-                                                            Layout.preferredHeight: 18
-                                                            radius: 4
-                                                            color: {
-                                                                void root.colorsTick
-                                                                return root.themeColorFor(modelData.key)
-                                                            }
-                                                            border.width: 1
-                                                            border.color: Qt.rgba(1, 1, 1, 0.25)
-                                                            MouseArea {
-                                                                anchors.fill: parent
-                                                                cursorShape: Qt.PointingHandCursor
-                                                                onClicked: {
-                                                                    if (root.colorsPickerKey === modelData.key)
-                                                                        root.closeColorPicker()
-                                                                    else
-                                                                        root.openColorPicker(modelData.key)
-                                                                }
-                                                            }
+                                                        onEditingFinished: {
+                                                            const n = parseInt(text, 10)
+                                                            if (!isNaN(n))
+                                                                root.setThemeNumberValue(modelData.key, n)
+                                                            root.colorsTick++
                                                         }
-                                                        Text {
-                                                            text: {
-                                                                void root.colorsTick
-                                                                return root.themeHexFor(modelData.key)
-                                                            }
-                                                            color: bar.subtext
-                                                            font.pixelSize: 10
-                                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
-                                                            Layout.preferredWidth: 56
-                                                            elide: Text.ElideRight
-                                                        }
+                                                    }
+                                                    Text {
+                                                        text: "%"
+                                                        color: bar.subtext
+                                                        font.pixelSize: 12
+                                                        font.family: bar.fontFamily
                                                     }
                                                 }
                                             }
                                         }
+                                    }
 
-                                        // Right half of text controls
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            Layout.preferredWidth: 1
-                                            Layout.alignment: Qt.AlignTop
-                                            spacing: 6
-
-                                            Repeater {
-                                                model: {
-                                                    void root.colorsTick
-                                                    return root.themeTextRowsRight()
-                                                }
-                                                delegate: Rectangle {
-                                                    required property var modelData
-                                                    Layout.fillWidth: true
-                                                    Layout.preferredHeight: 36
-                                                    radius: root.chipR
-                                                    color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
-                                                    border.width: 1
-                                                    border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
-
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                return root.volumeTierRows()
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 42
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 6
+                                                    spacing: 2
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.label
+                                                        color: bar.subtext
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                        elide: Text.ElideRight
+                                                    }
                                                     RowLayout {
-                                                        anchors.fill: parent
-                                                        anchors.leftMargin: 8
-                                                        anchors.rightMargin: 8
-                                                        spacing: 6
-                                                        Text {
-                                                            Layout.fillWidth: true
-                                                            text: modelData.label
-                                                            color: bar.text
-                                                            font.pixelSize: 11
-                                                            font.family: bar.fontFamily
-                                                            elide: Text.ElideRight
-                                                        }
+                                                        Layout.fillWidth: true
+                                                        spacing: 4
                                                         Rectangle {
-                                                            Layout.preferredWidth: 24
-                                                            Layout.preferredHeight: 18
-                                                            radius: 4
+                                                            Layout.preferredWidth: 22
+                                                            Layout.preferredHeight: 14
+                                                            radius: 3
                                                             color: {
                                                                 void root.colorsTick
                                                                 return root.themeColorFor(modelData.key)
@@ -6841,6 +7806,7 @@ Item {
                                                             }
                                                         }
                                                         Text {
+                                                            Layout.fillWidth: true
                                                             text: {
                                                                 void root.colorsTick
                                                                 return root.themeHexFor(modelData.key)
@@ -6848,7 +7814,6 @@ Item {
                                                             color: bar.subtext
                                                             font.pixelSize: 10
                                                             font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
-                                                            Layout.preferredWidth: 56
                                                             elide: Text.ElideRight
                                                         }
                                                     }
@@ -6856,15 +7821,1276 @@ Item {
                                             }
                                         }
                                     }
+
+                                    // ── Input volume (microphone) ──
+                                    Text {
+                                        text: "Input volume"
+                                        color: bar.text
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                        Layout.topMargin: 6
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WordWrap
+                                        text: "Microphone / input bars on the status bar and in Audio panels."
+                                        color: bar.subtext
+                                        font.pixelSize: (bar.popupHintSize !== undefined ? bar.popupHintSize : 11) + 1
+                                        font.family: bar.fontFamily
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Repeater {
+                                            model: [
+                                                { key: "audioMicUtilThreshold1", label: "Low ≤" },
+                                                { key: "audioMicUtilThreshold2", label: "Mid ≤" },
+                                                { key: "audioMicUtilThreshold3", label: "High ≤" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 36
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: bar.dividerStrong
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 6
+                                                    spacing: 4
+                                                    Text {
+                                                        text: modelData.label
+                                                        color: bar.text
+                                                        font.pixelSize: 12
+                                                        font.family: bar.fontFamily
+                                                    }
+                                                    TextInput {
+                                                        Layout.fillWidth: true
+                                                        horizontalAlignment: Text.AlignRight
+                                                        color: bar.text
+                                                        font.pixelSize: 13
+                                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                        selectByMouse: true
+                                                        validator: IntValidator { bottom: 1; top: 99 }
+                                                        text: {
+                                                            void root.colorsTick
+                                                            return "" + root.themeNumberFor(modelData.key)
+                                                        }
+                                                        onEditingFinished: {
+                                                            const n = parseInt(text, 10)
+                                                            if (!isNaN(n))
+                                                                root.setThemeNumberValue(modelData.key, n)
+                                                            root.colorsTick++
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: "%"
+                                                        color: bar.subtext
+                                                        font.pixelSize: 12
+                                                        font.family: bar.fontFamily
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                return root.micVolumeTierRows()
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 42
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 6
+                                                    spacing: 2
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.label
+                                                        color: bar.subtext
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 4
+                                                        Rectangle {
+                                                            Layout.preferredWidth: 22
+                                                            Layout.preferredHeight: 14
+                                                            radius: 3
+                                                            color: {
+                                                                void root.colorsTick
+                                                                return root.themeColorFor(modelData.key)
+                                                            }
+                                                            border.width: 1
+                                                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    if (root.colorsPickerKey === modelData.key)
+                                                                        root.closeColorPicker()
+                                                                    else
+                                                                        root.openColorPicker(modelData.key)
+                                                                }
+                                                            }
+                                                        }
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: {
+                                                                void root.colorsTick
+                                                                return root.themeHexFor(modelData.key)
+                                                            }
+                                                            color: bar.subtext
+                                                            font.pixelSize: 10
+                                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ── Sys Stats (CPU / Memory / GPU util bars) ──
+                                    Text {
+                                        text: "Sys Stats load"
+                                        color: bar.text
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                        Layout.topMargin: 6
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WordWrap
+                                        text: "Utilization bar and % colors for CPU, Memory, and GPU on the Sys Stats pill."
+                                        color: bar.subtext
+                                        font.pixelSize: (bar.popupHintSize !== undefined ? bar.popupHintSize : 11) + 1
+                                        font.family: bar.fontFamily
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Repeater {
+                                            model: [
+                                                { key: "statUtilThreshold1", label: "Low ≤" },
+                                                { key: "statUtilThreshold2", label: "Mid ≤" },
+                                                { key: "statUtilThreshold3", label: "High ≤" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 36
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: bar.dividerStrong
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 6
+                                                    spacing: 4
+                                                    Text {
+                                                        text: modelData.label
+                                                        color: bar.text
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                    }
+                                                    TextInput {
+                                                        Layout.fillWidth: true
+                                                        horizontalAlignment: Text.AlignRight
+                                                        color: bar.text
+                                                        font.pixelSize: 12
+                                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                        selectByMouse: true
+                                                        validator: IntValidator { bottom: 1; top: 99 }
+                                                        text: {
+                                                            void root.colorsTick
+                                                            return "" + root.themeNumberFor(modelData.key)
+                                                        }
+                                                        onEditingFinished: {
+                                                            const n = parseInt(text, 10)
+                                                            if (!isNaN(n))
+                                                                root.setThemeNumberValue(modelData.key, n)
+                                                            root.colorsTick++
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: "%"
+                                                        color: bar.subtext
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                return root.statUtilTierRows()
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 40
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 6
+                                                    spacing: 2
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.label
+                                                        color: bar.text
+                                                        font.pixelSize: 10
+                                                        font.family: bar.fontFamily
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 4
+                                                        Rectangle {
+                                                            Layout.preferredWidth: 22
+                                                            Layout.preferredHeight: 14
+                                                            radius: 3
+                                                            color: {
+                                                                void root.colorsTick
+                                                                return root.themeColorFor(modelData.key)
+                                                            }
+                                                            border.width: 1
+                                                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    if (root.colorsPickerKey === modelData.key)
+                                                                        root.closeColorPicker()
+                                                                    else
+                                                                        root.openColorPicker(modelData.key)
+                                                                }
+                                                            }
+                                                        }
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: {
+                                                                void root.colorsTick
+                                                                return root.themeHexFor(modelData.key)
+                                                            }
+                                                            color: bar.subtext
+                                                            font.pixelSize: 9
+                                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ── Sys Stats temperature labels (CPU / GPU) ──
+                                    Text {
+                                        text: "Sys Stats temperature"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: bar.fontFamily
+                                        Layout.topMargin: 4
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WordWrap
+                                        text: "CPU/GPU temperature label colors and °C cutoffs (Memory uses secondary text for used GiB)."
+                                        color: bar.subtext
+                                        font.pixelSize: bar.popupHintSize
+                                        font.family: bar.fontFamily
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Repeater {
+                                            model: [
+                                                { key: "statTempWarmAt", label: "Warm ≥", unit: "°C" },
+                                                { key: "statTempHotAt", label: "Hot ≥", unit: "°C" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 36
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: bar.dividerStrong
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 6
+                                                    spacing: 4
+                                                    Text {
+                                                        text: modelData.label
+                                                        color: bar.text
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                    }
+                                                    TextInput {
+                                                        Layout.fillWidth: true
+                                                        horizontalAlignment: Text.AlignRight
+                                                        color: bar.text
+                                                        font.pixelSize: 12
+                                                        font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                        selectByMouse: true
+                                                        validator: IntValidator { bottom: 1; top: 150 }
+                                                        text: {
+                                                            void root.colorsTick
+                                                            return "" + root.themeNumberFor(modelData.key)
+                                                        }
+                                                        onEditingFinished: {
+                                                            const n = parseInt(text, 10)
+                                                            if (!isNaN(n))
+                                                                root.setThemeNumberValue(modelData.key, n)
+                                                            root.colorsTick++
+                                                        }
+                                                    }
+                                                    Text {
+                                                        text: modelData.unit
+                                                        color: bar.subtext
+                                                        font.pixelSize: 11
+                                                        font.family: bar.fontFamily
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Repeater {
+                                            model: {
+                                                void root.colorsTick
+                                                return root.statTempRows()
+                                            }
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 40
+                                                radius: root.chipR
+                                                color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                                border.width: 1
+                                                border.color: root.colorsPickerKey === modelData.key ? bar.accent : bar.dividerStrong
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 6
+                                                    spacing: 2
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: modelData.label
+                                                        color: bar.text
+                                                        font.pixelSize: 10
+                                                        font.family: bar.fontFamily
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 4
+                                                        Rectangle {
+                                                            Layout.preferredWidth: 22
+                                                            Layout.preferredHeight: 14
+                                                            radius: 3
+                                                            color: {
+                                                                void root.colorsTick
+                                                                return root.themeColorFor(modelData.key)
+                                                            }
+                                                            border.width: 1
+                                                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: {
+                                                                    if (root.colorsPickerKey === modelData.key)
+                                                                        root.closeColorPicker()
+                                                                    else
+                                                                        root.openColorPicker(modelData.key)
+                                                                }
+                                                            }
+                                                        }
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: {
+                                                                void root.colorsTick
+                                                                return root.themeHexFor(modelData.key)
+                                                            }
+                                                            color: bar.subtext
+                                                            font.pixelSize: 9
+                                                            font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        } // temp color swatches RowLayout
+                                    } // thresholdsLeftCol
+                                    } // thresholdsLeftFlick
+
+                                    // ════ RIGHT — color picker ════
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 1
+                                        Layout.fillHeight: true
+                                        Layout.alignment: Qt.AlignTop
+                                        spacing: 6
+
+                                        Text {
+                                            text: root.thresholdsPickerOpen()
+                                                  ? ("Picker · " + root.themeLabelForKey(root.colorsPickerKey))
+                                                  : "Picker"
+                                            color: bar.text
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            font.family: bar.fontFamily
+                                        }
+                                        Text {
+                                            visible: !root.thresholdsPickerOpen()
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                            text: "Click a volume or Sys Stats color swatch to edit it here."
+                                            color: bar.subtext
+                                            font.pixelSize: bar.popupHintSize
+                                            font.family: bar.fontFamily
+                                        }
+                                        ColorPickerPanel {
+                                            id: colorsPickerThresholds
+                                            Layout.fillWidth: true
+                                            Layout.fillHeight: true
+                                            Layout.minimumHeight: 220
+                                            visible: root.thresholdsPickerOpen()
+                                            title: root.themeLabelForKey(root.colorsPickerKey)
+                                            showOpacity: root.themeKeyHasOpacity(root.colorsPickerKey)
+                                            panelBg: bar.glassPopupBg
+                                            panelBorder: bar.glassPopupBorder
+                                            labelColor: bar.text
+                                            fieldBg: root.optFieldBg
+                                            accentColor: bar.accent
+                                            fontFamily: bar.fontFamily
+                                            onVisibleChanged: {
+                                                if (visible && root.colorsPickerKey.length)
+                                                    colorsPickerThresholds.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                            }
+                                            Connections {
+                                                target: root
+                                                function onColorsPickerKeyChanged() {
+                                                    if (root.thresholdsPickerOpen())
+                                                        colorsPickerThresholds.loadFromColor(root.themeColorFor(root.colorsPickerKey))
+                                                }
+                                            }
+                                            onColorEdited: (c) => root.applyPickedColor(c)
+                                            onAccepted: root.closeColorPicker()
+                                        }
+                                    } // thresholds right column
+                                } // thresholdsRow
+
+                                // ════════ FONTS tab ════════
+                                ColumnLayout {
+                                    visible: root.colorsTab === "fonts"
+                                    Layout.fillWidth: true
+                                    spacing: 10
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.WordWrap
+                                        text: "Font on the left · size on the right. UI keeps a Nerd Font first for icons. Role fonts inherit UI when unset. Saves with the theme."
+                                        color: bar.subtext
+                                        font.pixelSize: bar.popupHintSize
+                                        font.family: (bar.fontSecondaryResolved !== undefined) ? bar.fontSecondaryResolved : bar.fontFamily
+                                    }
+
+                                    // ── header row labels ──
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Typeface"
+                                            color: bar.subtext
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                            font.family: bar.fontFamily
+                                        }
+                                        Text {
+                                            Layout.preferredWidth: root.fontSizeChipWidth()
+                                            text: "Size"
+                                            color: bar.subtext
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                            font.family: bar.fontFamily
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+                                    }
+
+                                    // ════════ UI font ════════
+                                    Text {
+                                        text: "UI font"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: (bar.fontMainResolved !== undefined) ? bar.fontMainResolved : bar.fontFamily
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        ComboBox {
+                                            id: uiFontCombo
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 36
+                                            Layout.minimumWidth: 120
+                                            model: { void root.colorsTick; return root.systemFontFamilies }
+                                            currentIndex: {
+                                                void root.colorsTick
+                                                void root.systemFontFamilies
+                                                return root.fontIndexFor(root.currentUiFontName())
+                                            }
+                                            onActivated: function(index) { root.applyUiFontFromCombo(index) }
+                                            contentItem: Text {
+                                                leftPadding: 10
+                                                rightPadding: uiFontCombo.indicator.width + 12
+                                                text: {
+                                                    void root.colorsTick
+                                                    const n = root.currentUiFontName()
+                                                    return n.length ? n : uiFontCombo.displayText
+                                                }
+                                                font.pixelSize: 13
+                                                font.family: {
+                                                    void root.colorsTick
+                                                    const n = root.currentUiFontName()
+                                                    return n.length ? n : bar.fontFamily
+                                                }
+                                                color: bar.text
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                            }
+                                            background: Rectangle {
+                                                radius: 6
+                                                color: root.optFieldBg
+                                                border.width: 1
+                                                border.color: uiFontCombo.popup.visible ? bar.accent : bar.pillBorder
+                                            }
+                                            indicator: Text {
+                                                x: uiFontCombo.width - width - 10
+                                                y: (uiFontCombo.height - height) / 2
+                                                text: uiFontCombo.popup.visible ? "▴" : "▾"
+                                                color: bar.subtext
+                                                font.pixelSize: 11
+                                            }
+                                            popup: Popup {
+                                                y: uiFontCombo.height + 2
+                                                width: uiFontCombo.width
+                                                implicitHeight: Math.min(300, contentItem.implicitHeight + 4)
+                                                padding: 2
+                                                contentItem: ListView {
+                                                    clip: true
+                                                    implicitHeight: contentHeight
+                                                    model: uiFontCombo.popup.visible ? uiFontCombo.delegateModel : null
+                                                    currentIndex: uiFontCombo.highlightedIndex
+                                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                                }
+                                                background: Rectangle {
+                                                    radius: 8
+                                                    color: bar.glassPopupBg !== undefined ? bar.glassPopupBg : Qt.rgba(0.06, 0.08, 0.12, 0.96)
+                                                    border.width: 1
+                                                    border.color: bar.glassPopupBorder !== undefined ? bar.glassPopupBorder : bar.pillBorder
+                                                }
+                                            }
+                                            delegate: ItemDelegate {
+                                                width: uiFontCombo.width
+                                                height: 32
+                                                required property int index
+                                                required property string modelData
+                                                highlighted: uiFontCombo.highlightedIndex === index
+                                                contentItem: Text {
+                                                    text: modelData + "  ·  Aa Bb 123"
+                                                    color: bar.text
+                                                    font.family: modelData
+                                                    font.pixelSize: 13
+                                                    elide: Text.ElideRight
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                background: Rectangle {
+                                                    color: parent.highlighted
+                                                           ? (bar.controlActiveBg !== undefined ? bar.controlActiveBg : Qt.rgba(0, 0.7, 0.75, 0.35))
+                                                           : "transparent"
+                                                    radius: 4
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: root.fontSizeChipWidth()
+                                            Layout.maximumWidth: root.fontSizeChipWidth()
+                                            Layout.preferredHeight: 36
+                                            radius: root.chipR
+                                            color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                            border.width: 1
+                                            border.color: bar.dividerStrong
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 4
+                                                Slider {
+                                                    Layout.fillWidth: true
+                                                    from: 70; to: 150; stepSize: 1
+                                                    value: root.currentRoleFontScalePct("ui")
+                                                    onPressedChanged: { if (pressed) root.pushThemeUndo() }
+                                                    onMoved: root.applyFontScalePct(value)
+                                                }
+                                                Text {
+                                                    text: root.currentRoleFontScalePct("ui") + "%"
+                                                    color: bar.subtext
+                                                    font.pixelSize: 11
+                                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                    Layout.preferredWidth: 40
+                                                    horizontalAlignment: Text.AlignRight
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ════════ Monospace ════════
+                                    Text {
+                                        text: "Monospace font"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: (bar.fontMainResolved !== undefined) ? bar.fontMainResolved : bar.fontFamily
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        ComboBox {
+                                            id: monoFontCombo
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 36
+                                            Layout.minimumWidth: 120
+                                            model: { void root.colorsTick; return root.systemFontFamilies }
+                                            currentIndex: {
+                                                void root.colorsTick
+                                                void root.systemFontFamilies
+                                                return root.fontIndexFor(root.currentMonoFontName())
+                                            }
+                                            onActivated: function(index) { root.applyMonoFontFromCombo(index) }
+                                            contentItem: Text {
+                                                leftPadding: 10
+                                                rightPadding: monoFontCombo.indicator.width + 12
+                                                text: {
+                                                    void root.colorsTick
+                                                    const n = root.currentMonoFontName()
+                                                    return n.length ? n : monoFontCombo.displayText
+                                                }
+                                                font.pixelSize: 13
+                                                font.family: {
+                                                    void root.colorsTick
+                                                    const n = root.currentMonoFontName()
+                                                    return n.length ? n : (bar.fontMono || bar.fontFamily)
+                                                }
+                                                color: bar.text
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                            }
+                                            background: Rectangle {
+                                                radius: 6
+                                                color: root.optFieldBg
+                                                border.width: 1
+                                                border.color: monoFontCombo.popup.visible ? bar.accent : bar.pillBorder
+                                            }
+                                            indicator: Text {
+                                                x: monoFontCombo.width - width - 10
+                                                y: (monoFontCombo.height - height) / 2
+                                                text: monoFontCombo.popup.visible ? "▴" : "▾"
+                                                color: bar.subtext
+                                                font.pixelSize: 11
+                                            }
+                                            popup: Popup {
+                                                y: monoFontCombo.height + 2
+                                                width: monoFontCombo.width
+                                                implicitHeight: Math.min(300, contentItem.implicitHeight + 4)
+                                                padding: 2
+                                                contentItem: ListView {
+                                                    clip: true
+                                                    implicitHeight: contentHeight
+                                                    model: monoFontCombo.popup.visible ? monoFontCombo.delegateModel : null
+                                                    currentIndex: monoFontCombo.highlightedIndex
+                                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                                }
+                                                background: Rectangle {
+                                                    radius: 8
+                                                    color: bar.glassPopupBg !== undefined ? bar.glassPopupBg : Qt.rgba(0.06, 0.08, 0.12, 0.96)
+                                                    border.width: 1
+                                                    border.color: bar.glassPopupBorder !== undefined ? bar.glassPopupBorder : bar.pillBorder
+                                                }
+                                            }
+                                            delegate: ItemDelegate {
+                                                width: monoFontCombo.width
+                                                height: 32
+                                                required property int index
+                                                required property string modelData
+                                                highlighted: monoFontCombo.highlightedIndex === index
+                                                contentItem: Text {
+                                                    text: modelData + "  ·  0xFF {} []"
+                                                    color: bar.text
+                                                    font.family: modelData
+                                                    font.pixelSize: 13
+                                                    elide: Text.ElideRight
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                background: Rectangle {
+                                                    color: parent.highlighted
+                                                           ? (bar.controlActiveBg !== undefined ? bar.controlActiveBg : Qt.rgba(0, 0.7, 0.75, 0.35))
+                                                           : "transparent"
+                                                    radius: 4
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: root.fontSizeChipWidth()
+                                            Layout.maximumWidth: root.fontSizeChipWidth()
+                                            Layout.preferredHeight: 36
+                                            radius: root.chipR
+                                            color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                            border.width: 1
+                                            border.color: bar.dividerStrong
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 4
+                                                Slider {
+                                                    Layout.fillWidth: true
+                                                    from: 70; to: 150; stepSize: 1
+                                                    value: root.currentRoleFontScalePct("mono")
+                                                    onPressedChanged: { if (pressed) root.pushThemeUndo() }
+                                                    onMoved: root.applyRoleFontScalePct("mono", value)
+                                                }
+                                                Text {
+                                                    text: root.currentRoleFontScalePct("mono") + "%"
+                                                    color: bar.subtext
+                                                    font.pixelSize: 11
+                                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                    Layout.preferredWidth: 40
+                                                    horizontalAlignment: Text.AlignRight
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ── role divider ──
+                                    Text {
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 4
+                                        wrapMode: Text.WordWrap
+                                        text: "Menu & bar roles (optional — inherit UI when unset)"
+                                        color: bar.subtext
+                                        font.pixelSize: 10
+                                        font.family: (bar.fontSecondaryResolved !== undefined) ? bar.fontSecondaryResolved : bar.fontFamily
+                                    }
+
+                                    // ════════ Main ════════
+                                    Text {
+                                        text: "Main text (menu headers)"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: (bar.fontMainResolved !== undefined) ? bar.fontMainResolved : bar.fontFamily
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        ComboBox {
+                                            id: mainFontCombo
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 34
+                                            Layout.minimumWidth: 120
+                                            model: { void root.colorsTick; return root.systemFontFamilies }
+                                            currentIndex: {
+                                                void root.colorsTick
+                                                void root.systemFontFamilies
+                                                return root.fontIndexFor(root.currentRoleFontName("main"))
+                                            }
+                                            onActivated: function(index) { root.applyRoleFontFromCombo("main", index) }
+                                            contentItem: Text {
+                                                leftPadding: 10
+                                                rightPadding: mainFontCombo.indicator.width + 12
+                                                text: {
+                                                    void root.colorsTick
+                                                    const n = root.currentRoleFontName("main")
+                                                    return n.length ? n : mainFontCombo.displayText
+                                                }
+                                                font.pixelSize: 12
+                                                font.family: {
+                                                    void root.colorsTick
+                                                    const n = root.currentRoleFontName("main")
+                                                    return n.length ? n : bar.fontFamily
+                                                }
+                                                color: bar.text
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                            }
+                                            background: Rectangle {
+                                                radius: 6
+                                                color: root.optFieldBg
+                                                border.width: 1
+                                                border.color: mainFontCombo.popup.visible ? bar.accent : bar.pillBorder
+                                            }
+                                            indicator: Text {
+                                                x: mainFontCombo.width - width - 10
+                                                y: (mainFontCombo.height - height) / 2
+                                                text: mainFontCombo.popup.visible ? "▴" : "▾"
+                                                color: bar.subtext
+                                                font.pixelSize: 11
+                                            }
+                                            popup: Popup {
+                                                y: mainFontCombo.height + 2
+                                                width: mainFontCombo.width
+                                                implicitHeight: Math.min(260, contentItem.implicitHeight + 4)
+                                                padding: 2
+                                                contentItem: ListView {
+                                                    clip: true
+                                                    implicitHeight: contentHeight
+                                                    model: mainFontCombo.popup.visible ? mainFontCombo.delegateModel : null
+                                                    currentIndex: mainFontCombo.highlightedIndex
+                                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                                }
+                                                background: Rectangle {
+                                                    radius: 8
+                                                    color: bar.glassPopupBg !== undefined ? bar.glassPopupBg : Qt.rgba(0.06, 0.08, 0.12, 0.96)
+                                                    border.width: 1
+                                                    border.color: bar.glassPopupBorder !== undefined ? bar.glassPopupBorder : bar.pillBorder
+                                                }
+                                            }
+                                            delegate: ItemDelegate {
+                                                width: mainFontCombo.width
+                                                height: 30
+                                                required property int index
+                                                required property string modelData
+                                                highlighted: mainFontCombo.highlightedIndex === index
+                                                contentItem: Text {
+                                                    text: modelData + "  ·  Header"
+                                                    color: bar.text
+                                                    font.family: modelData
+                                                    font.pixelSize: 12
+                                                    elide: Text.ElideRight
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                background: Rectangle {
+                                                    color: parent.highlighted
+                                                           ? (bar.controlActiveBg !== undefined ? bar.controlActiveBg : Qt.rgba(0, 0.7, 0.75, 0.35))
+                                                           : "transparent"
+                                                    radius: 4
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: root.fontSizeChipWidth()
+                                            Layout.maximumWidth: root.fontSizeChipWidth()
+                                            Layout.preferredHeight: 34
+                                            radius: root.chipR
+                                            color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                            border.width: 1
+                                            border.color: bar.dividerStrong
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 4
+                                                Slider {
+                                                    Layout.fillWidth: true
+                                                    from: 70; to: 150; stepSize: 1
+                                                    value: root.currentRoleFontScalePct("main")
+                                                    onPressedChanged: { if (pressed) root.pushThemeUndo() }
+                                                    onMoved: root.applyRoleFontScalePct("main", value)
+                                                }
+                                                Text {
+                                                    text: root.currentRoleFontScalePct("main") + "%"
+                                                    color: bar.subtext
+                                                    font.pixelSize: 11
+                                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                    Layout.preferredWidth: 40
+                                                    horizontalAlignment: Text.AlignRight
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ════════ Secondary ════════
+                                    Text {
+                                        text: "Secondary text (menu body)"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: (bar.fontMainResolved !== undefined) ? bar.fontMainResolved : bar.fontFamily
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        ComboBox {
+                                            id: secondaryFontCombo
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 34
+                                            Layout.minimumWidth: 120
+                                            model: { void root.colorsTick; return root.systemFontFamilies }
+                                            currentIndex: {
+                                                void root.colorsTick
+                                                void root.systemFontFamilies
+                                                return root.fontIndexFor(root.currentRoleFontName("secondary"))
+                                            }
+                                            onActivated: function(index) { root.applyRoleFontFromCombo("secondary", index) }
+                                            contentItem: Text {
+                                                leftPadding: 10
+                                                rightPadding: secondaryFontCombo.indicator.width + 12
+                                                text: {
+                                                    void root.colorsTick
+                                                    const n = root.currentRoleFontName("secondary")
+                                                    return n.length ? n : secondaryFontCombo.displayText
+                                                }
+                                                font.pixelSize: 12
+                                                font.family: {
+                                                    void root.colorsTick
+                                                    const n = root.currentRoleFontName("secondary")
+                                                    return n.length ? n : bar.fontFamily
+                                                }
+                                                color: bar.subtext
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                            }
+                                            background: Rectangle {
+                                                radius: 6
+                                                color: root.optFieldBg
+                                                border.width: 1
+                                                border.color: secondaryFontCombo.popup.visible ? bar.accent : bar.pillBorder
+                                            }
+                                            indicator: Text {
+                                                x: secondaryFontCombo.width - width - 10
+                                                y: (secondaryFontCombo.height - height) / 2
+                                                text: secondaryFontCombo.popup.visible ? "▴" : "▾"
+                                                color: bar.subtext
+                                                font.pixelSize: 11
+                                            }
+                                            popup: Popup {
+                                                y: secondaryFontCombo.height + 2
+                                                width: secondaryFontCombo.width
+                                                implicitHeight: Math.min(260, contentItem.implicitHeight + 4)
+                                                padding: 2
+                                                contentItem: ListView {
+                                                    clip: true
+                                                    implicitHeight: contentHeight
+                                                    model: secondaryFontCombo.popup.visible ? secondaryFontCombo.delegateModel : null
+                                                    currentIndex: secondaryFontCombo.highlightedIndex
+                                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                                }
+                                                background: Rectangle {
+                                                    radius: 8
+                                                    color: bar.glassPopupBg !== undefined ? bar.glassPopupBg : Qt.rgba(0.06, 0.08, 0.12, 0.96)
+                                                    border.width: 1
+                                                    border.color: bar.glassPopupBorder !== undefined ? bar.glassPopupBorder : bar.pillBorder
+                                                }
+                                            }
+                                            delegate: ItemDelegate {
+                                                width: secondaryFontCombo.width
+                                                height: 30
+                                                required property int index
+                                                required property string modelData
+                                                highlighted: secondaryFontCombo.highlightedIndex === index
+                                                contentItem: Text {
+                                                    text: modelData + "  ·  Body"
+                                                    color: bar.subtext
+                                                    font.family: modelData
+                                                    font.pixelSize: 12
+                                                    elide: Text.ElideRight
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                background: Rectangle {
+                                                    color: parent.highlighted
+                                                           ? (bar.controlActiveBg !== undefined ? bar.controlActiveBg : Qt.rgba(0, 0.7, 0.75, 0.35))
+                                                           : "transparent"
+                                                    radius: 4
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: root.fontSizeChipWidth()
+                                            Layout.maximumWidth: root.fontSizeChipWidth()
+                                            Layout.preferredHeight: 34
+                                            radius: root.chipR
+                                            color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                            border.width: 1
+                                            border.color: bar.dividerStrong
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 4
+                                                Slider {
+                                                    Layout.fillWidth: true
+                                                    from: 70; to: 150; stepSize: 1
+                                                    value: root.currentRoleFontScalePct("secondary")
+                                                    onPressedChanged: { if (pressed) root.pushThemeUndo() }
+                                                    onMoved: root.applyRoleFontScalePct("secondary", value)
+                                                }
+                                                Text {
+                                                    text: root.currentRoleFontScalePct("secondary") + "%"
+                                                    color: bar.subtext
+                                                    font.pixelSize: 11
+                                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                    Layout.preferredWidth: 40
+                                                    horizontalAlignment: Text.AlignRight
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ════════ Bar widget ════════
+                                    Text {
+                                        text: "Bar widget text"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: (bar.fontMainResolved !== undefined) ? bar.fontMainResolved : bar.fontFamily
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        ComboBox {
+                                            id: barFaceFontCombo
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 34
+                                            Layout.minimumWidth: 120
+                                            model: { void root.colorsTick; return root.systemFontFamilies }
+                                            currentIndex: {
+                                                void root.colorsTick
+                                                void root.systemFontFamilies
+                                                return root.fontIndexFor(root.currentRoleFontName("bar"))
+                                            }
+                                            onActivated: function(index) { root.applyRoleFontFromCombo("bar", index) }
+                                            contentItem: Text {
+                                                leftPadding: 10
+                                                rightPadding: barFaceFontCombo.indicator.width + 12
+                                                text: {
+                                                    void root.colorsTick
+                                                    const n = root.currentRoleFontName("bar")
+                                                    return n.length ? n : barFaceFontCombo.displayText
+                                                }
+                                                font.pixelSize: 12
+                                                font.family: {
+                                                    void root.colorsTick
+                                                    const n = root.currentRoleFontName("bar")
+                                                    return n.length ? n : bar.fontFamily
+                                                }
+                                                color: (bar.barText !== undefined) ? bar.barText : bar.text
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                            }
+                                            background: Rectangle {
+                                                radius: 6
+                                                color: root.optFieldBg
+                                                border.width: 1
+                                                border.color: barFaceFontCombo.popup.visible ? bar.accent : bar.pillBorder
+                                            }
+                                            indicator: Text {
+                                                x: barFaceFontCombo.width - width - 10
+                                                y: (barFaceFontCombo.height - height) / 2
+                                                text: barFaceFontCombo.popup.visible ? "▴" : "▾"
+                                                color: bar.subtext
+                                                font.pixelSize: 11
+                                            }
+                                            popup: Popup {
+                                                y: barFaceFontCombo.height + 2
+                                                width: barFaceFontCombo.width
+                                                implicitHeight: Math.min(260, contentItem.implicitHeight + 4)
+                                                padding: 2
+                                                contentItem: ListView {
+                                                    clip: true
+                                                    implicitHeight: contentHeight
+                                                    model: barFaceFontCombo.popup.visible ? barFaceFontCombo.delegateModel : null
+                                                    currentIndex: barFaceFontCombo.highlightedIndex
+                                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                                }
+                                                background: Rectangle {
+                                                    radius: 8
+                                                    color: bar.glassPopupBg !== undefined ? bar.glassPopupBg : Qt.rgba(0.06, 0.08, 0.12, 0.96)
+                                                    border.width: 1
+                                                    border.color: bar.glassPopupBorder !== undefined ? bar.glassPopupBorder : bar.pillBorder
+                                                }
+                                            }
+                                            delegate: ItemDelegate {
+                                                width: barFaceFontCombo.width
+                                                height: 30
+                                                required property int index
+                                                required property string modelData
+                                                highlighted: barFaceFontCombo.highlightedIndex === index
+                                                contentItem: Text {
+                                                    text: modelData + "  ·  12:34"
+                                                    color: (bar.barText !== undefined) ? bar.barText : bar.text
+                                                    font.family: modelData
+                                                    font.pixelSize: 12
+                                                    elide: Text.ElideRight
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                background: Rectangle {
+                                                    color: parent.highlighted
+                                                           ? (bar.controlActiveBg !== undefined ? bar.controlActiveBg : Qt.rgba(0, 0.7, 0.75, 0.35))
+                                                           : "transparent"
+                                                    radius: 4
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            Layout.preferredWidth: root.fontSizeChipWidth()
+                                            Layout.maximumWidth: root.fontSizeChipWidth()
+                                            Layout.preferredHeight: 34
+                                            radius: root.chipR
+                                            color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                            border.width: 1
+                                            border.color: bar.dividerStrong
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 4
+                                                Slider {
+                                                    Layout.fillWidth: true
+                                                    from: 70; to: 150; stepSize: 1
+                                                    value: root.currentRoleFontScalePct("bar")
+                                                    onPressedChanged: { if (pressed) root.pushThemeUndo() }
+                                                    onMoved: root.applyRoleFontScalePct("bar", value)
+                                                }
+                                                Text {
+                                                    text: root.currentRoleFontScalePct("bar") + "%"
+                                                    color: bar.subtext
+                                                    font.pixelSize: 11
+                                                    font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                                    Layout.preferredWidth: 40
+                                                    horizontalAlignment: Text.AlignRight
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ════════ Preview (all options) ════════
+                                    Text {
+                                        Layout.topMargin: 4
+                                        text: "Preview"
+                                        color: bar.text
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: (bar.fontMainResolved !== undefined) ? bar.fontMainResolved : bar.fontFamily
+                                    }
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: fontPreviewCol.implicitHeight + 18
+                                        radius: root.chipR
+                                        color: Qt.rgba(0.08, 0.10, 0.14, 0.55)
+                                        border.width: 1
+                                        border.color: bar.dividerStrong
+                                        ColumnLayout {
+                                            id: fontPreviewCol
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 10
+                                            spacing: 8
+                                            Text {
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                                text: {
+                                                    void root.colorsTick
+                                                    return "UI · The quick brown fox — " + root.currentUiFontName() + " · " + root.currentRoleFontScalePct("ui") + "%"
+                                                }
+                                                color: bar.text
+                                                font.pixelSize: bar.fontBody !== undefined ? bar.fontBody : 13
+                                                font.family: bar.fontFamily
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                                text: {
+                                                    void root.colorsTick
+                                                    return "Mono · const x = 0xDEAD; // " + root.currentMonoFontName() + " · " + root.currentRoleFontScalePct("mono") + "%"
+                                                }
+                                                color: bar.subtext
+                                                font.pixelSize: bar.fontMonoFace !== undefined ? bar.fontMonoFace : 12
+                                                font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                                text: {
+                                                    void root.colorsTick
+                                                    return "Main · Menu headers — " + root.currentRoleFontName("main") + " · " + (bar.popupTitleSize || 16) + "px"
+                                                }
+                                                color: bar.text
+                                                font.pixelSize: bar.popupTitleSize !== undefined ? bar.popupTitleSize : 16
+                                                font.bold: true
+                                                font.family: (bar.fontMainResolved !== undefined) ? bar.fontMainResolved : bar.fontFamily
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                                text: {
+                                                    void root.colorsTick
+                                                    return "Secondary · Body & hints — " + root.currentRoleFontName("secondary") + " · " + (bar.fontBody || 12) + "px"
+                                                }
+                                                color: bar.subtext
+                                                font.pixelSize: bar.fontBody !== undefined ? bar.fontBody : 12
+                                                font.family: (bar.fontSecondaryResolved !== undefined) ? bar.fontSecondaryResolved : bar.fontFamily
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                                text: {
+                                                    void root.colorsTick
+                                                    return "Bar · 12:34  CPU 42%  · " + root.currentRoleFontName("bar") + " · " + ((bar.fontBarFace !== undefined) ? bar.fontBarFace : 13) + "px"
+                                                }
+                                                color: (bar.barText !== undefined) ? bar.barText : bar.text
+                                                font.pixelSize: bar.fontBarFace !== undefined ? bar.fontBarFace : 13
+                                                font.bold: true
+                                                font.family: (bar.fontBarResolved !== undefined) ? bar.fontBarResolved : bar.fontFamily
+                                            }
+                                        }
+                                    }
                                 }
 
-                                // ── Presets (optional; toggled from Options) ──
+                                // ════════ PRESETS tab ════════
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 8
                                     visible: {
                                         void root.optionsTick
-                                        return bar && bar.showColorPresets !== false
+                                        return root.colorsTab === "presets"
+                                               && bar && bar.showColorPresets !== false
                                     }
 
                                     // Built-in presets (cannot be removed)
@@ -6879,7 +9105,7 @@ Item {
                                         Layout.fillWidth: true
                                         wrapMode: Text.WordWrap
                                         text: "Always available — these cannot be removed."
-                                        color: bar.overlay
+                                        color: bar.subtext
                                         font.pixelSize: 11
                                         font.family: bar.fontFamily
                                     }
@@ -6898,7 +9124,7 @@ Item {
                                                 width: Math.max(88, presetLbl.implicitWidth + 14)
                                                 height: 26
                                                 radius: root.chipR
-                                                color: presetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                color: presetMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                 border.width: 1
                                                 border.color: bar.pillBorder
                                                 Text {
@@ -6945,7 +9171,7 @@ Item {
                                             font.pixelSize: 12
                                             font.family: bar.fontFamily
                                             color: bar.text
-                                            placeholderTextColor: bar.overlay
+                                            placeholderTextColor: bar.subtext
                                             selectedTextColor: "#000000"
                                             selectionColor: bar.accent
                                             background: Rectangle {
@@ -6966,7 +9192,7 @@ Item {
                                             Layout.preferredHeight: 28
                                             Layout.preferredWidth: savePresetLbl.implicitWidth + 14
                                             radius: root.chipR
-                                            color: savePresetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                            color: savePresetMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                             border.width: 1
                                             border.color: bar.pillBorder
                                             Text {
@@ -7013,7 +9239,7 @@ Item {
                                                 width: userPresetRow.implicitWidth + 12
                                                 height: 28
                                                 radius: root.chipR
-                                                color: userPresetMa.containsMouse ? bar.glassHover : bar.pillBg
+                                                color: userPresetMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                                 border.width: 1
                                                 border.color: bar.pillBorder
 
@@ -7082,7 +9308,7 @@ Item {
                                             return list.length === 0
                                         }
                                         text: "No custom presets yet — save the current look with a name above."
-                                        color: bar.overlay
+                                        color: bar.subtext
                                         font.pixelSize: 11
                                         font.family: bar.fontFamily
                                         wrapMode: Text.WordWrap
@@ -7094,7 +9320,7 @@ Item {
                                         spacing: 6
                                         Text {
                                             text: "Load file"
-                                            color: bar.overlay
+                                            color: bar.subtext
                                             font.pixelSize: 11
                                             font.family: bar.fontFamily
                                         }
@@ -7107,7 +9333,7 @@ Item {
                                             font.pixelSize: 11
                                             font.family: bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily
                                             color: bar.text
-                                            placeholderTextColor: bar.overlay
+                                            placeholderTextColor: bar.subtext
                                             selectedTextColor: "#000000"
                                             selectionColor: bar.accent
                                             background: Rectangle {
@@ -7127,7 +9353,7 @@ Item {
                                             Layout.preferredHeight: 26
                                             Layout.preferredWidth: loadPathLbl.implicitWidth + 12
                                             radius: root.chipR
-                                            color: loadPathMa.containsMouse ? bar.glassHover : bar.pillBg
+                                            color: loadPathMa.containsMouse ? bar.glassHover : (bar.buttonBg !== undefined ? bar.buttonBg : bar.pillBg)
                                             border.width: 1
                                             border.color: bar.pillBorder
                                             Text {
@@ -7152,7 +9378,9 @@ Item {
                                         }
                                     }
                                 }
-                            }
+                                } // themesBodyCol
+                                } // themesBodyFlick
+                            } // themesPanel
 
                             // ===== CLOCK =====
                             ColumnLayout {
@@ -7186,7 +9414,7 @@ Item {
                                         radius: root.chipR
                                         color: cRowMa.containsMouse ? bar.popupButtonHoverBg : Qt.rgba(0.10, 0.10, 0.12, 0.55)
                                         border.width: bar.controlBorderWidth
-                                        border.color: active ? bar.accent : bar.dividerStrong
+                                        border.color: active ? root.activeLabelColor() : bar.dividerStrong
 
                                         ColumnLayout {
                                             anchors.fill: parent
@@ -7197,14 +9425,14 @@ Item {
                                             spacing: 0
                                             Text {
                                                 text: modelData.label + (active ? "  · active" : "")
-                                                color: active ? bar.accent : bar.text
+                                                color: active ? root.activeLabelColor() : bar.text
                                                 font.pixelSize: 12
                                                 font.bold: active
                                                 font.family: bar.fontFamily
                                             }
                                             Text {
                                                 text: modelData.tip || modelData.format
-                                                color: bar.overlay
+                                                color: bar.subtext
                                                 font.pixelSize: 10
                                                 font.family: bar.fontFamily
                                                 elide: Text.ElideRight
@@ -7229,7 +9457,7 @@ Item {
                     visible: root.activeMenu.length > 0
                     Layout.alignment: Qt.AlignRight
                     text: "click outside to close"
-                    color: bar.overlay
+                    color: bar.subtext
                     font.pixelSize: bar.popupHintSize
                     font.family: bar.fontFamily
                 }
@@ -7254,7 +9482,7 @@ Item {
                             { id: "wallpaper", label: "Wallpaper" },
                             { id: "widgets",   label: "Widgets" },
                             { id: "options",   label: "Options" },
-                            { id: "colors",    label: "Colors" },
+                            { id: "colors",    label: "Themes" },
                             { id: "launch",    label: "Launch" },
                             { id: "autostart", label: "Autostart" },
                             { id: "mime",      label: "MIME" },

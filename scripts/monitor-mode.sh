@@ -329,8 +329,47 @@ apply_mode() {
     fi
   fi
 
+  # Persist so the mode survives reboot / hyprctl reload (Hyprland Lua config)
+  persist_monitors_lua "$mon_name" "$mode" "$bitdepth" || true
+
   # Print status for callers
   status_json
+}
+
+# Rewrite ~/.config/hypr/config/monitors.lua (or create it) with the applied mode.
+# Keeps cm = "auto" and scale 1.0; backs up the previous file once per apply.
+persist_monitors_lua() {
+  local mon_name="$1" mode="$2" bitdepth="$3"
+  local conf_dir conf bak
+  conf_dir="${HYPR_MONITORS_LUA_DIR:-$HOME/.config/hypr/config}"
+  conf="${HYPR_MONITORS_LUA:-$conf_dir/monitors.lua}"
+
+  mkdir -p "$(dirname "$conf")" 2>/dev/null || return 1
+
+  if [[ -f "$conf" ]]; then
+    bak="${conf}.bak-qs"
+    cp -f "$conf" "$bak" 2>/dev/null || true
+  fi
+
+  # mode is WxH@rate — quote as string for Lua
+  cat >"$conf" <<EOF
+-- ━━━━ Monitors ╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╸
+--
+-- Managed by Quickshell Display panel (scripts/monitor-mode.sh).
+-- Last applied: $(date -Iseconds 2>/dev/null || date)
+-- Manual edits are fine; the next Apply from the bar will rewrite this file.
+--
+-- See https://wiki.hypr.land/Configuring/Basics/Monitors/
+
+hl.monitor({
+    output   = "${mon_name}",
+    mode     = "${mode}",
+    position = "0x0",
+    scale    = 1.0,
+    bitdepth = ${bitdepth},
+    cm = "auto",
+})
+EOF
 }
 
 usage() {

@@ -59,7 +59,7 @@ Rectangle {
     radius: bar.pillRadius
     color: mediaHover.containsMouse ? bar.glassHover : bar.glassPillBg
     border.width: bar.controlBorderWidth
-    border.color: mediaHover.containsMouse ? bar.accent : bar.glassBorder
+    border.color: mediaHover.containsMouse ? bar.accent : bar.pillBorder
 
     // ===== MEDIA STATE (logic preserved exactly) =====
     QtObject {
@@ -301,14 +301,14 @@ Rectangle {
             text: media.isPlaying ? "▶" : "⏸"
             font.pixelSize: bar.iconSizePill
             font.family: bar.fontFamily
-            color: media.isPlaying ? bar.accent : bar.subtext
+            color: media.isPlaying ? bar.accent : (bar.iconColor !== undefined ? bar.iconColor : bar.subtext)
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        // Title
+        // Title (bar face — Themes → Bar widget text)
         Text {
             text: media.title || "No media"
-            color: bar.text
+            color: (bar.barText !== undefined) ? bar.barText : bar.text
             font.pixelSize: 15
             font.bold: true
             font.family: bar.fontFamily
@@ -414,7 +414,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Text {
                         text: media.appName
-                        color: bar.accent
+                        color: bar.text
                         font.pixelSize: bar.popupSectionSize
                         font.bold: true
                     }
@@ -455,7 +455,7 @@ Rectangle {
 
                     Text {
                         text: "click outside to close"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.popupHintSize
                         Layout.leftMargin: 8
                     }
@@ -493,7 +493,7 @@ Rectangle {
                             visible: media.artUrl === ""
                             text: "󰝚"
                             font.pixelSize: 42
-                            color: bar.overlay
+                            color: bar.subtext
                         }
                     }
 
@@ -525,7 +525,7 @@ Rectangle {
                             Layout.fillWidth: true
                             visible: media.album !== ""
                             text: media.album
-                            color: bar.overlay
+                            color: bar.subtext
                             font.pixelSize: 13
                             elide: Text.ElideRight
                         }
@@ -639,14 +639,14 @@ Rectangle {
                         Layout.fillWidth: true
                         Text {
                             text: Qt.formatTime(new Date(media.position), "mm:ss")
-                            color: bar.overlay
+                            color: bar.subtext
                             font.pixelSize: 11
                             font.family: bar.fontMono
                         }
                         Item { Layout.fillWidth: true }
                         Text {
                             text: Qt.formatTime(new Date(media.length), "mm:ss")
-                            color: bar.overlay
+                            color: bar.subtext
                             font.pixelSize: 11
                             font.family: bar.fontMono
                         }
@@ -661,7 +661,7 @@ Rectangle {
 
                     Text {
                         text: "Active streams"
-                        color: bar.accent
+                        color: bar.text
                         font.pixelSize: bar.popupHintSize
                         font.bold: true
                     }
@@ -715,7 +715,7 @@ Rectangle {
                                         Text {
                                             visible: modelData.dbusName
                                             text: (modelData.dbusName || "").replace("org.mpris.MediaPlayer2.", "")
-                                            color: bar.overlay
+                                            color: bar.subtext
                                             font.pixelSize: 8
                                             elide: Text.ElideRight
                                             width: parent.width
@@ -742,7 +742,7 @@ Rectangle {
 
                     Text {
                         text: "Audio sources from PipeWire"
-                        color: bar.accent
+                        color: bar.text
                         font.pixelSize: bar.popupHintSize
                         font.bold: true
                     }
@@ -769,7 +769,7 @@ Rectangle {
 
                     Text {
                         text: "Direct PipeWire nodes (browsers + Audacious, mpv, etc). Independent of MPRIS."
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: 9
                         font.italic: true
                     }

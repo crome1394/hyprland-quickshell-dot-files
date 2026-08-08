@@ -1,4 +1,5 @@
 import QtQuick
+import "../components"
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
@@ -39,6 +40,7 @@ Rectangle {
     clip: true
 
     radius: bar.pillRadius
+    // Outer chrome is stable; each app icon highlights on its own.
     color: bar.pillBg
     border.width: bar.controlBorderWidth
     border.color: bar.pillBorder
@@ -95,6 +97,9 @@ Rectangle {
                 height: root._icon + 8
                 radius: bar.workspaceRadius
                 color: launchClick.containsMouse ? bar.iconHoverBg : "transparent"
+                border.width: launchClick.containsMouse ? bar.controlBorderWidth : 0
+                border.color: launchClick.containsMouse ? bar.accent : "transparent"
+                Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
                 clip: true
 
                 Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
@@ -116,7 +121,7 @@ Rectangle {
                     text: modelData.glyph || ""
                     font.pixelSize: root._icon
                     font.family: bar.fontFamily
-                    color: launchClick.containsMouse ? bar.accent : bar.subtext
+                    color: launchClick.containsMouse ? bar.accent : (bar.iconColor !== undefined ? bar.iconColor : bar.subtext)
                 }
 
                 MouseArea {
@@ -126,9 +131,12 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.launchEntry(modelData)
 
-                    ToolTip.text: modelData.tooltip || ""
-                    ToolTip.visible: containsMouse && (modelData.tooltip || "").length > 0
-                    ToolTip.delay: bar.tooltipDelay
+                    BarToolTip {
+                        bar: root.bar
+                        visible: launchClick.containsMouse && (modelData.tooltip || "").length > 0
+                        text: modelData.tooltip || ""
+                        anchorItem: launchClick
+                    }
                 }
             }
         }

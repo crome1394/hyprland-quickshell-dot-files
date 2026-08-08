@@ -2,6 +2,20 @@
 
 Notable changes for people upgrading this config. Day-to-day usage is in [README.md](README.md) and [docs/](docs/).
 
+## 2026-08 — Theme system, fonts, polish
+
+- **Themes** (control strip → **Themes**): live color/opacity editor, undo, thresholds (volume + sysstats), **Fonts** tab, presets.
+  - Text roles: **Main** (menu headers), **Secondary** (menu body), **Bar widget text** (face on the bar) — isolated colors.
+  - **Fonts**: UI / Mono / Main / Secondary / Bar — each with typeface + size % (two-column layout); preview lists all five.
+  - Liquid presets: Liquid glass, mint, violet, rose, amber, ice, aurora (+ solid/soft/nordic/ember/ocean/lavender/forest).
+  - Persist: `state/theme-colors.json`; named presets under `themes/`.
+- **Display**: Apply writes `~/.config/hypr/config/monitors.lua` so resolution/refresh/bit-depth survive reboot.
+- **Sys Stats / Network Options**: independent toggles for bar util graphs vs menu graphs; network traffic sparkline optional.
+- **Notifications**: left-click history panel (expand all, per-item copy); right-click DND / clear / SwayNC control center. History via `scripts/notification-history.py`.
+- **Hover**: content-chip accent rim (not whole multi-item pills); Net/BT/Audio sections when embedded.
+- **MIME / control panels**: secondary body greys track Themes → Secondary text.
+- **Stability**: fixed QML type-coercion warnings (`NetworkMonitorView` bools/ints, `ClockPill` grid spacing, `ServicesView` row selection).
+
 ## 2026-08 — Control bar & FreshRSS
 
 - **MIME panel** (control strip → **MIME**): Preferred applications / file-type defaults.

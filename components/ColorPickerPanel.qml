@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Quickshell
 
 // =============================================================================
 // ColorPickerPanel.qml — simple mouse-driven color picker for non-coders
@@ -25,6 +26,7 @@ Item {
     signal colorEdited(color c)
     signal accepted()
     signal cancelled()
+    signal hexCopied(string hex)
 
     // Internal HSV (h 0–360, s/v 0–1)
     property real h: 180
@@ -32,10 +34,50 @@ Item {
     property real v: 1
     property bool _syncing: false
 
-    // Compact: must fit beside Colors without forcing the control-bar Flickable to scroll
-    // (scrolling steals drag events from the SV square / hue strip).
+    // Default compact size; when the parent assigns a taller height (Layout.preferredHeight
+    // / fillHeight), the SV square grows between the header and the bottom chrome.
+    // Bottom controls (hue / opacity / hex / RGB / Done) are always reserved — never
+    // truncated when the host is short or the SV expands.
+    // Keep drag preventStealing so a parent Flickable does not steal the SV/hue drag.
     implicitWidth: 280
-    implicitHeight: mainCol.implicitHeight + 10
+    // header + svMin + hue + optional opacity + hex + done + margins/spacing
+    implicitHeight: 12 + 22 + svMinHeight + 5 + 16 + (showOpacity ? 30 : 0) + 30 + 30 + 12
+    property int svMinHeight: 96
+    property bool _hexCopied: false
+    // Space reserved under the SV square so chrome never collapses
+    readonly property int chromeReserveH: {
+        // hue 16 + spacing + (opacity row) + hex row 28 + done 28 + spacings + margins
+        var h = 16 + 5 + 28 + 5 + 28 + 8
+        if (root.showOpacity)
+            h += 28 + 5
+        return h
+    }
+
+    function copyHexToClipboard() {
+        var hex = toHex(root.previewColor)
+        try {
+            Quickshell.execDetached([
+                "sh", "-c",
+                'printf "%s" "$1" | wl-copy 2>/dev/null || printf "%s" "$1" | xclip -selection clipboard 2>/dev/null || true',
+                "copy-hex",
+                hex
+            ])
+        } catch (e) {
+            // Fallback without Quickshell binding
+            try {
+                // Some hosts expose clipboard on Qt.application
+            } catch (e2) {}
+        }
+        root._hexCopied = true
+        copyHexReset.restart()
+    }
+
+    Timer {
+        id: copyHexReset
+        interval: 1200
+        repeat: false
+        onTriggered: root._hexCopied = false
+    }
 
     function clamp01(n) {
         var x = Number(n)
@@ -197,107 +239,49 @@ Item {
         color: root.panelBg
         border.width: 1
         border.color: root.panelBorder
+        // Clip only the SV square; chrome is outside it so controls never paint under the edge
+        clip: false
 
-        ColumnLayout {
-            id: mainCol
+        // ── Header (fixed top) ──
+        RowLayout {
+            id: headerRow
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 6
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            anchors.topMargin: 6
+            height: 20
+            spacing: 6
+            Text {
+                Layout.fillWidth: true
+                text: root.title
+                color: root.labelColor
+                font.pixelSize: 12
+                font.bold: true
+                font.family: root.fontFamily
+                elide: Text.ElideRight
+            }
+            Rectangle {
+                Layout.preferredWidth: 28
+                Layout.preferredHeight: 18
+                radius: 4
+                color: root.previewColor
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.25)
+            }
+        }
+
+        // ── Bottom chrome (fixed — never truncated) ──
+        ColumnLayout {
+            id: chromeCol
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            anchors.bottomMargin: 6
             spacing: 5
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 6
-                Text {
-                    Layout.fillWidth: true
-                    text: root.title
-                    color: root.labelColor
-                    font.pixelSize: 12
-                    font.bold: true
-                    font.family: root.fontFamily
-                    elide: Text.ElideRight
-                }
-                Rectangle {
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 18
-                    radius: 4
-                    color: root.previewColor
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.25)
-                }
-            }
-
-            // Saturation / Value square (compact — avoids panel scrollbar)
-            Item {
-                id: svBox
-                Layout.fillWidth: true
-                Layout.preferredHeight: 96
-
-                // Hue base
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 6
-                    color: root.pureHueColor
-                }
-                // White → transparent (saturation)
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 6
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: "#ffffffff" }
-                        GradientStop { position: 1.0; color: "#00ffffff" }
-                    }
-                }
-                // Transparent → black (value)
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 6
-                    gradient: Gradient {
-                        orientation: Gradient.Vertical
-                        GradientStop { position: 0.0; color: "#00000000" }
-                        GradientStop { position: 1.0; color: "#ff000000" }
-                    }
-                }
-
-                // Cursor
-                Rectangle {
-                    width: 12
-                    height: 12
-                    radius: 6
-                    color: "transparent"
-                    border.width: 2
-                    border.color: "#ffffff"
-                    x: root.s * svBox.width - width / 2
-                    y: (1 - root.v) * svBox.height - height / 2
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 8
-                        height: 8
-                        radius: 4
-                        color: "transparent"
-                        border.width: 1
-                        border.color: "#000000"
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.CrossCursor
-                    // Keep drag inside the square — parent Flickable must not steal it
-                    preventStealing: true
-                    function pick(mx, my) {
-                        root.s = Math.max(0, Math.min(1, mx / Math.max(1, svBox.width)))
-                        root.v = Math.max(0, Math.min(1, 1 - (my / Math.max(1, svBox.height))))
-                        root.emitColor()
-                    }
-                    onPressed: (mouse) => pick(mouse.x, mouse.y)
-                    onPositionChanged: (mouse) => {
-                        if (pressed) pick(mouse.x, mouse.y)
-                    }
-                }
-            }
 
             // Hue strip
             Item {
@@ -346,9 +330,10 @@ Item {
                 }
             }
 
-            // Opacity + Hex on one row when possible
+            // Opacity row
             RowLayout {
                 Layout.fillWidth: true
+                Layout.preferredHeight: 24
                 visible: root.showOpacity
                 spacing: 6
                 Text {
@@ -379,9 +364,10 @@ Item {
                 }
             }
 
-            // Hex + RGB on one compact row
+            // Hex + RGB
             RowLayout {
                 Layout.fillWidth: true
+                Layout.preferredHeight: 24
                 spacing: 4
                 Text {
                     text: "Hex"
@@ -399,11 +385,23 @@ Item {
                     color: root.labelColor
                     selectedTextColor: "#000000"
                     selectionColor: root.accentColor
+                    // Clear on click so typing a new hex is immediate
+                    property bool _clearOnFocus: true
                     background: Rectangle {
                         radius: 4
                         color: root.fieldBg
                         border.width: 1
                         border.color: hexField.activeFocus ? root.accentColor : Qt.rgba(1, 1, 1, 0.12)
+                    }
+                    onActiveFocusChanged: {
+                        if (activeFocus && _clearOnFocus) {
+                            text = ""
+                            selectAll()
+                        } else if (!activeFocus) {
+                            // Restore display if left empty without commit
+                            if (!(text && text.length))
+                                syncFieldsFromColor(root.previewColor)
+                        }
                     }
                     onEditingFinished: root.applyHexText()
                     Keys.onReturnPressed: root.applyHexText()
@@ -494,8 +492,32 @@ Item {
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.preferredHeight: 24
                 spacing: 6
                 Item { Layout.fillWidth: true }
+                Rectangle {
+                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: copyHexLbl.implicitWidth + 14
+                    radius: 5
+                    color: copyHexMa.containsMouse ? Qt.rgba(0, 0.85, 0.80, 0.22) : root.fieldBg
+                    border.width: 1
+                    border.color: root.panelBorder
+                    Text {
+                        id: copyHexLbl
+                        anchors.centerIn: parent
+                        text: root._hexCopied ? "Copied" : "Copy hex"
+                        color: root.labelColor
+                        font.pixelSize: 11
+                        font.family: root.fontFamily
+                    }
+                    MouseArea {
+                        id: copyHexMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.copyHexToClipboard()
+                    }
+                }
                 Rectangle {
                     Layout.preferredHeight: 24
                     Layout.preferredWidth: closeLbl.implicitWidth + 14
@@ -518,6 +540,83 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.accepted()
                     }
+                }
+            }
+        }
+
+        // ── SV square fills space between header and chrome ──
+        Item {
+            id: svBox
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: headerRow.bottom
+            anchors.bottom: chromeCol.top
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            anchors.topMargin: 5
+            anchors.bottomMargin: 5
+            clip: true
+
+            // Hue base
+            Rectangle {
+                anchors.fill: parent
+                radius: 6
+                color: root.pureHueColor
+            }
+            // White → transparent (saturation)
+            Rectangle {
+                anchors.fill: parent
+                radius: 6
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "#ffffffff" }
+                    GradientStop { position: 1.0; color: "#00ffffff" }
+                }
+            }
+            // Transparent → black (value)
+            Rectangle {
+                anchors.fill: parent
+                radius: 6
+                gradient: Gradient {
+                    orientation: Gradient.Vertical
+                    GradientStop { position: 0.0; color: "#00000000" }
+                    GradientStop { position: 1.0; color: "#ff000000" }
+                }
+            }
+
+            // Cursor
+            Rectangle {
+                width: 12
+                height: 12
+                radius: 6
+                color: "transparent"
+                border.width: 2
+                border.color: "#ffffff"
+                x: root.s * svBox.width - width / 2
+                y: (1 - root.v) * svBox.height - height / 2
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 8
+                    height: 8
+                    radius: 4
+                    color: "transparent"
+                    border.width: 1
+                    border.color: "#000000"
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.CrossCursor
+                preventStealing: true
+                function pick(mx, my) {
+                    root.s = Math.max(0, Math.min(1, mx / Math.max(1, svBox.width)))
+                    root.v = Math.max(0, Math.min(1, 1 - (my / Math.max(1, svBox.height))))
+                    root.emitColor()
+                }
+                onPressed: (mouse) => pick(mouse.x, mouse.y)
+                onPositionChanged: (mouse) => {
+                    if (pressed) pick(mouse.x, mouse.y)
                 }
             }
         }

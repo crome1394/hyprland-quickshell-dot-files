@@ -1,53 +1,8 @@
-// Config.qml — Quickshell configuration (theme colors + workspace behavior)
-// =============================================================================
-// SINGLE SOURCE OF TRUTH — edit this file for bar visuals and workspace defaults.
-// (Named Config.qml for QML type registration; referred to as "config" in docs.)
-// =============================================================================
-//
-// Visual properties (colors, sizes, spacing, radii, fonts, icons, slider
-// styling, etc.) and workspace behavior defaults live here.
-//
-// How it works in this config:
-//   - shell.qml instantiates Config once and re-exports **every** property as
-//     aliases on the root `bar` object (e.g. bar.accent, bar.sliderFill,
-//     bar.wsMinimumShown, bar.wsShowSpecialPill, etc.).
-//   - Almost all widgets receive `required property var bar` and use `bar.xxx`.
-//   - Low-level components (VolumeBar, MiniVolumeBar, CavaVisualizer) read
-//     values from `bar` with safe fallbacks so they also stay in sync.
-//
-// You can also import it directly in new code if you prefer:
-//     import "config.qml" as C
-//     color: C.Config.accent
-//
-// (We deliberately avoided a heavy pragma Singleton + qmldir setup because
-//  it caused loader conflicts with the existing `Config {}` + alias pattern
-//  that the entire bar relies on.)
-//
-// All properties below are heavily commented with their purpose and consumers.
-//
-// Categories (search for the headers):
-//   - Base palette
-//   - Glassmorphic tokens (bar / pill / popup)
-//   - State Colors (hover, pressed, active, focus states for consistent interaction feedback)
-//   - Radii
-//   - Spacing & padding
-//   - Sizing (bar, pills, popups, icons)
-//   - Fonts (families + sizes)
-//   - Icons (glyphs for speaker/mic/power/etc — easy to swap entire icon set)
-//   - Sliders & progress (VolumeBar, MiniVolumeBar, seek bars, stat gauges)
-//   - Widget visibility (bar pill defaults)
-//   - QUICK LAUNCH (pinned app icons and launch commands)
-//   - NOTIFICATION BELL (notification daemon CLI commands for the bell)
-//   - POWER MENU (lock / logout / reboot / shutdown / BIOS commands)
-//   - KILL TARGET PILL (click-to-kill window picker)
-//   - Workspaces (pill behavior, colors, icons, special workspace name)
-//   - SYS STATS PILL (CPU | Memory | GPU bar pill size, gauges, temp colors)
-//   - SysStats metrics popups (right-click dropdown size/position per section)
-//   - Cava visualizer
-//   - System monitoring (gauges, poll default, shared tab-chip colors)
-//   - Hypr Config Inspector (overlay window, tabs, tables, key/env semantic colors)
-//   - Dividers & borders
-//   - Popups (generic metrics + internal layout tokens)
+// Config.qml — theme, fonts, sizes, visibility defaults (single source of truth).
+// shell.qml instantiates Config once and aliases every property on `bar`.
+// Widgets take `required property var bar` and read bar.xxx.
+// Day-to-day colors/fonts: control strip → Themes (state/theme-colors.json).
+// Search section headers below (e.g. FONTS, WIDGET VISIBILITY, NOTIFICATION BELL).
 //   - Animation & Interaction (durations, easings, tooltip delays)
 //   - Enums (menu button types)
 //
@@ -80,11 +35,15 @@ QtObject {
     // Factory defaults live in themeFactoryDefaults() / themeReset().
     property color bg:        "#0a0e16"   // Deep blue-charcoal (solid fallback)
     property color surface:   "#141a24"   // Elevated blue-slate panels / tracks
-    property color text:      "#f0f4fc"   // Bright cool-white (high contrast on glass)
-    property color subtext:   "#a8b4c8"   // Cool silver-blue secondary labels
+    property color text:      "#f0f4fc"   // Main text — menu headers / titles only
+    property color subtext:   "#a8b4c8"   // Secondary text — menu body, hints, labels
+    property color barText:   "#f0f4fc"   // Widget face text on the main bar (clock, stats, IP, …)
     property color overlay:   "#6e7a90"   // Muted blue-grey (not flat mid-grey)
 
-    property color accent:    "#00F0E0"   // Vivid teal-cyan (active / hover / highlights)
+    // Accent = interactive chrome only: focus rings, selected outlines, hover rims,
+    // selection highlights. NOT section titles, status text, or monochrome icons
+    // (use text / buttonTextActive / iconColor for those).
+    property color accent:    "#00F0E0"   // Vivid teal-cyan (interactive highlight)
     property color muted:     "#FF3D8A"   // Magenta-pink secondary + warning / mute / DND
 
     // Semantic / status colors
@@ -116,8 +75,9 @@ QtObject {
     property color glassPopupBorder:     Qt.rgba(0.55, 0.72, 0.82, 0.18)
     property color glassPopupHighlight:  Qt.rgba(1, 1, 1, 0.18)
 
-    // Convenience aliases used by many pills (prevents drift)
-    // pillBg / pillHover track glass* so one Colors control updates both.
+    // Convenience aliases used by many pills (same Theme slot — no separate Colors row).
+    // pillBg always tracks glassPillBg; pillHover / controlHoverBg track glassHover.
+    // setThemeColor keeps these in sync; they are NOT independent editable keys.
     property color pillBg:     glassPillBg
     property color pillBorder: Qt.rgba(1, 1, 1, 0.10)  // Soft glass rim; hover uses accent
     property color pillHover:  glassHover
@@ -127,9 +87,11 @@ QtObject {
     // =========================================================================
     // These provide consistent interactive feedback across pills, buttons, and popups.
     // Use these instead of ad-hoc Qt.rgba or hex values for hover/pressed states.
+    // Isolation rule: each Colors-panel key writes ONLY its own property (plus the
+    // intentional aliases listed above). No cascading into unrelated keys.
 
-    // Pill-level hover (used by almost every bar widget)
-    property color pillHoverBorder: accent   // Border color on hover for all pills
+    // Pill-level hover border (tracks accent by default; not a separate Colors row)
+    property color pillHoverBorder: accent
 
     // Per-item hover chips — translucent teal glow (QuickLaunch, tray, workspaces, …)
     property color iconHoverBg: Qt.rgba(0.0, 0.85, 0.82, 0.28)
@@ -141,6 +103,11 @@ QtObject {
     // Specific popup button hover
     property color popupButtonHoverBg: Qt.rgba(0.08, 0.10, 0.16, 0.65)
 
+    // Control-bar toolbar / chip button fill (inactive). Isolated from pill/widget bg
+    // so editing "Widget background" does not recolor Position / Colors / Audio tabs.
+    // Default matches historical pillBg so the look is unchanged until edited.
+    property color buttonBg:         Qt.rgba(0.05, 0.07, 0.12, 0.72)
+
     // Control-bar menu tab labels (Position / Colors / …) — independent of accent/subtext
     property color buttonText:       "#a8b4c8"   // Inactive menu button label
     property color buttonTextActive: "#00F0E0"   // Active / hovered menu button label
@@ -150,6 +117,10 @@ QtObject {
     // =========================================================================
     // Keys exposed in the UI map 1:1 to properties above. Derived tokens
     // (sliderFill, wsActiveBorder, …) stay bound to accent/muted/etc.
+    //
+    // Isolation: setThemeColor(key) mutates only that key (+ documented aliases).
+    // Shared visual roles (button tabs 1/6/11 → buttonBg; bar pills → glassPillBg)
+    // use the same Theme property on purpose — never accidental cross-talk.
 
     readonly property var themeEditableKeys: [
         "glassBg", "glassPillBg", "glassPopupBg",
@@ -157,31 +128,87 @@ QtObject {
         "glassHighlight", "glassPopupHighlight",
         "glassHover", "iconHoverBg",
         "accent", "muted",
-        "text", "subtext", "overlay",
+        "text", "subtext", "barText", "overlay",
         "bg", "surface", "clock",
-        "controlActiveBg", "popupButtonHoverBg",
+        "buttonBg", "controlActiveBg", "popupButtonHoverBg",
         "buttonText", "buttonTextActive",
-        "wsActiveBg", "wsActiveText", "wsInactiveText"
+        "wsActiveBg", "wsActiveText", "wsInactiveText",
+        "audioSpeakerTier1", "audioSpeakerTier2", "audioSpeakerTier3", "audioSpeakerTier4",
+        "audioMicTier1", "audioMicTier2", "audioMicTier3", "audioMicTier4",
+        "iconColor", "audioSpeakerIcon", "audioMicIcon",
+        "statUtilTier1", "statUtilTier2", "statUtilTier3", "statUtilTier4",
+        "statTempCool", "statTempWarm", "statTempHot"
     ]
 
-    // Friendly rows shown in the Colors panel (label + property key + opacity?).
+    // Numeric theme keys (thresholds) — exported/imported with colors JSON.
+    readonly property var themeEditableNumbers: [
+        "audioUtilThreshold1", "audioUtilThreshold2", "audioUtilThreshold3",
+        "audioMicUtilThreshold1", "audioMicUtilThreshold2", "audioMicUtilThreshold3",
+        "statUtilThreshold1", "statUtilThreshold2", "statUtilThreshold3",
+        "statTempWarmAt", "statTempHotAt"
+    ]
+
+    // Friendly rows shown in the Colors → Theming tab.
+    // section: "colors" | "text" | "effects"
+    // opacity: true → also appears in the Opacity section as an alpha slider.
     readonly property var themeUiRows: [
-        { key: "glassBg",     label: "Bar background",    opacity: true },
-        { key: "glassPillBg", label: "Widget background", opacity: true },
-        { key: "glassPopupBg",label: "Menu background",   opacity: true },
-        { key: "glassBorder", label: "Border",            opacity: true },
-        { key: "accent",      label: "Accent",            opacity: false },
-        { key: "muted",       label: "Warning / pink",    opacity: false },
-        { key: "text",        label: "Main text",         opacity: false },
-        { key: "subtext",     label: "Secondary text",    opacity: false },
-        { key: "buttonText",  label: "Button text",       opacity: false },
-        { key: "buttonTextActive", label: "Active button text", opacity: false },
-        { key: "glassHover",  label: "Hover glow",        opacity: true },
-        { key: "controlActiveBg", label: "Active button", opacity: true },
-        { key: "wsActiveBg",  label: "Active workspace",  opacity: true },
-        { key: "wsActiveText", label: "Active workspace text", opacity: false },
-        { key: "wsInactiveText", label: "Workspace text", opacity: false },
-        { key: "glassHighlight", label: "Top edge shine", opacity: true }
+        // ── Colors (solid fills / accents) ──
+        { key: "buttonBg",    label: "Button background", opacity: true,  section: "colors" },
+        { key: "glassBg",     label: "Bar background",    opacity: true,  section: "colors" },
+        { key: "glassBorder", label: "Border",            opacity: true,  section: "colors" },
+        { key: "glassPillBg", label: "Widget / pill fill", opacity: true, section: "colors" },
+        { key: "pillBorder",  label: "Pill border",       opacity: true,  section: "colors" },
+        { key: "glassPopupBg",label: "Menu background",   opacity: true,  section: "colors" },
+        { key: "glassPopupBorder", label: "Menu border",  opacity: true,  section: "colors" },
+        { key: "accent",      label: "Accent (highlights)", opacity: false, section: "colors" },
+        { key: "muted",       label: "Warning / pink",    opacity: false, section: "colors" },
+        { key: "controlActiveBg", label: "Active button", opacity: true,  section: "colors" },
+        { key: "wsActiveBg",  label: "Active workspace",  opacity: true,  section: "colors" },
+        { key: "iconColor", label: "Icon color",   opacity: false, section: "colors" },
+        // ── Text ──
+        { key: "text",        label: "Main text (menu headers)", opacity: false, section: "text" },
+        { key: "subtext",     label: "Secondary text (menu body)", opacity: false, section: "text" },
+        { key: "barText",     label: "Bar widget text", opacity: false, section: "text" },
+        { key: "buttonText",  label: "Button text",       opacity: false, section: "text" },
+        { key: "buttonTextActive", label: "Active button text", opacity: false, section: "text" },
+        { key: "wsActiveText", label: "Active workspace text", opacity: false, section: "text" },
+        { key: "wsInactiveText", label: "Workspace text", opacity: false, section: "text" },
+        // ── Special / Effects ──
+        { key: "glassHover",  label: "Hover glow",        opacity: true,  section: "effects" },
+        { key: "glassHighlight", label: "Top edge shine", opacity: true,  section: "effects" },
+        { key: "iconHoverBg", label: "Icon hover glow",   opacity: true,  section: "effects" },
+        { key: "glassPopupHighlight", label: "Menu top shine", opacity: true, section: "effects" }
+    ]
+
+    // Output (speaker) volume tiers — Themes → Thresholds.
+    readonly property var themeVolumeTierUiRows: [
+        { key: "audioSpeakerTier1", label: "Out low",    opacity: false },
+        { key: "audioSpeakerTier2", label: "Out mid",    opacity: false },
+        { key: "audioSpeakerTier3", label: "Out high",   opacity: false },
+        { key: "audioSpeakerTier4", label: "Out peak",   opacity: false }
+    ]
+
+    // Input (mic) volume tiers — independent from output.
+    readonly property var themeMicVolumeTierUiRows: [
+        { key: "audioMicTier1", label: "In low",    opacity: false },
+        { key: "audioMicTier2", label: "In mid",    opacity: false },
+        { key: "audioMicTier3", label: "In high",   opacity: false },
+        { key: "audioMicTier4", label: "In peak",   opacity: false }
+    ]
+
+    // SysStats util bar tiers (CPU / Memory / GPU — Colors → Thresholds).
+    readonly property var themeStatUtilTierUiRows: [
+        { key: "statUtilTier1", label: "Load low",    opacity: false },
+        { key: "statUtilTier2", label: "Load mid",    opacity: false },
+        { key: "statUtilTier3", label: "Load high",   opacity: false },
+        { key: "statUtilTier4", label: "Load peak",   opacity: false }
+    ]
+
+    // SysStats temperature label colors (CPU / GPU).
+    readonly property var themeStatTempUiRows: [
+        { key: "statTempCool", label: "Temp cool", opacity: false },
+        { key: "statTempWarm", label: "Temp warm", opacity: false },
+        { key: "statTempHot",  label: "Temp hot",  opacity: false }
     ]
 
     function _clamp01(n) {
@@ -249,6 +276,7 @@ QtObject {
         case "surface": return surface
         case "text": return text
         case "subtext": return subtext
+        case "barText": return barText
         case "overlay": return overlay
         case "accent": return accent
         case "muted": return muted
@@ -265,6 +293,7 @@ QtObject {
         case "glassPopupHighlight": return glassPopupHighlight
         case "pillBorder": return pillBorder
         case "iconHoverBg": return iconHoverBg
+        case "buttonBg": return buttonBg
         case "controlActiveBg": return controlActiveBg
         case "popupButtonHoverBg": return popupButtonHoverBg
         case "buttonText": return buttonText
@@ -272,10 +301,31 @@ QtObject {
         case "wsActiveBg": return wsActiveBg
         case "wsActiveText": return wsActiveText
         case "wsInactiveText": return wsInactiveText
+        case "audioSpeakerTier1": return audioSpeakerTier1
+        case "audioSpeakerTier2": return audioSpeakerTier2
+        case "audioSpeakerTier3": return audioSpeakerTier3
+        case "audioSpeakerTier4": return audioSpeakerTier4
+        case "audioMicTier1": return audioMicTier1
+        case "audioMicTier2": return audioMicTier2
+        case "audioMicTier3": return audioMicTier3
+        case "audioMicTier4": return audioMicTier4
+        case "iconColor": return iconColor
+        case "audioSpeakerIcon": return audioSpeakerIcon
+        case "audioMicIcon": return audioMicIcon
+        case "statUtilTier1": return statUtilTier1
+        case "statUtilTier2": return statUtilTier2
+        case "statUtilTier3": return statUtilTier3
+        case "statUtilTier4": return statUtilTier4
+        case "statTempCool": return statTempCool
+        case "statTempWarm": return statTempWarm
+        case "statTempHot": return statTempHot
         default: return null
         }
     }
 
+    // Strict isolation: each key writes only itself, except documented aliases
+    // (glassPillBg→pillBg, glassHover→pillHover+controlHoverBg, accent→pillHoverBorder,
+    //  volume speaker tiers mirror mic tiers when set via speaker keys).
     function setThemeColor(key, c) {
         if (!c) return false
         switch (key) {
@@ -283,37 +333,31 @@ QtObject {
         case "surface": surface = c; break
         case "text": text = c; break
         case "subtext": subtext = c; break
+        case "barText": barText = c; break
         case "overlay": overlay = c; break
         case "accent":
             accent = c
-            pillHoverBorder = c
-            // Keep active menu labels in the accent family unless user overrides later
-            buttonTextActive = c
+            pillHoverBorder = c   // hover rim tracks accent (not a separate Colors key)
             break
         case "muted": muted = c; break
         case "todayBg": todayBg = c; break
         case "weekday": weekday = c; break
         case "clock": clock = c; break
         case "glassBg": glassBg = c; break
-        case "glassBorder":
-            glassBorder = c
-            // Keep popup rim in sync for the simple "Border" control
-            glassPopupBorder = colorWithAlpha(c, Math.max(c.a, 0.18))
-            break
+        case "glassBorder": glassBorder = c; break
         case "glassHighlight": glassHighlight = c; break
         case "glassPillBg": glassPillBg = c; pillBg = c; break
         case "glassHover":
             glassHover = c
             pillHover = c
             controlHoverBg = c
-            // Keep icon hover chips in the same family (slightly stronger)
-            iconHoverBg = colorWithAlpha(c, Math.min(1, Math.max(0.15, c.a + 0.06)))
             break
         case "glassPopupBg": glassPopupBg = c; break
         case "glassPopupBorder": glassPopupBorder = c; break
         case "glassPopupHighlight": glassPopupHighlight = c; break
         case "pillBorder": pillBorder = c; break
         case "iconHoverBg": iconHoverBg = c; break
+        case "buttonBg": buttonBg = c; break
         case "controlActiveBg": controlActiveBg = c; break
         case "popupButtonHoverBg": popupButtonHoverBg = c; break
         case "buttonText": buttonText = c; break
@@ -321,6 +365,109 @@ QtObject {
         case "wsActiveBg": wsActiveBg = c; break
         case "wsActiveText": wsActiveText = c; break
         case "wsInactiveText": wsInactiveText = c; break
+        case "audioSpeakerTier1": audioSpeakerTier1 = c; break
+        case "audioSpeakerTier2": audioSpeakerTier2 = c; break
+        case "audioSpeakerTier3": audioSpeakerTier3 = c; break
+        case "audioSpeakerTier4": audioSpeakerTier4 = c; break
+        case "audioMicTier1": audioMicTier1 = c; break
+        case "audioMicTier2": audioMicTier2 = c; break
+        case "audioMicTier3": audioMicTier3 = c; break
+        case "audioMicTier4": audioMicTier4 = c; break
+        case "iconColor":
+            iconColor = c
+            // Keep speaker/mic glyphs in sync with the shared icon color control
+            audioSpeakerIcon = c
+            audioMicIcon = c
+            break
+        case "audioSpeakerIcon":
+            audioSpeakerIcon = c
+            iconColor = c
+            audioMicIcon = c
+            break
+        case "audioMicIcon": audioMicIcon = c; break
+        case "statUtilTier1": statUtilTier1 = c; break
+        case "statUtilTier2": statUtilTier2 = c; break
+        case "statUtilTier3": statUtilTier3 = c; break
+        case "statUtilTier4": statUtilTier4 = c; break
+        case "statTempCool": statTempCool = c; break
+        case "statTempWarm": statTempWarm = c; break
+        case "statTempHot": statTempHot = c; break
+        default: return false
+        }
+        return true
+    }
+
+    function getThemeNumber(key) {
+        switch (key) {
+        case "audioUtilThreshold1": return audioUtilThreshold1
+        case "audioUtilThreshold2": return audioUtilThreshold2
+        case "audioUtilThreshold3": return audioUtilThreshold3
+        case "audioMicUtilThreshold1": return audioMicUtilThreshold1
+        case "audioMicUtilThreshold2": return audioMicUtilThreshold2
+        case "audioMicUtilThreshold3": return audioMicUtilThreshold3
+        case "statUtilThreshold1": return statUtilThreshold1
+        case "statUtilThreshold2": return statUtilThreshold2
+        case "statUtilThreshold3": return statUtilThreshold3
+        case "statTempWarmAt": return statTempWarmAt
+        case "statTempHotAt": return statTempHotAt
+        default: return null
+        }
+    }
+
+    function setThemeNumber(key, n) {
+        var v = Math.round(Number(n))
+        if (!(v >= 0)) v = 0
+        switch (key) {
+        case "audioUtilThreshold1":
+            if (v > 100) v = 100
+            audioUtilThreshold1 = Math.min(v, audioUtilThreshold2 - 1)
+            if (audioUtilThreshold1 < 1) audioUtilThreshold1 = 1
+            break
+        case "audioUtilThreshold2":
+            if (v > 100) v = 100
+            audioUtilThreshold2 = Math.max(audioUtilThreshold1 + 1, Math.min(v, audioUtilThreshold3 - 1))
+            break
+        case "audioUtilThreshold3":
+            if (v > 100) v = 100
+            audioUtilThreshold3 = Math.max(audioUtilThreshold2 + 1, Math.min(v, 99))
+            break
+        case "audioMicUtilThreshold1":
+            if (v > 100) v = 100
+            audioMicUtilThreshold1 = Math.min(v, audioMicUtilThreshold2 - 1)
+            if (audioMicUtilThreshold1 < 1) audioMicUtilThreshold1 = 1
+            break
+        case "audioMicUtilThreshold2":
+            if (v > 100) v = 100
+            audioMicUtilThreshold2 = Math.max(audioMicUtilThreshold1 + 1, Math.min(v, audioMicUtilThreshold3 - 1))
+            break
+        case "audioMicUtilThreshold3":
+            if (v > 100) v = 100
+            audioMicUtilThreshold3 = Math.max(audioMicUtilThreshold2 + 1, Math.min(v, 99))
+            break
+        case "statUtilThreshold1":
+            if (v > 100) v = 100
+            statUtilThreshold1 = Math.min(v, statUtilThreshold2 - 1)
+            if (statUtilThreshold1 < 1) statUtilThreshold1 = 1
+            break
+        case "statUtilThreshold2":
+            if (v > 100) v = 100
+            statUtilThreshold2 = Math.max(statUtilThreshold1 + 1, Math.min(v, statUtilThreshold3 - 1))
+            break
+        case "statUtilThreshold3":
+            if (v > 100) v = 100
+            statUtilThreshold3 = Math.max(statUtilThreshold2 + 1, Math.min(v, 99))
+            break
+        case "statTempWarmAt":
+            // °C cutoffs — allow up to 150
+            if (v > 150) v = 150
+            if (v < 1) v = 1
+            statTempWarmAt = Math.min(v, statTempHotAt - 1)
+            break
+        case "statTempHotAt":
+            if (v > 150) v = 150
+            if (v < 2) v = 2
+            statTempHotAt = Math.max(statTempWarmAt + 1, v)
+            break
         default: return false
         }
         return true
@@ -347,10 +494,31 @@ QtObject {
             if (c)
                 colors[k] = colorToThemeEntry(c)
         }
+        var numbers = {}
+        var nkeys = themeEditableNumbers
+        for (var j = 0; j < nkeys.length; j++) {
+            var nk = nkeys[j]
+            var nv = getThemeNumber(nk)
+            if (nv !== null && nv !== undefined)
+                numbers[nk] = nv
+        }
         return {
             name: name && ("" + name).length ? ("" + name) : "Custom",
             version: 1,
-            colors: colors
+            colors: colors,
+            numbers: numbers,
+            fonts: {
+                fontFamily: fontFamily,
+                fontMono: fontMono,
+                fontScale: fontScale,
+                fontMonoScale: fontMonoScale,
+                fontMain: fontMain,
+                fontSecondary: fontSecondary,
+                fontBar: fontBar,
+                fontMainScale: fontMainScale,
+                fontSecondaryScale: fontSecondaryScale,
+                fontBarScale: fontBarScale
+            }
         }
     }
 
@@ -367,12 +535,239 @@ QtObject {
             if (c && setThemeColor(k, c))
                 any = true
         }
-        // Re-sync alias-style props after bulk apply
+        // Optional numeric thresholds (volume tiers)
+        var numbers = obj.numbers
+        if (numbers && typeof numbers === "object") {
+            var nkeys = themeEditableNumbers
+            for (var j = 0; j < nkeys.length; j++) {
+                var nk = nkeys[j]
+                if (numbers[nk] === undefined) continue
+                if (setThemeNumber(nk, numbers[nk]))
+                    any = true
+            }
+        }
+        // Optional font families + scale + per-role faces/sizes
+        if (obj.fonts && typeof obj.fonts === "object") {
+            if (obj.fonts.fontFamily !== undefined && ("" + obj.fonts.fontFamily).length) {
+                fontFamily = "" + obj.fonts.fontFamily
+                any = true
+            }
+            if (obj.fonts.fontMono !== undefined && ("" + obj.fonts.fontMono).length) {
+                fontMono = "" + obj.fonts.fontMono
+                any = true
+            }
+            if (obj.fonts.fontScale !== undefined) {
+                if (setThemeFontScale(obj.fonts.fontScale))
+                    any = true
+            }
+            if (obj.fonts.fontMonoScale !== undefined) {
+                if (setThemeFontRoleScale("mono", obj.fonts.fontMonoScale))
+                    any = true
+            }
+            if (obj.fonts.fontMain !== undefined) {
+                fontMain = ("" + obj.fonts.fontMain).trim()
+                any = true
+            }
+            if (obj.fonts.fontSecondary !== undefined) {
+                fontSecondary = ("" + obj.fonts.fontSecondary).trim()
+                any = true
+            }
+            if (obj.fonts.fontBar !== undefined) {
+                fontBar = ("" + obj.fonts.fontBar).trim()
+                any = true
+            }
+            if (obj.fonts.fontMainScale !== undefined) {
+                if (setThemeFontRoleScale("main", obj.fonts.fontMainScale))
+                    any = true
+            }
+            if (obj.fonts.fontSecondaryScale !== undefined) {
+                if (setThemeFontRoleScale("secondary", obj.fonts.fontSecondaryScale))
+                    any = true
+            }
+            if (obj.fonts.fontBarScale !== undefined) {
+                if (setThemeFontRoleScale("bar", obj.fonts.fontBarScale))
+                    any = true
+            }
+        }
+        // Re-sync alias-style props after bulk apply (only true aliases)
         pillBg = glassPillBg
         pillHover = glassHover
         controlHoverBg = glassHover
         pillHoverBorder = accent
         return any
+    }
+
+    function setThemeFont(key, value) {
+        var s = (value === undefined || value === null) ? "" : ("" + value).trim()
+        // Role fonts may be cleared (empty = inherit UI font)
+        if (key === "fontMain") {
+            fontMain = s
+            return true
+        }
+        if (key === "fontSecondary") {
+            fontSecondary = s
+            return true
+        }
+        if (key === "fontBar") {
+            fontBar = s
+            return true
+        }
+        if (!s.length)
+            return false
+        if (key === "fontFamily") {
+            fontFamily = s
+            return true
+        }
+        if (key === "fontMono") {
+            fontMono = s
+            return true
+        }
+        return false
+    }
+
+    function setThemeFontScale(s) {
+        var x = Number(s)
+        if (!(x > 0) || isNaN(x))
+            return false
+        if (x < 0.70) x = 0.70
+        if (x > 1.50) x = 1.50
+        // Snap to 0.01 so the slider feels stable
+        fontScale = Math.round(x * 100) / 100
+        return true
+    }
+
+    // role: "main" | "secondary" | "bar" | "mono" | "ui" (ui → fontScale)
+    function setThemeFontRoleScale(role, s) {
+        var x = _clampFontRoleScale(s)
+        if (role === "main") {
+            fontMainScale = x
+            return true
+        }
+        if (role === "secondary") {
+            fontSecondaryScale = x
+            return true
+        }
+        if (role === "bar") {
+            fontBarScale = x
+            return true
+        }
+        if (role === "mono") {
+            fontMonoScale = x
+            return true
+        }
+        if (role === "ui") {
+            fontScale = x
+            return true
+        }
+        return false
+    }
+
+    // Apply a plain text face for Main / Secondary / Bar (no Nerd Font prefix — text only).
+    function setRoleFontFamily(role, family) {
+        var name = (family === undefined || family === null) ? "" : ("" + family).trim()
+        var stack = name.length ? (name + ", sans-serif") : ""
+        if (role === "main") {
+            fontMain = stack
+            return true
+        }
+        if (role === "secondary") {
+            fontSecondary = stack
+            return true
+        }
+        if (role === "bar") {
+            fontBar = stack
+            return true
+        }
+        return false
+    }
+
+    function primaryRoleFontFamily(role) {
+        var stack = ""
+        if (role === "main")
+            stack = fontMain
+        else if (role === "secondary")
+            stack = fontSecondary
+        else if (role === "bar")
+            stack = fontBar
+        if (!stack || !("" + stack).trim().length)
+            return primaryUiFontFamily()
+        return primaryFontFamily(stack)
+    }
+
+    // First family in a CSS-style stack (for dropdown selection display).
+    function primaryFontFamily(stack) {
+        if (!stack)
+            return ""
+        var parts = ("" + stack).split(",")
+        for (var i = 0; i < parts.length; i++) {
+            var p = ("" + parts[i]).trim()
+            if (!p.length)
+                continue
+            // Skip generic fallbacks
+            var low = p.toLowerCase()
+            if (low === "monospace" || low === "sans-serif" || low === "serif"
+                    || low === "cursive" || low === "fantasy" || low === "system-ui")
+                continue
+            return p
+        }
+        return ("" + parts[0]).trim()
+    }
+
+    // Preferred UI text face (skips leading icon/nerd font so dropdown matches text face).
+    function primaryUiFontFamily() {
+        if (!fontFamily)
+            return ""
+        var parts = ("" + fontFamily).split(",")
+        var iconHints = ["symbols nerd font", "nerd font", "font awesome", "material design icons"]
+        for (var i = 0; i < parts.length; i++) {
+            var p = ("" + parts[i]).trim()
+            if (!p.length)
+                continue
+            var low = p.toLowerCase()
+            if (low === "monospace" || low === "sans-serif" || low === "serif"
+                    || low === "cursive" || low === "fantasy" || low === "system-ui")
+                continue
+            var isIcon = false
+            for (var j = 0; j < iconHints.length; j++) {
+                if (low.indexOf(iconHints[j]) >= 0) {
+                    isIcon = true
+                    break
+                }
+            }
+            if (!isIcon)
+                return p
+        }
+        return primaryFontFamily(fontFamily)
+    }
+
+    // Apply a single UI face while keeping a Nerd Font first for bar glyphs.
+    function setUiFontFamily(family) {
+        var name = (family === undefined || family === null) ? "" : ("" + family).trim()
+        if (!name.length)
+            return false
+        var icon = "Symbols Nerd Font"
+        if (name.toLowerCase() === icon.toLowerCase())
+            fontFamily = icon + ", sans-serif"
+        else
+            fontFamily = icon + ", " + name + ", sans-serif"
+        return true
+    }
+
+    function setMonoFontFamily(family) {
+        var name = (family === undefined || family === null) ? "" : ("" + family).trim()
+        if (!name.length)
+            return false
+        fontMono = name + ", monospace"
+        return true
+    }
+
+    // Keep role scales sane when loading older themes without them
+    function ensureFontRoleDefaults() {
+        fontScale = _clampFontRoleScale(fontScale)
+        fontMonoScale = _clampFontRoleScale(fontMonoScale)
+        fontMainScale = _clampFontRoleScale(fontMainScale)
+        fontSecondaryScale = _clampFontRoleScale(fontSecondaryScale)
+        fontBarScale = _clampFontRoleScale(fontBarScale)
     }
 
     function themeFactoryDefaults() {
@@ -384,6 +779,7 @@ QtObject {
                 surface: { hex: "#141a24", alpha: 1 },
                 text: { hex: "#f0f4fc", alpha: 1 },
                 subtext: { hex: "#a8b4c8", alpha: 1 },
+                barText: { hex: "#f0f4fc", alpha: 1 },
                 overlay: { hex: "#6e7a90", alpha: 1 },
                 accent: { hex: "#00F0E0", alpha: 1 },
                 muted: { hex: "#FF3D8A", alpha: 1 },
@@ -400,13 +796,57 @@ QtObject {
                 glassPopupHighlight: { hex: "#ffffff", alpha: 0.18 },
                 pillBorder: { hex: "#ffffff", alpha: 0.10 },
                 iconHoverBg: { hex: "#00d9d1", alpha: 0.28 },
+                buttonBg: { hex: "#0d121e", alpha: 0.72 },
                 controlActiveBg: { hex: "#00b3bf", alpha: 0.35 },
                 popupButtonHoverBg: { hex: "#141a29", alpha: 0.65 },
                 buttonText: { hex: "#a8b4c8", alpha: 1 },
                 buttonTextActive: { hex: "#00F0E0", alpha: 1 },
                 wsActiveBg: { hex: "#00d9cc", alpha: 0.28 },
                 wsActiveText: { hex: "#e6fffc", alpha: 1 },
-                wsInactiveText: { hex: "#ffffff", alpha: 1 }
+                wsInactiveText: { hex: "#ffffff", alpha: 1 },
+                audioSpeakerTier1: { hex: "#10B981", alpha: 1 },
+                audioSpeakerTier2: { hex: "#F59E0B", alpha: 1 },
+                audioSpeakerTier3: { hex: "#F97316", alpha: 1 },
+                audioSpeakerTier4: { hex: "#EF4444", alpha: 1 },
+                audioMicTier1: { hex: "#10B981", alpha: 1 },
+                audioMicTier2: { hex: "#F59E0B", alpha: 1 },
+                audioMicTier3: { hex: "#F97316", alpha: 1 },
+                audioMicTier4: { hex: "#EF4444", alpha: 1 },
+                iconColor: { hex: "#ffffff", alpha: 1 },
+                audioSpeakerIcon: { hex: "#ffffff", alpha: 1 },
+                audioMicIcon: { hex: "#ffffff", alpha: 1 },
+                statUtilTier1: { hex: "#10B981", alpha: 1 },
+                statUtilTier2: { hex: "#F59E0B", alpha: 1 },
+                statUtilTier3: { hex: "#F97316", alpha: 1 },
+                statUtilTier4: { hex: "#EF4444", alpha: 1 },
+                statTempCool: { hex: "#f0f4fc", alpha: 1 },
+                statTempWarm: { hex: "#f0d060", alpha: 1 },
+                statTempHot: { hex: "#FF3D8A", alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25,
+                audioUtilThreshold2: 50,
+                audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25,
+                audioMicUtilThreshold2: 50,
+                audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25,
+                statUtilThreshold2: 50,
+                statUtilThreshold3: 75,
+                statTempWarmAt: 70,
+                statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
             }
         }
     }
@@ -420,6 +860,7 @@ QtObject {
                 surface: { hex: "#121416", alpha: 1 },
                 text: { hex: "#ececee", alpha: 1 },
                 subtext: { hex: "#b0b0b2", alpha: 1 },
+                barText: { hex: "#ececee", alpha: 1 },
                 overlay: { hex: "#5c5c60", alpha: 1 },
                 accent: { hex: "#00c4f5", alpha: 1 },
                 muted: { hex: "#e85d6f", alpha: 1 },
@@ -436,13 +877,57 @@ QtObject {
                 glassPopupHighlight: { hex: "#000000", alpha: 0 },
                 pillBorder: { hex: "#0a0c0e", alpha: 1 },
                 iconHoverBg: { hex: "#0a3a48", alpha: 1 },
+                buttonBg: { hex: "#0a0c0e", alpha: 1 },
                 controlActiveBg: { hex: "#16181c", alpha: 1 },
                 popupButtonHoverBg: { hex: "#121416", alpha: 1 },
                 buttonText: { hex: "#b0b0b2", alpha: 1 },
                 buttonTextActive: { hex: "#00c4f5", alpha: 1 },
                 wsActiveBg: { hex: "#16181c", alpha: 1 },
                 wsActiveText: { hex: "#ececee", alpha: 1 },
-                wsInactiveText: { hex: "#ffffff", alpha: 1 }
+                wsInactiveText: { hex: "#ffffff", alpha: 1 },
+                audioSpeakerTier1: { hex: "#10B981", alpha: 1 },
+                audioSpeakerTier2: { hex: "#F59E0B", alpha: 1 },
+                audioSpeakerTier3: { hex: "#F97316", alpha: 1 },
+                audioSpeakerTier4: { hex: "#EF4444", alpha: 1 },
+                audioMicTier1: { hex: "#10B981", alpha: 1 },
+                audioMicTier2: { hex: "#F59E0B", alpha: 1 },
+                audioMicTier3: { hex: "#F97316", alpha: 1 },
+                audioMicTier4: { hex: "#EF4444", alpha: 1 },
+                iconColor: { hex: "#ffffff", alpha: 1 },
+                audioSpeakerIcon: { hex: "#ffffff", alpha: 1 },
+                audioMicIcon: { hex: "#ffffff", alpha: 1 },
+                statUtilTier1: { hex: "#10B981", alpha: 1 },
+                statUtilTier2: { hex: "#F59E0B", alpha: 1 },
+                statUtilTier3: { hex: "#F97316", alpha: 1 },
+                statUtilTier4: { hex: "#EF4444", alpha: 1 },
+                statTempCool: { hex: "#ececee", alpha: 1 },
+                statTempWarm: { hex: "#f0d060", alpha: 1 },
+                statTempHot: { hex: "#e85d6f", alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25,
+                audioUtilThreshold2: 50,
+                audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25,
+                audioMicUtilThreshold2: 50,
+                audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25,
+                statUtilThreshold2: 50,
+                statUtilThreshold3: 75,
+                statTempWarmAt: 70,
+                statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
             }
         }
     }
@@ -456,6 +941,7 @@ QtObject {
                 surface: { hex: "#25262b", alpha: 1 },
                 text: { hex: "#e8e8ec", alpha: 1 },
                 subtext: { hex: "#a0a4b0", alpha: 1 },
+                barText: { hex: "#e8e8ec", alpha: 1 },
                 overlay: { hex: "#6c7080", alpha: 1 },
                 accent: { hex: "#7ec8e3", alpha: 1 },
                 muted: { hex: "#e88a9a", alpha: 1 },
@@ -472,15 +958,540 @@ QtObject {
                 glassPopupHighlight: { hex: "#ffffff", alpha: 0.14 },
                 pillBorder: { hex: "#ffffff", alpha: 0.08 },
                 iconHoverBg: { hex: "#7ec8e3", alpha: 0.22 },
+                buttonBg: { hex: "#22242a", alpha: 0.80 },
                 controlActiveBg: { hex: "#7ec8e3", alpha: 0.28 },
                 popupButtonHoverBg: { hex: "#2a2c32", alpha: 0.70 },
                 buttonText: { hex: "#a0a4b0", alpha: 1 },
                 buttonTextActive: { hex: "#7ec8e3", alpha: 1 },
                 wsActiveBg: { hex: "#7ec8e3", alpha: 0.28 },
                 wsActiveText: { hex: "#e8f7fc", alpha: 1 },
-                wsInactiveText: { hex: "#ffffff", alpha: 1 }
+                wsInactiveText: { hex: "#ffffff", alpha: 1 },
+                audioSpeakerTier1: { hex: "#10B981", alpha: 1 },
+                audioSpeakerTier2: { hex: "#F59E0B", alpha: 1 },
+                audioSpeakerTier3: { hex: "#F97316", alpha: 1 },
+                audioSpeakerTier4: { hex: "#EF4444", alpha: 1 },
+                audioMicTier1: { hex: "#10B981", alpha: 1 },
+                audioMicTier2: { hex: "#F59E0B", alpha: 1 },
+                audioMicTier3: { hex: "#F97316", alpha: 1 },
+                audioMicTier4: { hex: "#EF4444", alpha: 1 },
+                iconColor: { hex: "#ffffff", alpha: 1 },
+                audioSpeakerIcon: { hex: "#ffffff", alpha: 1 },
+                audioMicIcon: { hex: "#ffffff", alpha: 1 },
+                statUtilTier1: { hex: "#10B981", alpha: 1 },
+                statUtilTier2: { hex: "#F59E0B", alpha: 1 },
+                statUtilTier3: { hex: "#F97316", alpha: 1 },
+                statUtilTier4: { hex: "#EF4444", alpha: 1 },
+                statTempCool: { hex: "#e8e8ec", alpha: 1 },
+                statTempWarm: { hex: "#f0d060", alpha: 1 },
+                statTempHot: { hex: "#e88a9a", alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25,
+                audioUtilThreshold2: 50,
+                audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25,
+                audioMicUtilThreshold2: 50,
+                audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25,
+                statUtilThreshold2: 50,
+                statUtilThreshold3: 75,
+                statTempWarmAt: 70,
+                statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
             }
         }
+    }
+
+    // ── Additional polished built-in presets (easy on the eyes) ──────────
+    function themePresetNordicFrost() {
+        return {
+            name: "Nordic frost",
+            version: 1,
+            colors: {
+                bg: { hex: "#1a1e26", alpha: 1 },
+                surface: { hex: "#222831", alpha: 1 },
+                text: { hex: "#e8eef7", alpha: 1 },
+                subtext: { hex: "#9aa8bc", alpha: 1 },
+                barText: { hex: "#e8eef7", alpha: 1 },
+                overlay: { hex: "#6b788c", alpha: 1 },
+                accent: { hex: "#88c0d0", alpha: 1 },
+                muted: { hex: "#bf616a", alpha: 1 },
+                todayBg: { hex: "#8fbcbb", alpha: 1 },
+                weekday: { hex: "#b48ead", alpha: 1 },
+                clock: { hex: "#eceff4", alpha: 1 },
+                glassBg: { hex: "#1a1e26", alpha: 0.62 },
+                glassBorder: { hex: "#88c0d0", alpha: 0.14 },
+                glassHighlight: { hex: "#ffffff", alpha: 0.06 },
+                glassPillBg: { hex: "#1e2430", alpha: 0.78 },
+                glassHover: { hex: "#88c0d0", alpha: 0.18 },
+                glassPopupBg: { hex: "#171b22", alpha: 0.92 },
+                glassPopupBorder: { hex: "#88c0d0", alpha: 0.16 },
+                glassPopupHighlight: { hex: "#ffffff", alpha: 0.10 },
+                pillBorder: { hex: "#ffffff", alpha: 0.08 },
+                iconHoverBg: { hex: "#88c0d0", alpha: 0.22 },
+                buttonBg: { hex: "#1e2430", alpha: 0.78 },
+                controlActiveBg: { hex: "#88c0d0", alpha: 0.28 },
+                popupButtonHoverBg: { hex: "#252b36", alpha: 0.70 },
+                buttonText: { hex: "#9aa8bc", alpha: 1 },
+                buttonTextActive: { hex: "#88c0d0", alpha: 1 },
+                wsActiveBg: { hex: "#88c0d0", alpha: 0.26 },
+                wsActiveText: { hex: "#e8f4f8", alpha: 1 },
+                wsInactiveText: { hex: "#d8dee9", alpha: 1 },
+                audioSpeakerTier1: { hex: "#a3be8c", alpha: 1 },
+                audioSpeakerTier2: { hex: "#ebcb8b", alpha: 1 },
+                audioSpeakerTier3: { hex: "#d08770", alpha: 1 },
+                audioSpeakerTier4: { hex: "#bf616a", alpha: 1 },
+                audioMicTier1: { hex: "#a3be8c", alpha: 1 },
+                audioMicTier2: { hex: "#ebcb8b", alpha: 1 },
+                audioMicTier3: { hex: "#d08770", alpha: 1 },
+                audioMicTier4: { hex: "#bf616a", alpha: 1 },
+                iconColor: { hex: "#d8dee9", alpha: 1 },
+                audioSpeakerIcon: { hex: "#d8dee9", alpha: 1 },
+                audioMicIcon: { hex: "#d8dee9", alpha: 1 },
+                statUtilTier1: { hex: "#a3be8c", alpha: 1 },
+                statUtilTier2: { hex: "#ebcb8b", alpha: 1 },
+                statUtilTier3: { hex: "#d08770", alpha: 1 },
+                statUtilTier4: { hex: "#bf616a", alpha: 1 },
+                statTempCool: { hex: "#e8eef7", alpha: 1 },
+                statTempWarm: { hex: "#ebcb8b", alpha: 1 },
+                statTempHot: { hex: "#bf616a", alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25, audioUtilThreshold2: 50, audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25, audioMicUtilThreshold2: 50, audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25, statUtilThreshold2: 50, statUtilThreshold3: 75,
+                statTempWarmAt: 70, statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
+            }
+        }
+    }
+
+    function themePresetWarmEmber() {
+        return {
+            name: "Warm ember",
+            version: 1,
+            colors: {
+                bg: { hex: "#16120f", alpha: 1 },
+                surface: { hex: "#221c18", alpha: 1 },
+                text: { hex: "#f3ebe3", alpha: 1 },
+                subtext: { hex: "#b5a497", alpha: 1 },
+                barText: { hex: "#f3ebe3", alpha: 1 },
+                overlay: { hex: "#7a6c60", alpha: 1 },
+                accent: { hex: "#e0a36a", alpha: 1 },
+                muted: { hex: "#d4756a", alpha: 1 },
+                todayBg: { hex: "#e8b07a", alpha: 1 },
+                weekday: { hex: "#c98b7a", alpha: 1 },
+                clock: { hex: "#fff8f0", alpha: 1 },
+                glassBg: { hex: "#16120f", alpha: 0.64 },
+                glassBorder: { hex: "#e0a36a", alpha: 0.14 },
+                glassHighlight: { hex: "#ffffff", alpha: 0.05 },
+                glassPillBg: { hex: "#1c1713", alpha: 0.80 },
+                glassHover: { hex: "#e0a36a", alpha: 0.18 },
+                glassPopupBg: { hex: "#14100d", alpha: 0.93 },
+                glassPopupBorder: { hex: "#e0a36a", alpha: 0.16 },
+                glassPopupHighlight: { hex: "#ffffff", alpha: 0.08 },
+                pillBorder: { hex: "#ffffff", alpha: 0.07 },
+                iconHoverBg: { hex: "#e0a36a", alpha: 0.22 },
+                buttonBg: { hex: "#1c1713", alpha: 0.80 },
+                controlActiveBg: { hex: "#e0a36a", alpha: 0.28 },
+                popupButtonHoverBg: { hex: "#2a221c", alpha: 0.70 },
+                buttonText: { hex: "#b5a497", alpha: 1 },
+                buttonTextActive: { hex: "#e0a36a", alpha: 1 },
+                wsActiveBg: { hex: "#e0a36a", alpha: 0.24 },
+                wsActiveText: { hex: "#fff4e8", alpha: 1 },
+                wsInactiveText: { hex: "#e8ddd2", alpha: 1 },
+                audioSpeakerTier1: { hex: "#7cb88a", alpha: 1 },
+                audioSpeakerTier2: { hex: "#d4a84b", alpha: 1 },
+                audioSpeakerTier3: { hex: "#d4844a", alpha: 1 },
+                audioSpeakerTier4: { hex: "#d4756a", alpha: 1 },
+                audioMicTier1: { hex: "#7cb88a", alpha: 1 },
+                audioMicTier2: { hex: "#d4a84b", alpha: 1 },
+                audioMicTier3: { hex: "#d4844a", alpha: 1 },
+                audioMicTier4: { hex: "#d4756a", alpha: 1 },
+                iconColor: { hex: "#e8ddd2", alpha: 1 },
+                audioSpeakerIcon: { hex: "#e8ddd2", alpha: 1 },
+                audioMicIcon: { hex: "#e8ddd2", alpha: 1 },
+                statUtilTier1: { hex: "#7cb88a", alpha: 1 },
+                statUtilTier2: { hex: "#d4a84b", alpha: 1 },
+                statUtilTier3: { hex: "#d4844a", alpha: 1 },
+                statUtilTier4: { hex: "#d4756a", alpha: 1 },
+                statTempCool: { hex: "#f3ebe3", alpha: 1 },
+                statTempWarm: { hex: "#d4a84b", alpha: 1 },
+                statTempHot: { hex: "#d4756a", alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25, audioUtilThreshold2: 50, audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25, audioMicUtilThreshold2: 50, audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25, statUtilThreshold2: 50, statUtilThreshold3: 75,
+                statTempWarmAt: 70, statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
+            }
+        }
+    }
+
+    function themePresetDeepOcean() {
+        return {
+            name: "Deep ocean",
+            version: 1,
+            colors: {
+                bg: { hex: "#0b1219", alpha: 1 },
+                surface: { hex: "#121c28", alpha: 1 },
+                text: { hex: "#e6f0fa", alpha: 1 },
+                subtext: { hex: "#8fa3b8", alpha: 1 },
+                barText: { hex: "#e6f0fa", alpha: 1 },
+                overlay: { hex: "#5c7188", alpha: 1 },
+                accent: { hex: "#3db8c9", alpha: 1 },
+                muted: { hex: "#e06c75", alpha: 1 },
+                todayBg: { hex: "#56c8d8", alpha: 1 },
+                weekday: { hex: "#7aa2f7", alpha: 1 },
+                clock: { hex: "#f0f7ff", alpha: 1 },
+                glassBg: { hex: "#0b1219", alpha: 0.60 },
+                glassBorder: { hex: "#3db8c9", alpha: 0.15 },
+                glassHighlight: { hex: "#ffffff", alpha: 0.06 },
+                glassPillBg: { hex: "#0f1722", alpha: 0.78 },
+                glassHover: { hex: "#3db8c9", alpha: 0.20 },
+                glassPopupBg: { hex: "#0a1018", alpha: 0.93 },
+                glassPopupBorder: { hex: "#3db8c9", alpha: 0.16 },
+                glassPopupHighlight: { hex: "#ffffff", alpha: 0.10 },
+                pillBorder: { hex: "#ffffff", alpha: 0.08 },
+                iconHoverBg: { hex: "#3db8c9", alpha: 0.24 },
+                buttonBg: { hex: "#0f1722", alpha: 0.78 },
+                controlActiveBg: { hex: "#3db8c9", alpha: 0.30 },
+                popupButtonHoverBg: { hex: "#162232", alpha: 0.70 },
+                buttonText: { hex: "#8fa3b8", alpha: 1 },
+                buttonTextActive: { hex: "#3db8c9", alpha: 1 },
+                wsActiveBg: { hex: "#3db8c9", alpha: 0.26 },
+                wsActiveText: { hex: "#e8fbff", alpha: 1 },
+                wsInactiveText: { hex: "#c8d8e8", alpha: 1 },
+                audioSpeakerTier1: { hex: "#2ee59a", alpha: 1 },
+                audioSpeakerTier2: { hex: "#f0c060", alpha: 1 },
+                audioSpeakerTier3: { hex: "#f08a50", alpha: 1 },
+                audioSpeakerTier4: { hex: "#e06c75", alpha: 1 },
+                audioMicTier1: { hex: "#2ee59a", alpha: 1 },
+                audioMicTier2: { hex: "#f0c060", alpha: 1 },
+                audioMicTier3: { hex: "#f08a50", alpha: 1 },
+                audioMicTier4: { hex: "#e06c75", alpha: 1 },
+                iconColor: { hex: "#c8d8e8", alpha: 1 },
+                audioSpeakerIcon: { hex: "#c8d8e8", alpha: 1 },
+                audioMicIcon: { hex: "#c8d8e8", alpha: 1 },
+                statUtilTier1: { hex: "#2ee59a", alpha: 1 },
+                statUtilTier2: { hex: "#f0c060", alpha: 1 },
+                statUtilTier3: { hex: "#f08a50", alpha: 1 },
+                statUtilTier4: { hex: "#e06c75", alpha: 1 },
+                statTempCool: { hex: "#e6f0fa", alpha: 1 },
+                statTempWarm: { hex: "#f0c060", alpha: 1 },
+                statTempHot: { hex: "#e06c75", alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25, audioUtilThreshold2: 50, audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25, audioMicUtilThreshold2: 50, audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25, statUtilThreshold2: 50, statUtilThreshold3: 75,
+                statTempWarmAt: 70, statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
+            }
+        }
+    }
+
+    function themePresetLavenderDusk() {
+        return {
+            name: "Lavender dusk",
+            version: 1,
+            colors: {
+                bg: { hex: "#14121a", alpha: 1 },
+                surface: { hex: "#1e1a28", alpha: 1 },
+                text: { hex: "#f0eaf8", alpha: 1 },
+                subtext: { hex: "#a89bb8", alpha: 1 },
+                barText: { hex: "#f0eaf8", alpha: 1 },
+                overlay: { hex: "#6e6480", alpha: 1 },
+                accent: { hex: "#b39ddb", alpha: 1 },
+                muted: { hex: "#e5738a", alpha: 1 },
+                todayBg: { hex: "#c4b0e8", alpha: 1 },
+                weekday: { hex: "#ce93d8", alpha: 1 },
+                clock: { hex: "#faf5ff", alpha: 1 },
+                glassBg: { hex: "#14121a", alpha: 0.62 },
+                glassBorder: { hex: "#b39ddb", alpha: 0.14 },
+                glassHighlight: { hex: "#ffffff", alpha: 0.06 },
+                glassPillBg: { hex: "#1a1622", alpha: 0.80 },
+                glassHover: { hex: "#b39ddb", alpha: 0.18 },
+                glassPopupBg: { hex: "#120f18", alpha: 0.93 },
+                glassPopupBorder: { hex: "#b39ddb", alpha: 0.16 },
+                glassPopupHighlight: { hex: "#ffffff", alpha: 0.09 },
+                pillBorder: { hex: "#ffffff", alpha: 0.08 },
+                iconHoverBg: { hex: "#b39ddb", alpha: 0.22 },
+                buttonBg: { hex: "#1a1622", alpha: 0.80 },
+                controlActiveBg: { hex: "#b39ddb", alpha: 0.28 },
+                popupButtonHoverBg: { hex: "#262032", alpha: 0.70 },
+                buttonText: { hex: "#a89bb8", alpha: 1 },
+                buttonTextActive: { hex: "#b39ddb", alpha: 1 },
+                wsActiveBg: { hex: "#b39ddb", alpha: 0.26 },
+                wsActiveText: { hex: "#f8f0ff", alpha: 1 },
+                wsInactiveText: { hex: "#e0d6f0", alpha: 1 },
+                audioSpeakerTier1: { hex: "#81c784", alpha: 1 },
+                audioSpeakerTier2: { hex: "#ffd54f", alpha: 1 },
+                audioSpeakerTier3: { hex: "#ff8a65", alpha: 1 },
+                audioSpeakerTier4: { hex: "#e5738a", alpha: 1 },
+                audioMicTier1: { hex: "#81c784", alpha: 1 },
+                audioMicTier2: { hex: "#ffd54f", alpha: 1 },
+                audioMicTier3: { hex: "#ff8a65", alpha: 1 },
+                audioMicTier4: { hex: "#e5738a", alpha: 1 },
+                iconColor: { hex: "#e0d6f0", alpha: 1 },
+                audioSpeakerIcon: { hex: "#e0d6f0", alpha: 1 },
+                audioMicIcon: { hex: "#e0d6f0", alpha: 1 },
+                statUtilTier1: { hex: "#81c784", alpha: 1 },
+                statUtilTier2: { hex: "#ffd54f", alpha: 1 },
+                statUtilTier3: { hex: "#ff8a65", alpha: 1 },
+                statUtilTier4: { hex: "#e5738a", alpha: 1 },
+                statTempCool: { hex: "#f0eaf8", alpha: 1 },
+                statTempWarm: { hex: "#ffd54f", alpha: 1 },
+                statTempHot: { hex: "#e5738a", alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25, audioUtilThreshold2: 50, audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25, audioMicUtilThreshold2: 50, audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25, statUtilThreshold2: 50, statUtilThreshold3: 75,
+                statTempWarmAt: 70, statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
+            }
+        }
+    }
+
+    function themePresetForestMoss() {
+        return {
+            name: "Forest moss",
+            version: 1,
+            colors: {
+                bg: { hex: "#101612", alpha: 1 },
+                surface: { hex: "#18201a", alpha: 1 },
+                text: { hex: "#e8f0e9", alpha: 1 },
+                subtext: { hex: "#9aafa0", alpha: 1 },
+                barText: { hex: "#e8f0e9", alpha: 1 },
+                overlay: { hex: "#64786c", alpha: 1 },
+                accent: { hex: "#7cb87c", alpha: 1 },
+                muted: { hex: "#d08070", alpha: 1 },
+                todayBg: { hex: "#8fca8f", alpha: 1 },
+                weekday: { hex: "#a8c878", alpha: 1 },
+                clock: { hex: "#f4faf4", alpha: 1 },
+                glassBg: { hex: "#101612", alpha: 0.62 },
+                glassBorder: { hex: "#7cb87c", alpha: 0.14 },
+                glassHighlight: { hex: "#ffffff", alpha: 0.05 },
+                glassPillBg: { hex: "#141c16", alpha: 0.80 },
+                glassHover: { hex: "#7cb87c", alpha: 0.18 },
+                glassPopupBg: { hex: "#0d120e", alpha: 0.93 },
+                glassPopupBorder: { hex: "#7cb87c", alpha: 0.16 },
+                glassPopupHighlight: { hex: "#ffffff", alpha: 0.08 },
+                pillBorder: { hex: "#ffffff", alpha: 0.07 },
+                iconHoverBg: { hex: "#7cb87c", alpha: 0.22 },
+                buttonBg: { hex: "#141c16", alpha: 0.80 },
+                controlActiveBg: { hex: "#7cb87c", alpha: 0.28 },
+                popupButtonHoverBg: { hex: "#1e2a20", alpha: 0.70 },
+                buttonText: { hex: "#9aafa0", alpha: 1 },
+                buttonTextActive: { hex: "#7cb87c", alpha: 1 },
+                wsActiveBg: { hex: "#7cb87c", alpha: 0.24 },
+                wsActiveText: { hex: "#f0fff0", alpha: 1 },
+                wsInactiveText: { hex: "#d4e4d6", alpha: 1 },
+                audioSpeakerTier1: { hex: "#6bcf8e", alpha: 1 },
+                audioSpeakerTier2: { hex: "#d4c05a", alpha: 1 },
+                audioSpeakerTier3: { hex: "#d4925a", alpha: 1 },
+                audioSpeakerTier4: { hex: "#d08070", alpha: 1 },
+                audioMicTier1: { hex: "#6bcf8e", alpha: 1 },
+                audioMicTier2: { hex: "#d4c05a", alpha: 1 },
+                audioMicTier3: { hex: "#d4925a", alpha: 1 },
+                audioMicTier4: { hex: "#d08070", alpha: 1 },
+                iconColor: { hex: "#d4e4d6", alpha: 1 },
+                audioSpeakerIcon: { hex: "#d4e4d6", alpha: 1 },
+                audioMicIcon: { hex: "#d4e4d6", alpha: 1 },
+                statUtilTier1: { hex: "#6bcf8e", alpha: 1 },
+                statUtilTier2: { hex: "#d4c05a", alpha: 1 },
+                statUtilTier3: { hex: "#d4925a", alpha: 1 },
+                statUtilTier4: { hex: "#d08070", alpha: 1 },
+                statTempCool: { hex: "#e8f0e9", alpha: 1 },
+                statTempWarm: { hex: "#d4c05a", alpha: 1 },
+                statTempHot: { hex: "#d08070", alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25, audioUtilThreshold2: 50, audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25, audioMicUtilThreshold2: 50, audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25, statUtilThreshold2: 50, statUtilThreshold3: 75,
+                statTempWarmAt: 70, statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
+            }
+        }
+    }
+
+    // Shared translucent glass skeleton for liquid-style presets (accent/muted vary).
+    function _hex2(n) {
+        var v = Math.max(0, Math.min(255, Math.round(n)))
+        var h = v.toString(16)
+        return h.length < 2 ? ("0" + h) : h
+    }
+    function _rgbHex(r, g, b) {
+        return "#" + _hex2(r * 255) + _hex2(g * 255) + _hex2(b * 255)
+    }
+    function _liquidPreset(name, accentHex, mutedHex, tintR, tintG, tintB) {
+        var a = accentHex
+        var m = mutedHex
+        var tr = tintR !== undefined ? tintR : 0.04
+        var tg = tintG !== undefined ? tintG : 0.06
+        var tb = tintB !== undefined ? tintB : 0.10
+        function glass(alpha) {
+            return { hex: _rgbHex(tr, tg, tb), alpha: alpha }
+        }
+        return {
+            name: name,
+            version: 1,
+            colors: {
+                bg: { hex: _rgbHex(tr, tg, tb), alpha: 1 },
+                surface: { hex: _rgbHex(Math.min(1, tr + 0.04), Math.min(1, tg + 0.05), Math.min(1, tb + 0.06)), alpha: 1 },
+                text: { hex: "#f0f4fc", alpha: 1 },
+                subtext: { hex: "#a8b4c8", alpha: 1 },
+                barText: { hex: "#f0f4fc", alpha: 1 },
+                overlay: { hex: "#6e7a90", alpha: 1 },
+                accent: { hex: a, alpha: 1 },
+                muted: { hex: m, alpha: 1 },
+                todayBg: { hex: a, alpha: 1 },
+                weekday: { hex: m, alpha: 1 },
+                clock: { hex: "#ffffff", alpha: 1 },
+                glassBg: glass(0.56),
+                glassBorder: { hex: a, alpha: 0.14 },
+                glassHighlight: { hex: "#ffffff", alpha: 0.08 },
+                glassPillBg: glass(0.72),
+                glassHover: { hex: a, alpha: 0.20 },
+                glassPopupBg: glass(0.90),
+                glassPopupBorder: { hex: a, alpha: 0.16 },
+                glassPopupHighlight: { hex: "#ffffff", alpha: 0.14 },
+                pillBorder: { hex: "#ffffff", alpha: 0.10 },
+                iconHoverBg: { hex: a, alpha: 0.26 },
+                buttonBg: glass(0.72),
+                controlActiveBg: { hex: a, alpha: 0.32 },
+                popupButtonHoverBg: glass(0.65),
+                buttonText: { hex: "#a8b4c8", alpha: 1 },
+                buttonTextActive: { hex: a, alpha: 1 },
+                wsActiveBg: { hex: a, alpha: 0.26 },
+                wsActiveText: { hex: "#e6fffc", alpha: 1 },
+                wsInactiveText: { hex: "#ffffff", alpha: 1 },
+                audioSpeakerTier1: { hex: "#10B981", alpha: 1 },
+                audioSpeakerTier2: { hex: "#F59E0B", alpha: 1 },
+                audioSpeakerTier3: { hex: "#F97316", alpha: 1 },
+                audioSpeakerTier4: { hex: "#EF4444", alpha: 1 },
+                audioMicTier1: { hex: "#10B981", alpha: 1 },
+                audioMicTier2: { hex: "#F59E0B", alpha: 1 },
+                audioMicTier3: { hex: "#F97316", alpha: 1 },
+                audioMicTier4: { hex: "#EF4444", alpha: 1 },
+                iconColor: { hex: "#ffffff", alpha: 1 },
+                audioSpeakerIcon: { hex: "#ffffff", alpha: 1 },
+                audioMicIcon: { hex: "#ffffff", alpha: 1 },
+                statUtilTier1: { hex: "#10B981", alpha: 1 },
+                statUtilTier2: { hex: "#F59E0B", alpha: 1 },
+                statUtilTier3: { hex: "#F97316", alpha: 1 },
+                statUtilTier4: { hex: "#EF4444", alpha: 1 },
+                statTempCool: { hex: "#f0f4fc", alpha: 1 },
+                statTempWarm: { hex: "#f0d060", alpha: 1 },
+                statTempHot: { hex: m, alpha: 1 }
+            },
+            numbers: {
+                audioUtilThreshold1: 25, audioUtilThreshold2: 50, audioUtilThreshold3: 75,
+                audioMicUtilThreshold1: 25, audioMicUtilThreshold2: 50, audioMicUtilThreshold3: 75,
+                statUtilThreshold1: 25, statUtilThreshold2: 50, statUtilThreshold3: 75,
+                statTempWarmAt: 70, statTempHotAt: 85
+            },
+            fonts: {
+                fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace",
+                fontMono: "JetBrains Mono Nerd Font, monospace",
+                fontScale: 1.0,
+                fontMonoScale: 1.0,
+                fontMain: "",
+                fontSecondary: "",
+                fontBar: "",
+                fontMainScale: 1.0,
+                fontSecondaryScale: 1.0,
+                fontBarScale: 1.0
+            }
+        }
+    }
+
+    function themePresetLiquidMint() {
+        return _liquidPreset("Liquid mint", "#5eead4", "#f472b6", 0.04, 0.08, 0.08)
+    }
+    function themePresetLiquidViolet() {
+        return _liquidPreset("Liquid violet", "#c4b5fd", "#f9a8d4", 0.07, 0.05, 0.12)
+    }
+    function themePresetLiquidRose() {
+        return _liquidPreset("Liquid rose", "#f9a8d4", "#fb7185", 0.10, 0.05, 0.08)
+    }
+    function themePresetLiquidAmber() {
+        return _liquidPreset("Liquid amber", "#fbbf24", "#fb7185", 0.09, 0.07, 0.04)
+    }
+    function themePresetLiquidIce() {
+        return _liquidPreset("Liquid ice", "#7dd3fc", "#a5b4fc", 0.04, 0.07, 0.12)
+    }
+    function themePresetLiquidAurora() {
+        return _liquidPreset("Liquid aurora", "#34d399", "#818cf8", 0.03, 0.08, 0.09)
     }
 
     function themeReset() {
@@ -490,8 +1501,19 @@ QtObject {
     function themeBuiltinPresets() {
         return [
             themeFactoryDefaults(),
+            themePresetLiquidMint(),
+            themePresetLiquidViolet(),
+            themePresetLiquidRose(),
+            themePresetLiquidAmber(),
+            themePresetLiquidIce(),
+            themePresetLiquidAurora(),
             themePresetSolidDark(),
-            themePresetSoftGrey()
+            themePresetSoftGrey(),
+            themePresetNordicFrost(),
+            themePresetWarmEmber(),
+            themePresetDeepOcean(),
+            themePresetLavenderDusk(),
+            themePresetForestMoss()
         ]
     }
 
@@ -803,12 +1825,14 @@ QtObject {
 
     // Popup internal layout tokens (standardizes the repeated glass card patterns)
     readonly property real popupHeaderHighlightHeight: 1.5   // Top light edge on popup glass cards
-    readonly property int popupTitleSize:             sp(16)    // "Audio Controls", "Power Menu", etc.
-    readonly property int popupSectionSize:           sp(13)    // "Playback", "Recording", section headers
-    readonly property int popupHintSize:              sp(11)    // "right-click pill or outside to close"
+    // Title sizes track Main text scale; hints track Secondary text scale
+    readonly property int popupTitleSize:             fspRole(16, fontMainScale)   // "Audio Controls", "Power Menu", etc.
+    readonly property int popupSectionSize:           fspRole(13, fontMainScale)   // "Playback", "Recording", section headers
+    readonly property int popupHintSize:              fspRole(11, fontSecondaryScale)   // body hints / secondary
     readonly property int popupSpacing:               sp(16)    // Main content margin inside popups
     readonly property int popupSpacingTight:          sp(10)    // Tighter popups (device lists, tray menus)
     readonly property int popupSectionSpacing:         sp(6)    // Spacing between sections inside popups
+    readonly property int popupGridSpacing:            sp(4)    // Calendar / dense grid cell gap (ClockPill)
 
     // =========================================================================
     // WIDGET VISIBILITY (bar pill defaults — IPC can override until qs restart)
@@ -1032,21 +2056,88 @@ QtObject {
     readonly property var powerBiosCommand: ["systemctl", "reboot", "--firmware-setup"]  // UEFI/BIOS on next boot
 
     // =========================================================================
-    // FONTS
+    // FONTS (writable — Themes → Fonts tab; persisted in theme-colors.json)
     // =========================================================================
-    readonly property string fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
-    readonly property string fontMono:   "JetBrains Mono Nerd Font, monospace"
+    property string fontFamily: "Symbols Nerd Font, JetBrains Mono Nerd Font, monospace"
+    property string fontMono:   "JetBrains Mono Nerd Font, monospace"
+    // UI type scale on top of uiScale (Themes → Fonts → UI font size). 1.0 = design default.
+    property real fontScale: 1.0
+    // Monospace size multiplier (Themes → Fonts → Monospace size). Stacks with fontScale.
+    property real fontMonoScale: 1.0
 
-    // Sizes (base designed for ~58px bar; scaled via uiScale, min 9px for readability)
-    readonly property int fontClock:      Math.max(9, sp(15))   // Main clock text (bold)
-    readonly property int fontPillLabel:  Math.max(9, sp(12))   // % labels next to volume bars, small text
-    readonly property int fontPillLabelBold: Math.max(9, sp(12))   // Bold variant of pill labels
-    readonly property int fontPopupTitle: Math.max(10, sp(16))   // "Audio Controls", "Power Menu", etc.
-    readonly property int fontSection:    Math.max(9, sp(13))   // "Playback", "Recording", tab labels
-    readonly property int fontBody:       Math.max(9, sp(12))   // Most body text in popups
-    readonly property int fontSmall:      Math.max(9, sp(11))   // Hints, tray menu items
-    readonly property int fontTiny:       Math.max(8, sp(10))   // Footer hints, help key pills
-    readonly property int fontPowerLabel: Math.max(9, sp(12))   // Text under big power icons
+    // Per-role faces (empty = inherit). Main/Secondary = menus; Bar = face text on the bar.
+    // Stored as primary family name (or full stack); resolved via font*Resolved below.
+    property string fontMain: ""
+    property string fontSecondary: ""
+    property string fontBar: ""
+    // Per-role size multipliers on top of fontScale (Themes → Fonts). 1.0 = match UI scale.
+    property real fontMainScale: 1.0
+    property real fontSecondaryScale: 1.0
+    property real fontBarScale: 1.0
+
+    // Font-aware size helper (uiScale × fontScale, min for readability)
+    function fsp(base) {
+        var b = Number(base)
+        if (!(b > 0))
+            return 0
+        var sc = Number(fontScale)
+        if (!(sc > 0))
+            sc = 1
+        return Math.max(8, Math.round(b * uiScale * sc))
+    }
+
+    // Role-scaled size: base × uiScale × fontScale × roleScale
+    function fspRole(base, roleScale) {
+        var b = Number(base)
+        if (!(b > 0))
+            return 0
+        var sc = Number(fontScale)
+        if (!(sc > 0))
+            sc = 1
+        var rs = Number(roleScale)
+        if (!(rs > 0))
+            rs = 1
+        return Math.max(8, Math.round(b * uiScale * sc * rs))
+    }
+
+    function _clampFontRoleScale(s) {
+        var x = Number(s)
+        if (!(x > 0) || isNaN(x))
+            return 1.0
+        if (x < 0.70) x = 0.70
+        if (x > 1.50) x = 1.50
+        return Math.round(x * 100) / 100
+    }
+
+    // Resolved stacks for QML Text.font.family (empty role → UI fontFamily)
+    readonly property string fontMainResolved: {
+        var s = (fontMain !== undefined && fontMain !== null) ? ("" + fontMain).trim() : ""
+        return s.length ? s : fontFamily
+    }
+    readonly property string fontSecondaryResolved: {
+        var s = (fontSecondary !== undefined && fontSecondary !== null) ? ("" + fontSecondary).trim() : ""
+        return s.length ? s : fontFamily
+    }
+    readonly property string fontBarResolved: {
+        var s = (fontBar !== undefined && fontBar !== null) ? ("" + fontBar).trim() : ""
+        return s.length ? s : fontFamily
+    }
+
+    // Sizes (base designed for ~58px bar; scaled via uiScale + fontScale [+ role])
+    // Main text → menu titles / section headers
+    readonly property int fontClock:      fspRole(15, fontBarScale)   // Clock face (bar widget text)
+    readonly property int fontPillLabel:  fsp(12)   // Volume % etc. (tier colors; global scale only)
+    readonly property int fontPillLabelBold: fsp(12)
+    readonly property int fontPopupTitle: fspRole(16, fontMainScale)   // Menu main titles
+    readonly property int fontSection:    fspRole(13, fontMainScale)   // Menu section headers
+    readonly property int fontBody:       fspRole(12, fontSecondaryScale)   // Menu body / secondary
+    readonly property int fontSmall:      fspRole(11, fontSecondaryScale)
+    readonly property int fontTiny:       fspRole(10, fontSecondaryScale)
+    readonly property int fontPowerLabel: fspRole(12, fontSecondaryScale)
+    // Explicit bar-face size (~sysstats / clock / IP) — Themes → Bar widget text size
+    readonly property int fontBarFace:    fspRole(13, fontBarScale)
+    // Mono sample / mono-labeled UI (Themes → Monospace size)
+    readonly property int fontMonoFace:   fspRole(12, fontMonoScale)
 
     // =========================================================================
     // ICON GLYPHS (single place to change the entire icon language)
@@ -1121,24 +2212,31 @@ QtObject {
     readonly property color sliderFillMuted:  muted     // Fill when device is muted (magenta)
     readonly property color sliderTrack:      surface  // Background track (blue-slate)
 
-    // AudioPill volume color ramps (25% tiers — speaker and mic tuned independently)
-    readonly property int audioUtilThreshold1: 25
-    readonly property int audioUtilThreshold2: 50
-    readonly property int audioUtilThreshold3: 75
+    // Output (speaker) volume color ramps — Themes → Thresholds.
+    property int audioUtilThreshold1: 25
+    property int audioUtilThreshold2: 50
+    property int audioUtilThreshold3: 75
 
-    readonly property color audioSpeakerTier1: "#10B981"   // 0–audioUtilThreshold1%
-    readonly property color audioSpeakerTier2: "#F59E0B"   // audioUtilThreshold1+1–audioUtilThreshold2%
-    readonly property color audioSpeakerTier3: "#F97316"   // audioUtilThreshold2+1–audioUtilThreshold3%
-    readonly property color audioSpeakerTier4: "#EF4444"   // audioUtilThreshold3+1–100%
+    property color audioSpeakerTier1: "#10B981"   // 0–audioUtilThreshold1%
+    property color audioSpeakerTier2: "#F59E0B"
+    property color audioSpeakerTier3: "#F97316"
+    property color audioSpeakerTier4: "#EF4444"
 
-    readonly property color audioMicTier1: "#10B981"
-    readonly property color audioMicTier2: "#F59E0B"
-    readonly property color audioMicTier3: "#F97316"
-    readonly property color audioMicTier4: "#EF4444"
+    // Input (mic) volume color ramps — independent thresholds + colors.
+    property int audioMicUtilThreshold1: 25
+    property int audioMicUtilThreshold2: 50
+    property int audioMicUtilThreshold3: 75
 
-    // AudioPill speaker/mic glyphs (independent from volume bar + % threshold colors)
-    readonly property color audioSpeakerIcon: "#ffffff"   // Unmuted speaker icon (pill + popup)
-    readonly property color audioMicIcon:     "#ffffff"   // Unmuted mic icon (pill + popup)
+    property color audioMicTier1: "#10B981"
+    property color audioMicTier2: "#F59E0B"
+    property color audioMicTier3: "#F97316"
+    property color audioMicTier4: "#EF4444"
+
+    // Shared monochrome glyph color (launcher, power, kill, media idle, net/bt idle, …)
+    // Themes → Icon color also keeps speaker/mic unmuted glyphs in sync.
+    property color iconColor: "#ffffff"
+    property color audioSpeakerIcon: "#ffffff"   // Unmuted speaker icon (pill + popup)
+    property color audioMicIcon:     "#ffffff"   // Unmuted mic icon (pill + popup)
     readonly property color audioSpeakerIconMuted: sliderFillMuted
     readonly property color audioMicIconMuted:     sliderFillMuted
 
@@ -1152,9 +2250,9 @@ QtObject {
 
     function audioMicUtilColor(percent) {
         var p = Math.max(0, Math.min(100, percent))
-        if (p <= audioUtilThreshold1) return audioMicTier1
-        if (p <= audioUtilThreshold2) return audioMicTier2
-        if (p <= audioUtilThreshold3) return audioMicTier3
+        if (p <= audioMicUtilThreshold1) return audioMicTier1
+        if (p <= audioMicUtilThreshold2) return audioMicTier2
+        if (p <= audioMicUtilThreshold3) return audioMicTier3
         return audioMicTier4
     }
 
@@ -1283,25 +2381,25 @@ QtObject {
     readonly property int  statGaugeRadius:   sp(3)
     readonly property color statTrack:       Qt.rgba(1, 1, 1, 0.10)  // Bar background track on glass
 
-    // Utilization % bar and text color by load level (green → yellow → orange → magenta).
-    readonly property color statUtilTier1: "#10B981"   // Low load (0% up to first threshold)
-    readonly property color statUtilTier2: "#F59E0B"
-    readonly property color statUtilTier3: "#F97316"
-    readonly property color statUtilTier4: "#EF4444"   // High load (above third threshold)
+    // Utilization % bar and text color by load level (writable — Colors → Thresholds).
+    property color statUtilTier1: "#10B981"   // Low load (0% up to first threshold)
+    property color statUtilTier2: "#F59E0B"
+    property color statUtilTier3: "#F97316"
+    property color statUtilTier4: "#EF4444"   // High load (above third threshold)
 
     // At what utilization % each color tier starts (must be in ascending order).
-    readonly property int statUtilThreshold1: 25
-    readonly property int statUtilThreshold2: 50
-    readonly property int statUtilThreshold3: 75
+    property int statUtilThreshold1: 25
+    property int statUtilThreshold2: 50
+    property int statUtilThreshold3: 75
 
-    // CPU/GPU temperature text colors (Memory shows used GiB instead — uses subtext color).
-    readonly property color statTempCool: text        // Normal temperature (primary text)
-    readonly property color statTempWarm: "#f0d060"   // Getting warm (bright gold)
-    readonly property color statTempHot:  muted       // Hot (magenta-pink)
+    // CPU/GPU temperature text colors (writable — Memory uses subtext for GiB).
+    property color statTempCool: "#f0f4fc"   // Normal temperature (matches default main text)
+    property color statTempWarm: "#f0d060"   // Getting warm (bright gold)
+    property color statTempHot:  "#FF3D8A"   // Hot (matches default muted / warning pink)
 
     // Temperatures in °C where the label switches cool → warm → hot.
-    readonly property int statTempWarmAt: 70
-    readonly property int statTempHotAt:  85
+    property int statTempWarmAt: 70
+    property int statTempHotAt:  85
 
     // Color of the "|" between utilization % and temperature (or used GiB for Memory).
     readonly property color statValueSeparator: overlay

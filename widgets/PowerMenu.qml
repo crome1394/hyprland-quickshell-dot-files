@@ -1,4 +1,5 @@
 import QtQuick
+import "../components"
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
@@ -59,7 +60,7 @@ Rectangle {
         text: bar.iconPower
         font.pixelSize: Math.max(10, Math.round(bar.iconSizePillLarge * _ws))
         font.family: bar.fontFamily
-        color: powerMouse.containsMouse ? bar.accent : bar.subtext
+        color: powerMouse.containsMouse ? bar.accent : (bar.iconColor !== undefined ? bar.iconColor : bar.subtext)
     }
 
     MouseArea {
@@ -69,9 +70,12 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-        ToolTip.text: "Left: power menu · Right: quick menu"
-        ToolTip.visible: containsMouse
-        ToolTip.delay: bar.tooltipDelay
+        BarToolTip {
+            bar: root.bar
+            visible: powerMouse.containsMouse
+            text: "Left: power menu · Right: quick menu"
+            anchorItem: powerMouse
+        }
 
         onClicked: (mouse) => {
             if (mouse.button === Qt.RightButton) {
@@ -234,7 +238,7 @@ Rectangle {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignRight
                     text: "click outside to close"
-                    color: bar.overlay
+                    color: bar.subtext
                     font.pixelSize: bar.popupHintSize
                     font.family: bar.fontFamily
                 }
@@ -293,7 +297,7 @@ Rectangle {
 
                     Text {
                         text: "ESC to close"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.popupHintSize
                         font.family: bar.fontFamily
                     }

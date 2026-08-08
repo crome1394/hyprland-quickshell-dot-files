@@ -2,34 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 
-// =============================================================================
-// ClockPill.qml — Clock + Calendar popup
-// =============================================================================
-//
-// Purpose:
-//   Displays a live updating clock. Click opens a self-contained calendar popup
-//   with month/year navigation and a 42-cell grid.
-//
-// Theme Properties Consumed:
-//   - bar.pillRadius, bar.pillBg, bar.pillBorder, bar.accent
-//   - bar.iconHoverBg, bar.workspaceRadius  (content hover; Config.qml)
-//   - bar.clock, bar.fontClock, bar.fontMono, bar.fontTiny
-//   - bar.popupRadius, bar.glassPopupBg, bar.glassPopupBorder, bar.glassPopupHighlight
-//   - bar.popupHeaderHighlightHeight, bar.popupSpacing, bar.popupTitleSize,
-//     bar.popupSectionSize, bar.popupHintSize, bar.popupSectionSpacing,
-//     bar.popupGridSpacing, bar.buttonRadius, bar.controlBorderWidth
-//   - bar.todayBg, bar.weekday, bar.text, bar.overlay, bar.bg
-//
-// Dependencies:
-//   - required property var bar (from shell.qml)
-//   - required property Item barBg (for accurate popup positioning)
-//
-// Notes:
-//   - Calendar logic and popup positioning are self-contained.
-//   - Additional centralization applied only for buttons, spacing, and fonts as requested.
-//   - A few small new tokens (popupGridSpacing, popupNavButtonSize, etc.) would be beneficial
-//     in Theme.qml for full cleanliness.
-// =============================================================================
+// ClockPill — live clock + calendar popup.
+// Face text: bar.barText / bar.fontBarResolved / bar.fontBarFace (Themes → Bar widget text).
 
 Rectangle {
     id: root
@@ -52,6 +26,7 @@ Rectangle {
     Layout.alignment: Qt.AlignVCenter
 
     // === Appearance via Theme ===
+    // Outer chrome is stable; the clock chip highlights on hover (content, not whole pill rim).
     radius: bar.pillRadius
     color: bar.pillBg
     border.width: bar.controlBorderWidth
@@ -65,16 +40,25 @@ Rectangle {
         height: parent.height - 8
         radius: bar.workspaceRadius
         color: clockArea.containsMouse ? bar.iconHoverBg : "transparent"
+        border.width: clockArea.containsMouse ? bar.controlBorderWidth : 0
+        border.color: clockArea.containsMouse ? bar.accent : "transparent"
 
         Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+        Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
         Text {
             id: clockLabel
             anchors.centerIn: parent
             text: Qt.formatDateTime(new Date(), root.clockFormat)
-            color: bar.clock
-            font.pixelSize: Math.max(9, Math.round(bar.fontClock * root._ws))
-            font.family: bar.fontMono
+            // Bar widget text (Themes → Bar widget text font/size)
+            color: (bar.barText !== undefined) ? bar.barText : bar.text
+            font.pixelSize: {
+                var base = (bar.fontBarFace !== undefined) ? bar.fontBarFace : 13
+                return Math.max(9, Math.round(base * root._ws))
+            }
+            font.family: (bar.fontBarResolved !== undefined && String(bar.fontBarResolved).length)
+                         ? bar.fontBarResolved
+                         : (bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily)
             font.bold: true
         }
 
@@ -199,7 +183,7 @@ Rectangle {
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData.sym
-                                color: bar.accent
+                                color: bar.text
                                 font.pixelSize: 15
                                 font.bold: true
                                 font.family: bar.fontFamily
@@ -264,8 +248,8 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     columns: 7
-                    rowSpacing: bar.popupGridSpacing
-                    columnSpacing: bar.popupGridSpacing
+                    rowSpacing: (bar.popupGridSpacing !== undefined) ? bar.popupGridSpacing : 4
+                    columnSpacing: (bar.popupGridSpacing !== undefined) ? bar.popupGridSpacing : 4
 
                     Repeater {
                         model: 42
@@ -329,14 +313,14 @@ Rectangle {
                     Text {
                         Layout.fillWidth: true
                         text: "Current day is highlighted"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.fontTiny
                         font.family: bar.fontFamily
                     }
 
                     Text {
                         text: "click clock to close"
-                        color: bar.overlay
+                        color: bar.subtext
                         font.pixelSize: bar.fontTiny
                         font.family: bar.fontFamily
                     }

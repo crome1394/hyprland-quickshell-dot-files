@@ -52,18 +52,20 @@ Item {
 
     readonly property real clampedLevel: Math.max(0, Math.min(1, level))
 
-    // Colour ramp: green → yellow → orange → red (matches AudioPill volume tiers)
+    // Colour ramp from Theme volume tiers (same source as AudioPill / VolumeBar)
     function levelColor(v) {
         if (root.muted)
             return root.mutedColor
-        var p = Math.max(0, Math.min(1, v))
-        if (p < 0.60)
-            return "#10B981"   // green
-        if (p < 0.80)
-            return "#F59E0B"   // amber
-        if (p < 0.92)
-            return "#F97316"   // orange
-        return "#EF4444"       // red (near clip)
+        var pct = Math.max(0, Math.min(100, v * 100))
+        if (bar && typeof bar.audioSpeakerUtilColor === "function")
+            return bar.audioSpeakerUtilColor(pct)
+        if (t && typeof t.audioSpeakerUtilColor === "function")
+            return t.audioSpeakerUtilColor(pct)
+        // Fallback matches factory Theme defaults
+        if (pct <= 25) return "#10B981"
+        if (pct <= 50) return "#F59E0B"
+        if (pct <= 75) return "#F97316"
+        return "#EF4444"
     }
 
     onClampedLevelChanged: {

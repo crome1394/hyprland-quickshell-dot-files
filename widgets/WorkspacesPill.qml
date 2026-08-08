@@ -15,7 +15,7 @@ import Quickshell.Hyprland
 // Config / bar properties consumed:
 //   - bar.wsMinimumShown, bar.wsShowOnlyActive, bar.showMagicWorkspacePill
 //   - bar.wsIconForId(id), bar.wsIconSpecial, bar.wsSpecialName, bar.wsIsSpecialName(name)
-//   - bar.pillRadius, bar.glassPillBg, bar.glassBorder, bar.controlBorderWidth
+//   - bar.pillRadius, bar.glassPillBg, bar.pillBorder, bar.glassHover, bar.controlBorderWidth
 //   - bar.wsButtonWidth, bar.wsButtonHeight, bar.workspaceRadius
 //   - bar.wsSpacing, bar.wsIconSize, bar.wsNumberSize
 //   - bar.wsActiveBg, bar.wsActiveBorder, bar.wsActiveText
@@ -52,10 +52,11 @@ Rectangle {
     clip: true
 
     // === Appearance via config (bar aliases) ===
+    // Outer chrome is stable; per-workspace buttons handle their own hover highlight.
     color: bar.glassPillBg
     radius: bar.pillRadius
     border.width: bar.controlBorderWidth
-    border.color: bar.glassBorder
+    border.color: bar.pillBorder
 
     // ===== Workspace logic (tightly coupled to this widget) =====
     property var shownWorkspaces: []
@@ -411,10 +412,12 @@ Rectangle {
                 radius: bar.workspaceRadius
                 color: isActive ? bar.wsActiveBg :
                        (isHovered ? bar.iconHoverBg : "transparent")
-                border.width: isActive ? bar.controlBorderWidth : 0
-                border.color: isActive ? bar.wsActiveBorder : bar.dividerStrong
+                border.width: (isActive || isHovered) ? bar.controlBorderWidth : 0
+                border.color: isActive ? bar.wsActiveBorder
+                              : (isHovered ? bar.accent : bar.dividerStrong)
 
                 Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+                Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
                 MouseArea {
                     id: wsMouse
@@ -435,7 +438,7 @@ Rectangle {
                         font.pixelSize: bar.wsIconSize
                         color: isActive ? bar.wsActiveText :
                                (isHovered ? (bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.accent)
-                                          : (bar.wsInactiveText !== undefined ? bar.wsInactiveText : bar.clock))
+                                          : (bar.wsInactiveText !== undefined ? bar.wsInactiveText : bar.text))
                         font.family: bar.fontFamily
                         font.bold: true
                     }
@@ -446,7 +449,7 @@ Rectangle {
                         font.bold: true
                         color: isActive ? bar.wsActiveText :
                                (isHovered ? (bar.buttonTextActive !== undefined ? bar.buttonTextActive : bar.accent)
-                                          : (bar.wsInactiveText !== undefined ? bar.wsInactiveText : bar.clock))
+                                          : (bar.wsInactiveText !== undefined ? bar.wsInactiveText : bar.text))
                     }
                 }
             }

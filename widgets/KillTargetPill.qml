@@ -1,4 +1,5 @@
 import QtQuick
+import "../components"
 import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
@@ -159,7 +160,7 @@ Item {
             text: bar.killTargetIcon
             font.pixelSize: bar.iconSizePillLarge
             font.family: bar.fontFamily
-            color: root.pickActive || pickMouse.containsMouse ? bar.accent : bar.subtext
+            color: root.pickActive || pickMouse.containsMouse ? bar.accent : (bar.iconColor !== undefined ? bar.iconColor : bar.subtext)
         }
 
         MouseArea {
@@ -169,11 +170,14 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onClicked: root.activatePickMode()
 
-            ToolTip.text: root.pickActive
-                ? "Click a window to kill · Esc to cancel"
-                : (root.statusMessage.length ? root.statusMessage : bar.killTargetTooltip)
-            ToolTip.visible: containsMouse || root.statusMessage.length > 0
-            ToolTip.delay: bar.tooltipDelay
+            BarToolTip {
+                bar: root.bar
+                visible: pickMouse.containsMouse || root.statusMessage.length > 0
+                anchorItem: pickMouse
+                text: root.pickActive
+                      ? "Click a window to kill · Esc to cancel"
+                      : (root.statusMessage.length ? root.statusMessage : bar.killTargetTooltip)
+            }
         }
     }
 

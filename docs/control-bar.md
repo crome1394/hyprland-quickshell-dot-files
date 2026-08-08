@@ -11,7 +11,7 @@ Open via the **Config menu** gear or **right-click empty bar chrome**. Toolbar o
 | **Wallpaper** | hyprpaper thumbs, apply, pick folder, add images |
 | **Widgets** | **A–Z list**; each row is three columns: **✓/✕ + full name** · **L C R** · **↑ ↓**; width slider 80–180%. Names use flexible width (Notifications, Hypr Inspector, etc. not clipped). Net·BT·Audio is one pill. **Reset layout** / **Reset sizes** |
 | **Options** | Behavior prefs (not layout) — table below |
-| **Colors** | Bar / widget look — color picker, opacity, presets, export/import (see Colors subsection) |
+| **Themes** | Live colors/opacity, text roles, **Fonts** (UI·Mono·Main·Secondary·Bar + sizes), thresholds, liquid presets (see Themes subsection) |
 | **Launch** | Quick Launch pins (installed apps or custom) |
 | **Autostart** | XDG `~/.config/autostart` (see Autostart subsection) |
 | **MIME** | Preferred applications / file-type defaults (see MIME subsection) |
@@ -69,13 +69,10 @@ Layout (top → bottom): status · adapter · **Resolution | Refresh | Bit depth
 - Poll **pauses** while dragging the resolution slider; no background work when Display is closed.
 - Selection changes do **not** bump global layout ticks (keeps the slider responsive).
 
-Pending changes do **not** take effect until **Apply**. Apply uses:
+Pending changes do **not** take effect until **Apply**. Apply:
 
-```bash
-hyprctl eval 'hl.monitor({ output="…", mode="WxH@rate", position="0x0", scale=1, bitdepth=N })'
-```
-
-`hyprctl reload` re-applies `monitors.lua` and can snap back to the config default.
+1. Runs `hyprctl eval` for the live mode (`scripts/monitor-mode.sh apply`).
+2. **Rewrites** `~/.config/hypr/config/monitors.lua` so the mode survives reboot / reload (backup: `monitors.lua.bak-qs`).
 
 Related CLI (outside this repo, on PATH): `hypr-resolution` — rofi menu over the same EDID modes (default 10-bit, scale 1).
 
@@ -86,27 +83,29 @@ Related CLI (outside this repo, on PATH): `hypr-resolution` — rofi menu over t
 | **Bar / UI** | UI scale auto/manual · Config menu icon on bar · **Color presets section** (show/hide presets on Colors) | `bar-layout.json` |
 | **Workspaces** | Magic pill · only-active · min pills · startup workspace · close magic on start | `bar-layout.json` |
 | **Audio** | Show AEC section · show Summary / device profiles / Level meters · keep Summary / Active streams expanded (AEC on/off is only in the Audio panel) | visibility/expand → `bar-layout.json` |
-| **Network** | nm-applet sticky login autostart | XDG / applet control |
+| **Network** | nm-applet sticky login autostart · traffic graph on/off | XDG / `bar-layout.json` |
 | **Bluetooth** | Blueman sticky login autostart | XDG / applet control |
-| **System stats** | Show CPU / Memory / GPU · metrics live updates | gauges → `bar-layout.json` |
+| **System stats** | Show CPU / Memory / GPU · **bar** util graphs · **menu** util graphs · metrics live updates | `bar-layout.json` |
 | **FreshRSS** | Filters expanded on open · HTTPS/HTTP · host · user · API password · **Test** / **Save server** | filters → `bar-layout.json`; credentials → `~/.config/freshrss-quickshell/freshrss.env` (never git) |
 
 Editable text fields use a slightly lifted background so they read as inputs. Toggle/number columns share a fixed right-hand control slot for alignment.
 
-## Colors panel
+## Themes panel
 
-Non-coder theme editor for the bar and all widgets. Open **Colors** on the control-bar toolbar.
+Non-coder theme editor for the bar and all widgets. Open **Themes** on the control-bar toolbar.
 
 ### Layout
 
-| Section | Placement | Contents |
-|---------|-----------|----------|
-| **Colors** | Left column | Swatches: bar / widget / menu backgrounds, border, accent, warning, hover, active button, active workspace, top edge shine |
-| **Opacity** | Right column | Opacity sliders for glass / border / hover / button / workspace fills |
-| **Text** | Full-width row under Colors / Opacity | Two columns of text swatches (left / right split) |
-| **Presets** | Bottom (optional) | Built-in + your presets + load file — toggle from **Options → Color presets section** |
+Title and sub-tabs (**Theming** · **Thresholds** · **Presets**) stay fixed at the top; the body scrolls underneath.
 
-The color picker opens on the **opposite** side of the Colors/Opacity row (left swatch → picker on right; right-column text swatch → picker on left).
+| Tab | Contents |
+|-----|----------|
+| **Theming** | Collapsible **Colors** · **Text** · **Special / Effects** (left) and **Opacity** (right). **Main text** = menu headers; **Secondary text** = menu body; **Bar widget text** = face labels on the bar |
+| **Thresholds** | Output/input volume + Sys Stats load/temperature (left); color picker (right) |
+| **Fonts** | Two columns: **typeface** left · **size %** right. Rows: **UI**, **Monospace**, **Main**, **Secondary**, **Bar widget**. Preview shows all five |
+| **Presets** | Liquid glass family (mint/violet/rose/amber/ice/aurora) + solid/soft/nordic/… — hide from **Options → Color presets section** |
+
+Color picker opens on the **right**. **Undo** reverts theme steps. Fonts, colors, and thresholds save to `state/theme-colors.json`.
 
 ### Controls
 
@@ -114,8 +113,8 @@ The color picker opens on the **opposite** side of the Colors/Opacity row (left 
 |---------|----------------|
 | **Colors** swatches | Bar background, widget background, menu background, border, accent, warning/pink, hover glow, **active button** (selected control-bar tab), **active workspace** (selected workspace pill), top edge shine |
 | **Opacity** sliders | Alpha for glass fills, borders, hover, active button, active workspace, top edge shine |
-| **Text** swatches | **Main** / **Secondary** text · **Button text** / **Active button text** (control-bar tab labels) · **Active workspace text** / **Workspace text** (workspace pill numbers & icons) |
-| **Built-in presets** | **Liquid glass**, **Solid dark**, **Soft grey** — always available, **cannot be removed** |
+| **Text** swatches | **Main** (headers) · **Secondary** (body) · **Bar widget text** (bar face) · button/workspace labels |
+| **Built-in presets** | Liquid glass + liquid variants, Solid dark, Soft grey, Nordic, Ember, Ocean, Lavender, Forest — **cannot be removed** |
 | **Your presets** | Click to apply; **×** removes a custom preset only |
 | **Save as preset** | Stores the current look under a name in `~/.config/quickshell/themes/` |
 | **Load file** | Optional path to any theme `.json` |
@@ -123,15 +122,28 @@ The color picker opens on the **opposite** side of the Colors/Opacity row (left 
 
 ### What maps to what
 
+Each Colors swatch writes **only** its Theme key (strict isolation). Shared looks use the **same** key on purpose (e.g. every inactive toolbar tab uses `buttonBg`).
+
 | UI label | Theme key | Affects |
 |----------|-----------|---------|
-| Widget background | `glassPillBg` / `pillBg` | Bar pills + inactive control-bar tabs |
+| Button background | `buttonBg` | Inactive control-bar toolbar tabs and action chips |
+| Bar background | `glassBg` | Main bar chrome fill |
+| Border | `glassBorder` | Main bar outer rim |
+| Widget / pill fill | `glassPillBg` / `pillBg` | Bar widget pills only (not toolbar buttons) |
+| Pill border | `pillBorder` | Pill rims (independent of bar border) |
+| Menu background / border | `glassPopupBg` / `glassPopupBorder` | Popups and control-bar panels |
 | Active button | `controlActiveBg` | Selected control-bar toolbar tab fill |
 | Active workspace | `wsActiveBg` | Selected workspace pill fill on the bar |
 | Button text | `buttonText` | Inactive control-bar tab labels |
 | Active button text | `buttonTextActive` | Active / hovered control-bar tab labels |
+| Icon color | `audioSpeakerIcon` (+ mic) | Speaker / mic unicode icons |
 | Active workspace text | `wsActiveText` | Number/icon on the active workspace |
 | Workspace text | `wsInactiveText` | Number/icon on inactive workspaces |
+| Volume levels | `audioSpeakerTier1`–`4` + thresholds | Volume bars on the bar and in Audio panels |
+| Sys Stats load | `statUtilTier1`–`4` + thresholds | CPU / Memory / GPU util bars and % text |
+| Sys Stats temperature | `statTempCool` / `Warm` / `Hot` + °C cutoffs | CPU / GPU temperature labels |
+
+**Thresholds** tab: volume and Sys Stats each have three cutoffs and four tier swatches (low → peak). Speaker and mic share the volume ramp. Temperature has warm/hot °C cutoffs and three colors.
 
 Changes apply **live** across the bar and widgets, and the active look is stored in `state/theme-colors.json` (survives `qs` restart). Layout prefs (including **Color presets section** visibility) stay in `bar-layout.json` — resetting colors does not move widgets.
 

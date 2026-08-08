@@ -36,7 +36,7 @@ Item {
     readonly property int sectionSpacing: 3
     readonly property int maxTableRows: 10
     readonly property int graphsMinHeight: 44
-    readonly property int wifiPanelHeight: (wifiInfo.iface && wifiInfo.connected) ? 44 : 0
+    readonly property int wifiPanelHeight: (!!wifiInfo.iface && !!wifiInfo.connected) ? 44 : 0
     readonly property int dnsListMinHeight: 36
     readonly property int firewallScrollHeight: 28
     readonly property int fwRowHeight: root.cardMargin * 2 + 18 + 11 + root.firewallScrollHeight + root.panelTailPad
@@ -221,7 +221,8 @@ Item {
     }
 
     function showVpnBar() {
-        return tailscaleActive() || (netData.vpn_iface && netData.vpn_iface.length > 0)
+        // Always bool — `||` of loose checks can yield undefined when vpn_iface is missing
+        return !!(tailscaleActive() || (netData.vpn_iface && String(netData.vpn_iface).length > 0))
     }
 
     function detailDns() {
@@ -1461,7 +1462,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: wifiBlock.implicitHeight + root.cardMargin * 2
-            visible: wifiInfo.iface && wifiInfo.connected
+            visible: !!(wifiInfo.iface && wifiInfo.connected)
             radius: root.cardRadius
             color: root.surfaceColor
             border.width: 1
@@ -1505,7 +1506,12 @@ Item {
     component ActiveConnectionsTile: ColumnLayout {
         spacing: root.panelSpacing
 
-        property int _liveTick: service && service.data ? service.data.timestamp : 0
+        property int _liveTick: {
+            if (!(service && service.data))
+                return 0
+            var t = Number(service.data.timestamp)
+            return (t > 0 && !isNaN(t)) ? t : 0
+        }
 
         SectionBar {
             title: "ACTIVE CONNECTIONS"

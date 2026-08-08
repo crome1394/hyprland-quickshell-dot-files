@@ -6,8 +6,8 @@
 
 Edit `Config.qml` to change:
 
-- Colors, fonts, spacing, radii, and icon glyphs
-- **Theme editor API** (`themeUiRows`, `themeEditableKeys`, `getThemeColor` / `setThemeColor`) — control strip **Colors** panel; includes button/workspace fills and text tokens (`controlActiveBg`, `buttonText`, `wsActiveBg`, …)
+- Colors, fonts (UI / mono / Main / Secondary / Bar roles + scales), spacing, radii, icons
+- **Theme editor API** (`themeUiRows`, `themeEditableKeys`, `getThemeColor` / `setThemeColor`, font role setters) — control strip **Themes** panel
 - Bar position and size (`barPosition`, `barHeight`, `barEdgeMargin`)
 - Bar pill visibility defaults (`showLauncherPill`, `showAudioPill`, etc.) and launcher command (`launcherCommand`)
 - **Quick Launch** apps (`quickLaunchApps`)

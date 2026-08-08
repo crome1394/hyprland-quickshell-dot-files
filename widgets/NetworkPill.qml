@@ -100,19 +100,31 @@ Rectangle {
     Layout.preferredHeight: implicitHeight
     Layout.alignment: Qt.AlignVCenter
 
+    HoverHandler {
+        id: netHoverVis
+    }
+    readonly property bool netHovered: netHoverVis.hovered || netMouse.containsMouse
+
+    // Standalone: stable outer chrome; content chip highlights on hover.
+    // Embedded (connectivity pill): this rect IS the content chip — hover rim + glow.
     radius: embedded ? bar.workspaceRadius : bar.pillRadius
     color: {
         if (embedded)
-            return netMouse.containsMouse ? bar.iconHoverBg : "transparent"
-        return netMouse.containsMouse ? bar.glassHover : bar.pillBg
+            return root.netHovered ? bar.iconHoverBg : "transparent"
+        return bar.pillBg
     }
-    border.width: embedded ? 0 : bar.controlBorderWidth
+    border.width: embedded
+        ? (root.netHovered ? bar.controlBorderWidth : 0)
+        : bar.controlBorderWidth
     border.color: embedded
-                 ? "transparent"
-                 : (netMouse.containsMouse ? bar.accent : bar.pillBorder)
+        ? (root.netHovered ? bar.accent : "transparent")
+        : bar.pillBorder
 
     Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
     Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+
+    readonly property bool _showTrafficGraph: bar.showNetTrafficGraph !== undefined
+        ? !!bar.showNetTrafficGraph : true
 
     // =========================================================================
     // Network state helpers
@@ -308,8 +320,8 @@ Rectangle {
         readonly property color pillGlyphColor: {
             if (!networkingEnabled) return bar ? bar.muted : "#6e7a90"
             if (isPortal) return "#F59E0B"
-            if (anyConnected) return bar ? bar.accent : "#00F0E0"
-            return bar ? bar.subtext : "#a8b4c8"
+            if (anyConnected) return bar ? (bar.iconColor !== undefined ? bar.iconColor : bar.subtext) : "#ffffff"
+            return bar ? (bar.iconColor !== undefined ? bar.iconColor : bar.subtext) : "#a8b4c8"
         }
 
         function hasWifiDevice() {
@@ -641,14 +653,11 @@ Rectangle {
     }
 
     function pushRateSample(rx, tx) {
-        // Graph history only while the popup is open (bar does not need sparklines)
-        if (!netPopup.visible) {
-            lastRxRate = Number(rx) || 0
-            lastTxRate = Number(tx) || 0
-            return
-        }
+        // Graph history only while the popup is open and traffic graph is enabled
         lastRxRate = Number(rx) || 0
         lastTxRate = Number(tx) || 0
+        if (!netPopup.visible || !root._showTrafficGraph)
+            return
         var rh = rxHistory.slice()
         var th = txHistory.slice()
         rh.push(lastRxRate)
@@ -933,47 +942,72 @@ Rectangle {
     }
 
     // =========================================================================
-    // Pill content
+    // Pill content (chip highlights; outer pill border stays stable)
     // =========================================================================
-    Item {
-        id: netContent
+    Rectangle {
+        id: netChip
         anchors.centerIn: parent
-        implicitWidth: pillRow.implicitWidth
-        implicitHeight: pillRow.implicitHeight
-        Row {
-            id: pillRow
-            spacing: Math.max(3, Math.round(6 * root._s))
+        width: Math.max(18, netContent.implicitWidth + (embedded ? 4 : 10))
+        height: embedded ? parent.height : Math.max(18, parent.height - 8)
+        radius: bar.workspaceRadius
+        color: {
+            if (embedded)
+                return "transparent"
+            return root.netHovered ? bar.iconHoverBg : "transparent"
+        }
+        border.width: (!embedded && root.netHovered) ? bar.controlBorderWidth : 0
+        border.color: (!embedded && root.netHovered) ? bar.accent : "transparent"
+
+        Behavior on color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+        Behavior on border.color { ColorAnimation { duration: 140; easing.type: Easing.OutQuad } }
+
+        Item {
+            id: netContent
             anchors.centerIn: parent
+            implicitWidth: pillRow.implicitWidth
+            implicitHeight: pillRow.implicitHeight
+            Row {
+                id: pillRow
+                spacing: Math.max(3, Math.round(6 * root._s))
+                anchors.centerIn: parent
 
-            Item {
-                width: Math.max(12, Math.round(bar.iconSizeTray * root._s))
-                height: Math.max(12, Math.round(bar.iconSizeTray * root._s))
-                anchors.verticalCenter: parent.verticalCenter
+                Item {
+                    width: Math.max(12, Math.round(bar.iconSizeTray * root._s))
+                    height: Math.max(12, Math.round(bar.iconSizeTray * root._s))
+                    anchors.verticalCenter: parent.verticalCenter
+                    Text {
+                        anchors.centerIn: parent
+                        text: net.pillGlyph
+                        font.pixelSize: Math.max(12, Math.round(bar.iconSizeTray * root._s))
+                        font.family: bar.fontFamily
+                        color: net.pillGlyphColor
+                    }
+                }
+
                 Text {
-                    anchors.centerIn: parent
-                    text: net.pillGlyph
-                    font.pixelSize: Math.max(12, Math.round(bar.iconSizeTray * root._s))
-                    font.family: bar.fontFamily
-                    color: net.pillGlyphColor
+                    visible: net.anyConnected && net.primaryIp.length > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: {
+                        // Compact: last octet of IPv4 or short label
+                        var ip = net.primaryIp
+                        var slash = ip.indexOf("/")
+                        if (slash > 0) ip = ip.substring(0, slash)
+                        var parts = ip.split(".")
+                        if (parts.length === 4) return parts[3]
+                        return ""
+                    }
+                    // Bar widget text (Themes → Fonts → Bar widget text)
+                    color: bar
+                           ? ((bar.barText !== undefined) ? bar.barText : bar.text)
+                           : "#e6edf7"
+                    font.pixelSize: {
+                        var base = (bar && bar.fontBarFace !== undefined) ? bar.fontBarFace : 13
+                        return Math.max(9, Math.round(base * root._s))
+                    }
+                    font.bold: true
+                    font.family: (bar && bar.fontBarResolved !== undefined && String(bar.fontBarResolved).length)
+                                 ? bar.fontBarResolved : bar.fontFamily
                 }
-            }
-
-            Text {
-                visible: net.anyConnected && net.primaryIp.length > 0
-                anchors.verticalCenter: parent.verticalCenter
-                text: {
-                    // Compact: last octet of IPv4 or short label
-                    var ip = net.primaryIp
-                    var slash = ip.indexOf("/")
-                    if (slash > 0) ip = ip.substring(0, slash)
-                    var parts = ip.split(".")
-                    if (parts.length === 4) return parts[3]
-                    return ""
-                }
-                color: bar ? bar.subtext : "#a8b4c8"
-                font.pixelSize: Math.max(9, Math.round((bar.fontPillLabel !== undefined ? bar.fontPillLabel : 12) * root._s))
-                font.bold: true
-                font.family: bar.fontFamily
             }
         }
     }
@@ -985,18 +1019,21 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton
 
-        ToolTip.text: {
-            if (!net.networkingEnabled)
-                return "Networking off · left-click for menu"
-            var bits = []
-            if (net.primaryLabel.length) bits.push(net.primaryLabel)
-            if (net.primaryIp.length) bits.push(net.primaryIp)
-            bits.push("connectivity: " + net.connectivity)
-            bits.push("left-click menu")
-            return bits.join(" · ")
+        BarToolTip {
+            bar: root.bar
+            visible: netMouse.containsMouse && !netPopup.visible
+            anchorItem: netMouse
+            text: {
+                if (!net.networkingEnabled)
+                    return "Networking off · left-click for menu"
+                var bits = []
+                if (net.primaryLabel.length) bits.push(net.primaryLabel)
+                if (net.primaryIp.length) bits.push(net.primaryIp)
+                bits.push("connectivity: " + net.connectivity)
+                bits.push("left-click menu")
+                return bits.join(" · ")
+            }
         }
-        ToolTip.visible: containsMouse && !netPopup.visible
-        ToolTip.delay: bar.tooltipDelay || 400
 
         onClicked: {
             if (netPopup.visible)
@@ -1115,10 +1152,15 @@ Rectangle {
 
                         MouseArea {
                             anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            ToolTip.text: "Re-check connectivity"
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
+                            BarToolTip {
+                            bar: root.bar
+                            preferSide: "above"
+                            visible: parent.containsMouse
+                            text: "Re-check connectivity"
+                            anchorItem: parent
+                        }
                             onClicked: net.checkConnectivity()
                         }
                     }
@@ -1144,9 +1186,13 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            ToolTip.text: "Reapply / renew IP (nmcli device reapply)"
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
+                            BarToolTip {
+                            bar: root.bar
+                            preferSide: "above"
+                            visible: parent.containsMouse
+                            text: "Reapply / renew IP (nmcli device reapply)"
+                            anchorItem: parent
+                        }
                             onClicked: root.refreshIp(root.detailIface)
                         }
                     }
@@ -1172,18 +1218,23 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            ToolTip.text: "Flush DNS caches and reapply resolver config"
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
+                            BarToolTip {
+                            bar: root.bar
+                            preferSide: "above"
+                            visible: parent.containsMouse
+                            text: "Flush DNS caches and reapply resolver config"
+                            anchorItem: parent
+                        }
                             onClicked: root.refreshDns(root.detailIface)
                         }
                     }
                 }
 
-                // Traffic graph (downstream + upstream)
+                // Traffic graph (downstream + upstream) — Options → Network → Traffic graph
                 Rectangle {
+                    visible: root._showTrafficGraph
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 72
+                    Layout.preferredHeight: root._showTrafficGraph ? 72 : 0
                     radius: bar.buttonRadius
                     color: bar.surface
                     border.width: bar.controlBorderWidth
@@ -1386,9 +1437,13 @@ Rectangle {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    ToolTip.text: "Click to copy"
-                                    ToolTip.visible: containsMouse && modelData.v && modelData.v !== "—"
-                                    ToolTip.delay: bar.tooltipDelay || 400
+                                    BarToolTip {
+                                        bar: root.bar
+                                        preferSide: "above"
+                                        visible: detailRowMa.containsMouse && modelData.v && modelData.v !== "—"
+                                        text: "Click to copy"
+                                        anchorItem: detailRowMa
+                                    }
                                     onClicked: root.copyToClipboard(modelData.v)
                                 }
                             }
@@ -1769,9 +1824,13 @@ Rectangle {
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
-                                                ToolTip.text: "Open nm-connection-editor for this connection"
-                                                ToolTip.visible: containsMouse
-                                                ToolTip.delay: bar.tooltipDelay || 400
+                                                BarToolTip {
+                            bar: root.bar
+                            preferSide: "above"
+                            visible: parent.containsMouse
+                            text: "Open nm-connection-editor for this connection"
+                            anchorItem: parent
+                        }
                                                 onClicked: {
                                                     var s = st || {}
                                                     root.openEditor(s.uuid || s.connection || "")
@@ -1927,9 +1986,13 @@ Rectangle {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    ToolTip.text: "Open nm-connection-editor for the selected connection"
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.delay: bar.tooltipDelay || 400
+                                    BarToolTip {
+                            bar: root.bar
+                            preferSide: "above"
+                            visible: parent.containsMouse
+                            text: "Open nm-connection-editor for the selected connection"
+                            anchorItem: parent
+                        }
                                     onClicked: {
                                         var uuid = root.selectedConnectionUuid()
                                         root.openEditor(uuid)
@@ -2355,11 +2418,15 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             enabled: net.wifiHardwareEnabled
-                            ToolTip.text: net.wifiHardwareEnabled
-                                          ? (net.wifiEnabled ? "Disable WiFi radio" : "Enable WiFi radio")
-                                          : "WiFi hardware blocked (rfkill)"
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
+                            BarToolTip {
+                                bar: root.bar
+                                preferSide: "above"
+                                visible: wifiMa.containsMouse
+                                anchorItem: wifiMa
+                                text: net.wifiHardwareEnabled
+                                      ? (net.wifiEnabled ? "Disable WiFi radio" : "Enable WiFi radio")
+                                      : "WiFi hardware blocked (rfkill)"
+                            }
                             onClicked: net.toggleWifi()
                         }
                     }
@@ -2387,11 +2454,15 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            ToolTip.text: net.networkingEnabled
-                                          ? "Disable all networking (nmcli networking off)"
-                                          : "Enable networking"
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
+                            BarToolTip {
+                                bar: root.bar
+                                preferSide: "above"
+                                visible: networkingMa.containsMouse
+                                anchorItem: networkingMa
+                                text: net.networkingEnabled
+                                      ? "Disable all networking (nmcli networking off)"
+                                      : "Enable networking"
+                            }
                             onClicked: net.toggleNetworking()
                         }
                     }
@@ -2422,16 +2493,20 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            ToolTip.text: {
-                                var sticky = root.appletAutostartEnabled
-                                    ? "autostart on (login)"
-                                    : "autostart off (stays off after reboot)"
-                                var sess = root.appletRunning ? "running" : "stopped"
-                                return "nm-applet · " + sess + " · " + sticky
-                                    + "\nLeft: session start/stop · Right: permanent disable/enable"
+                            BarToolTip {
+                                bar: root.bar
+                                preferSide: "above"
+                                visible: appletMa.containsMouse
+                                anchorItem: appletMa
+                                text: {
+                                    var sticky = root.appletAutostartEnabled
+                                        ? "autostart on (login)"
+                                        : "autostart off (stays off after reboot)"
+                                    var sess = root.appletRunning ? "running" : "stopped"
+                                    return "nm-applet · " + sess + " · " + sticky
+                                        + "\nLeft: session start/stop · Right: permanent disable/enable"
+                                }
                             }
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: bar.tooltipDelay || 400
                             onClicked: (mouse) => {
                                 if (mouse.button === Qt.RightButton) {
                                     if (root.appletAutostartEnabled)

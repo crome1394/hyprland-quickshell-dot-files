@@ -16,13 +16,17 @@ Item {
     property color gaugeLowColor: "#2ee59a"
     property color gaugeMidColor: "#f0d060"
     property color gaugeHighColor: "#FF3D8A"
+    // When false: hide circular gauge + history sparkline; keep summary + process list
+    property bool showGraphs: true
 
     readonly property int cardRadius: 6
     readonly property int cardMargin: 10
     readonly property int sectionSpacing: 8
 
     readonly property int summaryHeight: Math.max(68, Math.min(94, Math.round(height * 0.12)))
-    readonly property int middleHeight: Math.max(124, Math.min(260, Math.round(height * 0.34)))
+    readonly property int middleHeight: showGraphs
+        ? Math.max(124, Math.min(260, Math.round(height * 0.34)))
+        : Math.max(160, Math.round(height * 0.72))
 
     readonly property var gpuProcessRows: {
         const tick = service && service.data ? service.data.timestamp : 0
@@ -119,7 +123,9 @@ Item {
             spacing: root.sectionSpacing
 
             Rectangle {
-                Layout.preferredWidth: Math.max(150, Math.min(200, root.width * 0.22))
+                visible: root.showGraphs
+                Layout.preferredWidth: root.showGraphs
+                    ? Math.max(150, Math.min(200, root.width * 0.22)) : 0
                 Layout.fillHeight: true
                 radius: root.cardRadius
                 color: root.surfaceColor
@@ -185,9 +191,11 @@ Item {
 
         // GPU Usage History — fills remaining vertical space
         Rectangle {
+            visible: root.showGraphs
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.minimumHeight: 88
+            Layout.fillHeight: root.showGraphs
+            Layout.minimumHeight: root.showGraphs ? 88 : 0
+            Layout.preferredHeight: root.showGraphs ? -1 : 0
             radius: root.cardRadius
             color: root.surfaceColor
             border.width: 1

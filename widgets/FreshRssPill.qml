@@ -945,7 +945,7 @@ Rectangle {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: "󰑫"   // RSS-ish nerd font glyph; fallback below if missing
-            color: bar.accent
+            color: bar.iconColor !== undefined ? bar.iconColor : bar.subtext
             font.pixelSize: bar.iconSizePillLarge || 16
             font.family: bar.fontFamily
         }
@@ -953,9 +953,15 @@ Rectangle {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: root.unreadCount > 0 ? (root.unreadCount > 99 ? "99+" : String(root.unreadCount)) : "RSS"
-            color: bar.text
-            font.pixelSize: bar.fontTiny || 11
-            font.family: bar.fontMono
+            // Bar widget text (Themes → Fonts → Bar widget text)
+            color: (bar.barText !== undefined) ? bar.barText : bar.text
+            font.pixelSize: {
+                var base = (bar.fontBarFace !== undefined) ? bar.fontBarFace : 13
+                return Math.max(9, Math.round(base * root._ws))
+            }
+            font.family: (bar.fontBarResolved !== undefined && String(bar.fontBarResolved).length)
+                         ? bar.fontBarResolved
+                         : (bar.fontMono !== undefined ? bar.fontMono : bar.fontFamily)
             font.bold: root.unreadCount > 0
         }
     }
@@ -1305,7 +1311,7 @@ Rectangle {
                             text: root.mode === "fever"
                                   ? (root.writable ? "Fever · read/write" : "Fever")
                                   : "RSS · read-only"
-                            color: bar.accent
+                            color: bar.subtext
                             font.pixelSize: 11
                             font.family: bar.fontMono
                         }
@@ -2004,7 +2010,7 @@ Rectangle {
                                     Text {
                                         visible: Number(modelData.shown || 0) > 0
                                         text: "·" + String(modelData.shown || 0)
-                                        color: bar.overlay || bar.subtext
+                                        color: bar.subtext
                                         font.pixelSize: 10
                                         font.family: bar.fontMono
                                     }
@@ -2055,7 +2061,7 @@ Rectangle {
                                                 return String(u)
                                             return String(s)
                                         }
-                                        color: Number(modelData.unread || 0) > 0 ? bar.accent : (bar.overlay || bar.subtext)
+                                        color: Number(modelData.unread || 0) > 0 ? bar.accent : (bar.subtext)
                                         font.pixelSize: 10
                                         font.bold: Number(modelData.unread || 0) > 0
                                         font.family: bar.fontMono
@@ -2381,7 +2387,7 @@ Rectangle {
                     Layout.fillWidth: true
                     text: "w/s or ↑/↓ list · a/← Space expand · d/→ Enter open · j/k articles · / search · b browser · c share · v mpv · r refresh · Esc"
                           + (root.writable ? " · m item read · Shift+S star · Shift+R feed read · Shift+U feed unread" : "")
-                    color: bar.overlay || bar.subtext
+                    color: bar.subtext
                     font.pixelSize: 11
                     font.family: bar.fontMono
                     wrapMode: Text.WordWrap

@@ -143,6 +143,12 @@ ShellRoot {
     property bool showStatCpu: true
     property bool showStatMem: true
     property bool showStatGpu: true
+    // Util bar graphs on the Sys Stats pill face (labels / % always stay)
+    property bool showStatGauges: true
+    // Circular gauges + history in Sys Stats metrics popups (process lists always stay)
+    property bool showStatMenuGraphs: true
+    // Network details traffic sparkline (adapters / connections stay)
+    property bool showNetTrafficGraph: true
     // Hide Echo cancel block in Audio popup / control-bar Audio panel when false (Options)
     property bool showEchoCancelInMenu: true
     // Control-bar Audio panel section visibility (Options + bar-layout.json)
@@ -299,6 +305,9 @@ ShellRoot {
             root.showStatCpu = true
             root.showStatMem = true
             root.showStatGpu = true
+            root.showStatGauges = true
+            root.showStatMenuGraphs = true
+            root.showNetTrafficGraph = true
             root.showEchoCancelInMenu = true
             root.showAudioSummary = true
             root.showAudioDefaults = true
@@ -452,6 +461,9 @@ ShellRoot {
                     root.showStatCpu = barLayoutAdapter.showStatCpu
                     root.showStatMem = barLayoutAdapter.showStatMem
                     root.showStatGpu = barLayoutAdapter.showStatGpu
+                    root.showStatGauges = barLayoutAdapter.showStatGauges
+                    root.showStatMenuGraphs = barLayoutAdapter.showStatMenuGraphs
+                    root.showNetTrafficGraph = barLayoutAdapter.showNetTrafficGraph
                 }
                 if (barLayoutAdapter.hasAudioMenuPrefs) {
                     root.showEchoCancelInMenu = barLayoutAdapter.showEchoCancelInMenu
@@ -544,6 +556,9 @@ ShellRoot {
                 property bool showStatCpu: true
                 property bool showStatMem: true
                 property bool showStatGpu: true
+                property bool showStatGauges: true
+                property bool showStatMenuGraphs: true
+                property bool showNetTrafficGraph: true
                 // Audio popup / control-bar Audio panel sections
                 property bool hasAudioMenuPrefs: false
                 property bool showEchoCancelInMenu: true
@@ -628,6 +643,29 @@ ShellRoot {
                 return false
             bar.schedulePersistThemeColors()
             return true
+        }
+
+        function getThemeNumber(key) {
+            return cfg.getThemeNumber(key)
+        }
+
+        function setThemeNumber(key, n) {
+            if (!cfg.setThemeNumber(key, n))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
+
+        function setThemeFont(key, value) {
+            if (!cfg.setThemeFont(key, value))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
+
+        // Full theme snapshot for Themes-panel undo
+        function getThemeSnapshot() {
+            return cfg.themeExport("Active")
         }
 
         function resetThemeColors() {
@@ -945,6 +983,9 @@ ShellRoot {
             barLayoutAdapter.showStatCpu = root.showStatCpu
             barLayoutAdapter.showStatMem = root.showStatMem
             barLayoutAdapter.showStatGpu = root.showStatGpu
+            barLayoutAdapter.showStatGauges = root.showStatGauges
+            barLayoutAdapter.showStatMenuGraphs = root.showStatMenuGraphs
+            barLayoutAdapter.showNetTrafficGraph = root.showNetTrafficGraph
             barLayoutAdapter.hasAudioMenuPrefs = true
             barLayoutAdapter.showEchoCancelInMenu = root.showEchoCancelInMenu
             barLayoutAdapter.showAudioSummary = root.showAudioSummary
@@ -982,6 +1023,18 @@ ShellRoot {
         }
         function setShowStatGpu(enabled) {
             root.showStatGpu = !!enabled
+            persistBarLayout()
+        }
+        function setShowStatGauges(enabled) {
+            root.showStatGauges = !!enabled
+            persistBarLayout()
+        }
+        function setShowStatMenuGraphs(enabled) {
+            root.showStatMenuGraphs = !!enabled
+            persistBarLayout()
+        }
+        function setShowNetTrafficGraph(enabled) {
+            root.showNetTrafficGraph = !!enabled
             persistBarLayout()
         }
         function setShowEchoCancelInMenu(enabled) {
@@ -1581,15 +1634,16 @@ ShellRoot {
         property alias surface: cfg.surface
         property alias text: cfg.text
         property alias subtext: cfg.subtext
+        property alias barText: cfg.barText
         property alias overlay: cfg.overlay
         property alias accent: cfg.accent
         property alias muted: cfg.muted
         property alias todayBg: cfg.todayBg
         property alias weekday: cfg.weekday
         property alias clock: cfg.clock
-        readonly property alias statTempCool: cfg.statTempCool
-        readonly property alias statTempWarm: cfg.statTempWarm
-        readonly property alias statTempHot: cfg.statTempHot
+        property alias statTempCool: cfg.statTempCool
+        property alias statTempWarm: cfg.statTempWarm
+        property alias statTempHot: cfg.statTempHot
         readonly property alias statValueSeparator: cfg.statValueSeparator
 
         // --- Glassmorphic tokens (writable for Colors panel live editing)
@@ -1609,6 +1663,7 @@ ShellRoot {
         property alias pillHoverBorder: cfg.pillHoverBorder
         property alias iconHoverBg: cfg.iconHoverBg
         property alias controlHoverBg: cfg.controlHoverBg
+        property alias buttonBg: cfg.buttonBg
         property alias controlActiveBg: cfg.controlActiveBg
         property alias popupButtonHoverBg: cfg.popupButtonHoverBg
         property alias buttonText: cfg.buttonText
@@ -1616,6 +1671,11 @@ ShellRoot {
 
         // --- Theme editor (Colors panel)
         readonly property alias themeUiRows: cfg.themeUiRows
+        readonly property alias themeVolumeTierUiRows: cfg.themeVolumeTierUiRows
+        readonly property alias themeMicVolumeTierUiRows: cfg.themeMicVolumeTierUiRows
+        readonly property alias themeStatUtilTierUiRows: cfg.themeStatUtilTierUiRows
+        readonly property alias themeStatTempUiRows: cfg.themeStatTempUiRows
+        readonly property alias themeEditableNumbers: cfg.themeEditableNumbers
         readonly property string themeIoScript: "/home/crome/.config/quickshell/scripts/theme-io.sh"
         property string themeStatus: ""
         property var themeSavedList: []
@@ -1647,6 +1707,7 @@ ShellRoot {
         readonly property alias popupSpacing: cfg.popupSpacing
         readonly property alias popupSpacingTight: cfg.popupSpacingTight
         readonly property alias popupSectionSpacing: cfg.popupSectionSpacing
+        readonly property alias popupGridSpacing: cfg.popupGridSpacing
         readonly property alias widgetSpacing: cfg.widgetSpacing
         readonly property alias iconTextGap: cfg.iconTextGap
         readonly property alias dualAudioSidePadding: cfg.dualAudioSidePadding
@@ -1754,9 +1815,22 @@ ShellRoot {
         readonly property alias popupHelpWidth: cfg.popupHelpWidth
         readonly property alias popupHelpHeight: cfg.popupHelpHeight
 
-        // --- Fonts
-        readonly property alias fontFamily: cfg.fontFamily
-        readonly property alias fontMono: cfg.fontMono
+        // --- Fonts (writable via Themes → Fonts tab)
+        property alias fontFamily: cfg.fontFamily
+        property alias fontMono: cfg.fontMono
+        property alias fontScale: cfg.fontScale
+        property alias fontMonoScale: cfg.fontMonoScale
+        property alias fontMain: cfg.fontMain
+        property alias fontSecondary: cfg.fontSecondary
+        property alias fontBar: cfg.fontBar
+        property alias fontMainScale: cfg.fontMainScale
+        property alias fontSecondaryScale: cfg.fontSecondaryScale
+        property alias fontBarScale: cfg.fontBarScale
+        readonly property alias fontMainResolved: cfg.fontMainResolved
+        readonly property alias fontSecondaryResolved: cfg.fontSecondaryResolved
+        readonly property alias fontBarResolved: cfg.fontBarResolved
+        readonly property alias fontBarFace: cfg.fontBarFace
+        readonly property alias fontMonoFace: cfg.fontMonoFace
         readonly property alias fontClock: cfg.fontClock
         readonly property alias fontPillLabel: cfg.fontPillLabel
         readonly property alias fontPopupTitle: cfg.fontPopupTitle
@@ -1764,6 +1838,39 @@ ShellRoot {
         readonly property alias fontBody: cfg.fontBody
         readonly property alias fontSmall: cfg.fontSmall
         readonly property alias fontTiny: cfg.fontTiny
+        function primaryUiFontFamily() { return cfg.primaryUiFontFamily() }
+        function primaryFontFamily(stack) { return cfg.primaryFontFamily(stack) }
+        function primaryRoleFontFamily(role) { return cfg.primaryRoleFontFamily(role) }
+        function setUiFontFamily(name) {
+            if (!cfg.setUiFontFamily(name))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
+        function setMonoFontFamily(name) {
+            if (!cfg.setMonoFontFamily(name))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
+        function setThemeFontScale(s) {
+            if (!cfg.setThemeFontScale(s))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
+        function setRoleFontFamily(role, name) {
+            if (!cfg.setRoleFontFamily(role, name))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
+        function setThemeFontRoleScale(role, s) {
+            if (!cfg.setThemeFontRoleScale(role, s))
+                return false
+            bar.schedulePersistThemeColors()
+            return true
+        }
 
         // --- Icon glyphs
         readonly property alias iconSpeaker: cfg.iconSpeaker
@@ -1803,29 +1910,33 @@ ShellRoot {
         readonly property alias iconControlBar: cfg.iconControlBar
         readonly property alias launcherCommand: cfg.launcherCommand
         readonly property alias launcherTooltip: cfg.launcherTooltip
-        readonly property alias audioSpeakerIcon: cfg.audioSpeakerIcon
-        readonly property alias audioMicIcon: cfg.audioMicIcon
+        property alias iconColor: cfg.iconColor
+        property alias audioSpeakerIcon: cfg.audioSpeakerIcon
+        property alias audioMicIcon: cfg.audioMicIcon
         readonly property alias audioSpeakerIconMuted: cfg.audioSpeakerIconMuted
         readonly property alias audioMicIconMuted: cfg.audioMicIconMuted
 
-        // --- Sliders
+        // --- Sliders / volume tier colors (writable for Themes panel)
         readonly property alias sliderBarHeight: cfg.sliderBarHeight
         readonly property alias sliderPopupHeight: cfg.sliderPopupHeight
         readonly property alias sliderMiniHeight: cfg.sliderMiniHeight
         readonly property alias sliderFill: cfg.sliderFill
         readonly property alias sliderFillMuted: cfg.sliderFillMuted
         readonly property alias sliderTrack: cfg.sliderTrack
-        readonly property alias audioUtilThreshold1: cfg.audioUtilThreshold1
-        readonly property alias audioUtilThreshold2: cfg.audioUtilThreshold2
-        readonly property alias audioUtilThreshold3: cfg.audioUtilThreshold3
-        readonly property alias audioSpeakerTier1: cfg.audioSpeakerTier1
-        readonly property alias audioSpeakerTier2: cfg.audioSpeakerTier2
-        readonly property alias audioSpeakerTier3: cfg.audioSpeakerTier3
-        readonly property alias audioSpeakerTier4: cfg.audioSpeakerTier4
-        readonly property alias audioMicTier1: cfg.audioMicTier1
-        readonly property alias audioMicTier2: cfg.audioMicTier2
-        readonly property alias audioMicTier3: cfg.audioMicTier3
-        readonly property alias audioMicTier4: cfg.audioMicTier4
+        property alias audioUtilThreshold1: cfg.audioUtilThreshold1
+        property alias audioUtilThreshold2: cfg.audioUtilThreshold2
+        property alias audioUtilThreshold3: cfg.audioUtilThreshold3
+        property alias audioMicUtilThreshold1: cfg.audioMicUtilThreshold1
+        property alias audioMicUtilThreshold2: cfg.audioMicUtilThreshold2
+        property alias audioMicUtilThreshold3: cfg.audioMicUtilThreshold3
+        property alias audioSpeakerTier1: cfg.audioSpeakerTier1
+        property alias audioSpeakerTier2: cfg.audioSpeakerTier2
+        property alias audioSpeakerTier3: cfg.audioSpeakerTier3
+        property alias audioSpeakerTier4: cfg.audioSpeakerTier4
+        property alias audioMicTier1: cfg.audioMicTier1
+        property alias audioMicTier2: cfg.audioMicTier2
+        property alias audioMicTier3: cfg.audioMicTier3
+        property alias audioMicTier4: cfg.audioMicTier4
         function audioSpeakerUtilColor(percent) { return cfg.audioSpeakerUtilColor(percent) }
         function audioMicUtilColor(percent) { return cfg.audioMicUtilColor(percent) }
 
@@ -1866,6 +1977,9 @@ ShellRoot {
         property alias showStatCpu: root.showStatCpu
         property alias showStatMem: root.showStatMem
         property alias showStatGpu: root.showStatGpu
+        property alias showStatGauges: root.showStatGauges
+        property alias showStatMenuGraphs: root.showStatMenuGraphs
+        property alias showNetTrafficGraph: root.showNetTrafficGraph
         property alias showEchoCancelInMenu: root.showEchoCancelInMenu
         property alias showAudioSummary: root.showAudioSummary
         property alias showAudioDefaults: root.showAudioDefaults
@@ -1891,15 +2005,15 @@ ShellRoot {
         readonly property alias gaugeLow: cfg.gaugeLow
         readonly property alias gaugeMid: cfg.gaugeMid
         readonly property alias gaugeHigh: cfg.gaugeHigh
-        readonly property alias statUtilTier1: cfg.statUtilTier1
-        readonly property alias statUtilTier2: cfg.statUtilTier2
-        readonly property alias statUtilTier3: cfg.statUtilTier3
-        readonly property alias statUtilTier4: cfg.statUtilTier4
-        readonly property alias statUtilThreshold1: cfg.statUtilThreshold1
-        readonly property alias statUtilThreshold2: cfg.statUtilThreshold2
-        readonly property alias statUtilThreshold3: cfg.statUtilThreshold3
-        readonly property alias statTempWarmAt: cfg.statTempWarmAt
-        readonly property alias statTempHotAt: cfg.statTempHotAt
+        property alias statUtilTier1: cfg.statUtilTier1
+        property alias statUtilTier2: cfg.statUtilTier2
+        property alias statUtilTier3: cfg.statUtilTier3
+        property alias statUtilTier4: cfg.statUtilTier4
+        property alias statUtilThreshold1: cfg.statUtilThreshold1
+        property alias statUtilThreshold2: cfg.statUtilThreshold2
+        property alias statUtilThreshold3: cfg.statUtilThreshold3
+        property alias statTempWarmAt: cfg.statTempWarmAt
+        property alias statTempHotAt: cfg.statTempHotAt
         function statUtilColor(util) { return cfg.statUtilColor(util) }
         function statTempColor(temp) { return cfg.statTempColor(temp) }
 
@@ -2043,7 +2157,9 @@ ShellRoot {
                     text: bar.iconLauncher
                     font.pixelSize: bar.widgetW("launcher", bar.iconSizePillLarge)
                     font.family: bar.fontFamily
-                    color: launcherMouse.containsMouse ? bar.accent : bar.subtext
+                    color: launcherMouse.containsMouse
+                           ? bar.accent
+                           : (bar.iconColor !== undefined ? bar.iconColor : bar.subtext)
                 }
 
                 MouseArea {
@@ -2054,9 +2170,12 @@ ShellRoot {
                     onClicked: Quickshell.execDetached(["sh", "-c", bar.launcherCommand])
                 }
 
-                ToolTip.text: bar.launcherTooltip
-                ToolTip.visible: launcherMouse.containsMouse
-                ToolTip.delay: bar.tooltipDelay
+                BarToolTip {
+                    bar: bar
+                    visible: launcherMouse.containsMouse
+                    text: bar.launcherTooltip
+                    anchorItem: launcherMouse
+                }
             }
 
             // ─ Quick Launch ─
@@ -2218,7 +2337,7 @@ ShellRoot {
                     text: bar.iconHyprInsp
                     font.pixelSize: bar.widgetW("hyprInsp", bar.iconSizePillLarge)
                     font.family: bar.fontFamily
-                    color: hyprInspMouse.containsMouse ? bar.accent : bar.subtext
+                    color: hyprInspMouse.containsMouse ? bar.accent : (bar.iconColor !== undefined ? bar.iconColor : bar.subtext)
                 }
 
                 MouseArea {
@@ -2230,9 +2349,12 @@ ShellRoot {
                         if (hyprConfigInsp && hyprConfigInsp.toggle)
                             hyprConfigInsp.toggle()
                     }
-                    ToolTip.visible: containsMouse
-                    ToolTip.delay: bar.tooltipDelay
-                    ToolTip.text: "Hyprland Config Inspector"
+                    BarToolTip {
+                        bar: bar
+                        visible: hyprInspMouse.containsMouse
+                        text: "Hyprland Config Inspector"
+                        anchorItem: hyprInspMouse
+                    }
                 }
             }
 
@@ -2257,7 +2379,7 @@ ShellRoot {
                     font.pixelSize: bar.widgetW("controlBar", bar.iconSizePillLarge)
                     font.family: bar.fontFamily
                     color: controlBarMouse.containsMouse || (barControlBar && barControlBar.open)
-                           ? bar.accent : bar.subtext
+                           ? bar.accent : (bar.iconColor !== undefined ? bar.iconColor : bar.subtext)
                 }
 
                 MouseArea {
@@ -2269,9 +2391,12 @@ ShellRoot {
                         if (barControlBar && barControlBar.toggle)
                             barControlBar.toggle()
                     }
-                    ToolTip.visible: containsMouse
-                    ToolTip.delay: bar.tooltipDelay
-                    ToolTip.text: "Config menu (or right-click empty bar)"
+                    BarToolTip {
+                        bar: bar
+                        visible: controlBarMouse.containsMouse
+                        text: "Config menu (or right-click empty bar)"
+                        anchorItem: controlBarMouse
+                    }
                 }
             }
 
